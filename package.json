@@ -8,22 +8,25 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types":  "./dist/index.d.ts"
+      "types": "./dist/index.d.ts"
     }
   },
   "files": ["dist"],
   "scripts": {
-    "build":    "tsc",
-    "dev":      "tsc --watch",
+    "build": "tsc",
+    "dev": "tsc --watch",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.30.0",
-    "fastify":     ">=5.0.0"
+    "fastify": ">=5.0.0"
   },
   "devDependencies": {
-    "drizzle-orm": "^0.43.0",
-    "fastify":     "^5.0.0",
-    "typescript":  "^5.7.0"
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@types/node": "^26.1.0",
+    "drizzle-orm": "^0.44.1",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "^6.0.0",
+    "typescript": "^5.7.0"
   }
 }
