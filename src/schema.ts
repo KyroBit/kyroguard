@@ -33,7 +33,7 @@ export const policyGroupPolicies = pgTable('rbac_policy_group_policies', {
 export const userPolicyGroups = pgTable('rbac_user_policy_groups', {
   id:              text('id').primaryKey().$defaultFn(() => createId()),
   subject_id:      text('subject_id').notNull(),
-  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, { onDelete: 'cascade' }),
+  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, { onDelete: 'restrict' }),
   created_at:      timestamp('created_at').defaultNow().notNull(),
 })
 
