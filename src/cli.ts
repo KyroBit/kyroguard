@@ -7,8 +7,13 @@ try { process.loadEnvFile(resolve(process.cwd(), '.env')) } catch {}
 const [,, command] = process.argv
 
 if (command === 'sync') {
-  const configPath = resolve(process.cwd(), 'rbac.config.ts')
+  const url = process.env.DATABASE_URL
+  if (!url) {
+    console.error('[rbac] DATABASE_URL is not set.')
+    process.exit(1)
+  }
 
+  const configPath = resolve(process.cwd(), 'rbac.config.ts')
   let config: any
   try {
     config = await import(pathToFileURL(configPath).href)
@@ -17,15 +22,23 @@ if (command === 'sync') {
     process.exit(1)
   }
 
-  const { db, resources } = config.default ?? config
-
-  if (!db || !resources) {
-    console.error('[rbac] rbac.config.ts must export { db, resources }')
+  const { resources: resourcesPath } = config.default ?? config
+  if (!resourcesPath) {
+    console.error('[rbac] rbac.config.ts must export default { resources: "./path/to/resources.ts" }')
     process.exit(1)
   }
 
-  const { syncPolicies } = await import('./sync.js')
+  const resourcesModule = await import(pathToFileURL(resolve(process.cwd(), resourcesPath)).href)
+  const resources = resourcesModule.resources ?? resourcesModule.default
+
+  const { default: postgres } = await import('postgres')
+  const { drizzle }           = await import('drizzle-orm/postgres-js')
+  const { syncPolicies }      = await import('./sync.js')
+
+  const client = postgres(url)
+  const db     = drizzle(client)
   await syncPolicies(db, resources)
+  await client.end()
   process.exit(0)
 }
 
