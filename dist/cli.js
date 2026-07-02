@@ -21,13 +21,13 @@ if (command === 'sync') {
         console.error('[rbac] Could not load rbac.config.ts — make sure it exists in your project root.');
         process.exit(1);
     }
-    const { resources: resourcesPath } = config.default ?? config;
-    if (!resourcesPath) {
-        console.error('[rbac] rbac.config.ts must export default { resources: "./path/to/resources.ts" }');
+    const { policies: policiesPath } = config.default ?? config;
+    if (!policiesPath) {
+        console.error('[rbac] rbac.config.ts must export default { policies: "./path/to/policies.ts" }');
         process.exit(1);
     }
-    const resourcesModule = await import(pathToFileURL(resolve(process.cwd(), resourcesPath)).href);
-    const resources = resourcesModule.resources ?? resourcesModule.default;
+    const policiesModule = await import(pathToFileURL(resolve(process.cwd(), policiesPath)).href);
+    const resources = policiesModule.policies ?? policiesModule.resources ?? policiesModule.default;
     const { default: postgres } = await import('postgres');
     const { drizzle } = await import('drizzle-orm/postgres-js');
     const { syncPolicies } = await import('./sync.js');
