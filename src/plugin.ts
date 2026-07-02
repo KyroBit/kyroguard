@@ -1,30 +1,31 @@
 import fp                     from 'fastify-plugin'
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
-import { storage }            from './store.js'
+import { storage, addExtra }  from './store.js'
 import { syncPolicies }       from './sync.js'
 import { createDbProxy }      from './proxy.js'
 import { requirePolicy as _requirePolicy, clearPolicyCache } from './require-policy.js'
-import { addExtra }           from './store.js'
 import type { RbacOptions }   from './types.js'
+import type { RbacAdapter }   from './adapter.js'
 
 export interface RbacPluginOptions extends RbacOptions {
-  db: any
+  adapter: RbacAdapter
+  db?:     any
 }
 
 const rbacPlugin: FastifyPluginAsync<RbacPluginOptions> = async (app, opts) => {
-  const { db, resources, getSubject, contextExtra, scopes } = opts
+  const { adapter, db, resources, getSubject, contextExtra, scopes } = opts
 
-  await syncPolicies(db, resources)
+  await syncPolicies(adapter, resources)
 
-  const proxiedDb = createDbProxy(db, { resources, getSubject, contextExtra, scopes })
+  const proxiedDb = db ? createDbProxy(db, { resources, getSubject, contextExtra, scopes }, adapter) : null
 
-  app.addHook('onRequest', async (req) => {
+  app.addHook('onRequest', async () => {
     await new Promise<void>(resolve =>
       storage.run({ subject: { id: '' }, context: '', extraOnce: null }, () => resolve())
     )
   })
 
-  const rbacOpts = { ...opts, db }
+  const rbacOpts = { ...opts, adapter }
 
   app.decorate('rbac', {
     db: proxiedDb,

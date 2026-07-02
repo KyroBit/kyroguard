@@ -30,10 +30,11 @@ if (command === 'sync') {
     const resources = policiesModule.policies ?? policiesModule.resources ?? policiesModule.default;
     const { default: postgres } = await import('postgres');
     const { drizzle } = await import('drizzle-orm/postgres-js');
+    const { createDrizzleAdapter } = await import('./drizzle-adapter.js');
     const { syncPolicies } = await import('./sync.js');
     const client = postgres(url);
-    const db = drizzle(client);
-    await syncPolicies(db, resources);
+    const adapter = createDrizzleAdapter(drizzle(client));
+    await syncPolicies(adapter, resources);
     await client.end();
     process.exit(0);
 }

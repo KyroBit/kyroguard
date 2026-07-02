@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { RbacOptions } from './types.js';
+import type { RbacAdapter } from './adapter.js';
 export interface RbacPluginOptions extends RbacOptions {
-    db: any;
+    adapter: RbacAdapter;
+    db?: any;
 }
 declare const _default: FastifyPluginAsync<RbacPluginOptions>;
 export default _default;

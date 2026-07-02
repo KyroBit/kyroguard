@@ -1,7 +1,7 @@
-import { eq, and, type SQL } from 'drizzle-orm'
-import { resourceOwners } from './schema.js'
+import { and, type SQL } from 'drizzle-orm'
 import { getStore, consumeExtra } from './store.js'
 import type { RbacOptions } from './types.js'
+import type { RbacAdapter } from './adapter.js'
 
 const PENDING_SCOPE = Symbol('pendingScope')
 const TRACKED_TABLE = Symbol('trackedTable')
@@ -49,13 +49,13 @@ function wrapSelectBuilder(builder: any, scopeSql: SQL | null): any {
 // ─── Insert proxy ─────────────────────────────────────────────────────────────
 // Intercepts .then() after insert to auto-create resource_owners entry
 
-function wrapInsertBuilder(builder: any, rawDb: any, table: any, options: RbacOptions): any {
+function wrapInsertBuilder(builder: any, adapter: RbacAdapter, table: any, options: RbacOptions): any {
   return new Proxy(builder, {
     get(target, prop) {
       if (prop === 'then') {
         return async (resolve: any, reject: any) => {
           try {
-            const rows = await Promise.resolve(target)
+            const rows  = await Promise.resolve(target)
             const store = getStore()
 
             if (store && rows) {
@@ -67,15 +67,14 @@ function wrapInsertBuilder(builder: any, rawDb: any, table: any, options: RbacOp
 
                 for (const row of rowArray) {
                   if (!row?.id) continue
-                  await rawDb.insert(resourceOwners).values({
+                  const meta = { ...global, ...extra }
+                  await adapter.createResourceOwner({
                     resource_type: resource.type,
                     resource_id:   String(row.id),
                     subject_id:    store.subject.id ?? null,
                     context_type:  store.context    ?? null,
                     context_id:    String(store.subject.branchId ?? store.subject.contextId ?? '') || null,
-                    meta:          Object.keys({ ...global, ...extra }).length
-                                     ? { ...global, ...extra }
-                                     : null,
+                    meta:          Object.keys(meta).length ? meta : null,
                   })
                 }
               }
@@ -93,7 +92,7 @@ function wrapInsertBuilder(builder: any, rawDb: any, table: any, options: RbacOp
         return (...args: unknown[]) => {
           const result = value.apply(target, args)
           if (result && typeof result === 'object' && 'then' in result) {
-            return wrapInsertBuilder(result, rawDb, table, options)
+            return wrapInsertBuilder(result, adapter, table, options)
           }
           return result
         }
@@ -106,8 +105,7 @@ function wrapInsertBuilder(builder: any, rawDb: any, table: any, options: RbacOp
 
 // ─── Main db proxy ─────────────────────────────────────────────────────────────
 
-export function createDbProxy<T extends object>(rawDb: T, options: RbacOptions): T {
-  // Build table → resource map once
+export function createDbProxy<T extends object>(rawDb: T, options: RbacOptions, adapter: RbacAdapter): T {
   const tableResourceMap = new Map(options.resources.map(r => [r.table, r]))
 
   return new Proxy(rawDb, {
@@ -164,7 +162,7 @@ export function createDbProxy<T extends object>(rawDb: T, options: RbacOptions):
       if (prop === 'insert') {
         return (table: unknown) => {
           const insertBuilder = (target as any).insert(table)
-          return wrapInsertBuilder(insertBuilder, target, table, options)
+          return wrapInsertBuilder(insertBuilder, adapter, table, options)
         }
       }
 

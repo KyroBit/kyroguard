@@ -1,6 +1,6 @@
 {
   "name": "@kyrobit/rbac",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Scalable RBAC with policy groups, resource ownership and auto-scoped queries for Fastify + Drizzle",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,4 +1,5 @@
 export { Policy } from './policy.js';
+export { createDrizzleAdapter } from './drizzle-adapter.js';
 export { syncPolicies } from './sync.js';
 export { clearPolicyCache } from './require-policy.js';
 export { addExtra, setContext } from './store.js';
