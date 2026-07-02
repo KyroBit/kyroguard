@@ -25,8 +25,7 @@ export type ContextPolicies = Record<string, string[]>
 export type ScopeCondition = (subject: Subject, db: unknown) => unknown
 
 export interface Subject {
-  id:           string
-  branchId?:    string | null
-  context?:     string
+  id:        string
+  is_super?: boolean
   [key: string]: unknown
 }

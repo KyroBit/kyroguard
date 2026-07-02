@@ -4,6 +4,13 @@ export type { RbacOptions }                from './types.js'
 export { syncPolicies }                    from './sync.js'
 export { clearPolicyCache }                from './require-policy.js'
 export { addExtra, setContext }            from './store.js'
-export { policies, policyGroups, policyGroupPolicies, resourceOwners } from './schema.js'
+export {
+  policies,
+  policyGroups,
+  policyGroupPolicies,
+  userPolicyGroups,
+  userPolicies,
+  resourceOwners,
+} from './schema.js'
 export { default as rbacPlugin }           from './plugin.js'
 export type { RbacPluginOptions }          from './plugin.js'
