@@ -2,6 +2,8 @@
 import { pathToFileURL } from 'node:url'
 import { resolve }       from 'node:path'
 
+try { process.loadEnvFile(resolve(process.cwd(), '.env')) } catch {}
+
 const [,, command] = process.argv
 
 if (command === 'sync') {

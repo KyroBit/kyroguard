@@ -1,22 +1,27 @@
 {
   "name": "@kyrobit/rbac",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scalable RBAC with policy groups, resource ownership and auto-scoped queries for Fastify + Drizzle",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import":  "./dist/index.js",
+      "import": "./dist/index.js",
       "require": "./dist/index.js",
-      "types":   "./dist/index.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
   "bin": {
     "rbac": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
