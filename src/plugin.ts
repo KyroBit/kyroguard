@@ -1,7 +1,6 @@
 import fp                     from 'fastify-plugin'
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { storage, addExtra }  from './store.js'
-import { syncPolicies }       from './sync.js'
 import { createDbProxy }      from './proxy.js'
 import { requirePolicy as _requirePolicy, clearPolicyCache } from './require-policy.js'
 import type { RbacOptions }   from './types.js'
@@ -14,8 +13,6 @@ export interface RbacPluginOptions extends RbacOptions {
 
 const rbacPlugin: FastifyPluginAsync<RbacPluginOptions> = async (app, opts) => {
   const { adapter, db, resources, getSubject, contextExtra, scopes } = opts
-
-  await syncPolicies(adapter, resources)
 
   const proxiedDb = db ? createDbProxy(db, { resources, getSubject, contextExtra, scopes }, adapter) : null
 
