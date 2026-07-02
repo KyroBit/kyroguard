@@ -7,8 +7,6 @@ import { requirePolicy as _requirePolicy, clearPolicyCache } from './require-pol
 import { addExtra }           from './store.js'
 import type { RbacOptions }   from './types.js'
 import type { FastifyRequest } from 'fastify'
-import { eq }                 from 'drizzle-orm'
-import { users }              from './schema.js'
 
 export interface RbacPluginOptions extends RbacOptions {
   db:                   any
@@ -61,3 +59,15 @@ const rbacPlugin: FastifyPluginAsync<RbacPluginOptions> = async (app, opts) => {
 }
 
 export default fp(rbacPlugin, { name: '@kyrobit/rbac', fastify: '5' })
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    rbac: {
+      db:               any
+      setContext:       (req: FastifyRequest, context: string) => void
+      addExtra:         (extra: Record<string, unknown>) => void
+      clearPolicyCache: (policyGroupId?: string) => void
+      requirePolicy:    (policyName: string, options?: { resource?: (req: FastifyRequest) => unknown }) => (req: FastifyRequest, reply: any) => Promise<void>
+    }
+  }
+}
