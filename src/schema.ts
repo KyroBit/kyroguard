@@ -21,27 +21,27 @@ export const policyGroups = pgTable('rbac_policy_groups', {
   updated_at:  timestamp('updated_at').defaultNow().notNull(),
 })
 
+const restrict = { onDelete: 'restrict', onUpdate: 'restrict' } as const
+
 export const policyGroupPolicies = pgTable('rbac_policy_group_policies', {
   id:              text('id').primaryKey().$defaultFn(() => createId()),
-  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, { onDelete: 'cascade' }),
-  policy_id:       text('policy_id').notNull().references(() => policies.id, { onDelete: 'cascade' }),
+  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, restrict),
+  policy_id:       text('policy_id').notNull().references(() => policies.id, restrict),
   scope:           text('scope'),
   created_at:      timestamp('created_at').defaultNow().notNull(),
 })
 
-// User → many policy groups
 export const userPolicyGroups = pgTable('rbac_user_policy_groups', {
   id:              text('id').primaryKey().$defaultFn(() => createId()),
   subject_id:      text('subject_id').notNull(),
-  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, { onDelete: 'restrict' }),
+  policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, restrict),
   created_at:      timestamp('created_at').defaultNow().notNull(),
 })
 
-// User → direct policy assignments
 export const userPolicies = pgTable('rbac_user_policies', {
   id:         text('id').primaryKey().$defaultFn(() => createId()),
   subject_id: text('subject_id').notNull(),
-  policy_id:  text('policy_id').notNull().references(() => policies.id, { onDelete: 'cascade' }),
+  policy_id:  text('policy_id').notNull().references(() => policies.id, restrict),
   scope:      text('scope'),
   created_at: timestamp('created_at').defaultNow().notNull(),
 })
