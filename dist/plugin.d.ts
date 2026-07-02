@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import { type RequirePolicyOptions } from './require-policy.js';
 import type { RbacOptions } from './types.js';
 import type { RbacAdapter } from './adapter.js';
 export interface RbacPluginOptions extends RbacOptions {
@@ -14,9 +15,7 @@ declare module 'fastify' {
             setContext: (req: FastifyRequest, context: string) => void;
             addExtra: (extra: Record<string, unknown>) => void;
             clearPolicyCache: (subjectId?: string) => void;
-            requirePolicy: (policyName: string, options?: {
-                resource?: (req: FastifyRequest) => unknown;
-            }) => (req: FastifyRequest, reply: any) => Promise<void>;
+            requirePolicy: (policyName: string, options?: RequirePolicyOptions) => (req: FastifyRequest, reply: any) => Promise<void>;
         };
     }
 }

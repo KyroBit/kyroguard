@@ -2,7 +2,7 @@ import fp                     from 'fastify-plugin'
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { storage, addExtra }  from './store.js'
 import { createDbProxy }      from './proxy.js'
-import { requirePolicy as _requirePolicy, clearPolicyCache } from './require-policy.js'
+import { requirePolicy as _requirePolicy, clearPolicyCache, type RequirePolicyOptions } from './require-policy.js'
 import type { RbacOptions }   from './types.js'
 import type { RbacAdapter }   from './adapter.js'
 
@@ -37,7 +37,7 @@ const rbacPlugin: FastifyPluginAsync<RbacPluginOptions> = async (app, opts) => {
     addExtra,
     clearPolicyCache,
 
-    requirePolicy: (policyName: string, options?: { resource?: (req: FastifyRequest) => unknown }) =>
+    requirePolicy: (policyName: string, options?: RequirePolicyOptions) =>
       _requirePolicy(policyName, options, rbacOpts),
   })
 }
@@ -51,7 +51,7 @@ declare module 'fastify' {
       setContext:       (req: FastifyRequest, context: string) => void
       addExtra:         (extra: Record<string, unknown>) => void
       clearPolicyCache: (subjectId?: string) => void
-      requirePolicy:    (policyName: string, options?: { resource?: (req: FastifyRequest) => unknown }) => (req: FastifyRequest, reply: any) => Promise<void>
+      requirePolicy:    (policyName: string, options?: RequirePolicyOptions) => (req: FastifyRequest, reply: any) => Promise<void>
     }
   }
 }

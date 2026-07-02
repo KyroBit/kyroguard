@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, and } from 'drizzle-orm'
 import { policies, policyGroups, policyGroupPolicies, userPolicyGroups, userPolicies, resourceOwners } from './schema.js'
 import type { RbacAdapter, PolicyRow, PolicyRecord, GroupPolicyRecord, GroupPolicyInsert, ResourceOwnerRow } from './adapter.js'
 
@@ -45,9 +45,9 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
       await db.insert(policyGroupPolicies).values(rows)
     },
 
-    async getSubjectGroupPolicies(subjectId: string): Promise<{ name: string }[]> {
+    async getSubjectGroupPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]> {
       return db
-        .select({ name: policies.name })
+        .select({ name: policies.name, scope: policyGroupPolicies.scope })
         .from(userPolicyGroups)
         .innerJoin(policyGroups,        eq(userPolicyGroups.policy_group_id, policyGroups.id))
         .innerJoin(policyGroupPolicies, eq(policyGroupPolicies.policy_group_id, policyGroups.id))
@@ -55,12 +55,25 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
         .where(eq(userPolicyGroups.subject_id, subjectId))
     },
 
-    async getSubjectDirectPolicies(subjectId: string): Promise<{ name: string }[]> {
+    async getSubjectDirectPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]> {
       return db
-        .select({ name: policies.name })
+        .select({ name: policies.name, scope: userPolicies.scope })
         .from(userPolicies)
         .innerJoin(policies, eq(userPolicies.policy_id, policies.id))
         .where(eq(userPolicies.subject_id, subjectId))
+    },
+
+    async isResourceOwner(subjectId: string, resourceType: string, resourceId: string): Promise<boolean> {
+      const [row] = await db
+        .select({ id: resourceOwners.id })
+        .from(resourceOwners)
+        .where(and(
+          eq(resourceOwners.subject_id,    subjectId),
+          eq(resourceOwners.resource_type, resourceType),
+          eq(resourceOwners.resource_id,   resourceId),
+        ))
+        .limit(1)
+      return !!row
     },
 
     async createResourceOwner(row: ResourceOwnerRow): Promise<void> {

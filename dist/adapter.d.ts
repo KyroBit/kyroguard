@@ -37,10 +37,13 @@ export interface RbacAdapter {
     insertGroupPolicies(rows: GroupPolicyInsert[]): Promise<void>;
     getSubjectGroupPolicies(subjectId: string): Promise<{
         name: string;
+        scope: string | null;
     }[]>;
     getSubjectDirectPolicies(subjectId: string): Promise<{
         name: string;
+        scope: string | null;
     }[]>;
+    isResourceOwner(subjectId: string, resourceType: string, resourceId: string): Promise<boolean>;
     createResourceOwner(row: ResourceOwnerRow): Promise<void>;
 }
 //# sourceMappingURL=adapter.d.ts.map

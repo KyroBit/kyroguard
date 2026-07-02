@@ -3,14 +3,15 @@ import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { RbacOptions } from './types.js'
 import type { RbacAdapter } from './adapter.js'
 
-const cache = new Map<string, Set<string>>()
+// policy name → scope (null = unrestricted, string = restricted to that scope)
+const cache = new Map<string, Map<string, string | null>>()
 
 export function clearPolicyCache(subjectId?: string): void {
   if (subjectId) cache.delete(subjectId)
   else cache.clear()
 }
 
-async function getSubjectPolicies(adapter: RbacAdapter, subjectId: string): Promise<Set<string>> {
+async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string): Promise<Map<string, string | null>> {
   if (cache.has(subjectId)) return cache.get(subjectId)!
 
   const [groupRows, directRows] = await Promise.all([
@@ -18,18 +19,30 @@ async function getSubjectPolicies(adapter: RbacAdapter, subjectId: string): Prom
     adapter.getSubjectDirectPolicies(subjectId),
   ])
 
-  const set = new Set<string>([
-    ...groupRows.map(r => r.name),
-    ...directRows.map(r => r.name),
-  ])
+  const map = new Map<string, string | null>()
 
-  cache.set(subjectId, set)
-  return set
+  for (const row of [...groupRows, ...directRows]) {
+    const existing = map.get(row.name)
+    if (existing === undefined) {
+      map.set(row.name, row.scope)
+    } else if (existing !== null) {
+      // null = unrestricted wins over any scope
+      map.set(row.name, row.scope === null ? null : existing)
+    }
+  }
+
+  cache.set(subjectId, map)
+  return map
+}
+
+export interface RequirePolicyOptions {
+  resource?: (req: FastifyRequest) => Promise<{ type: string; id: string } | null | undefined>
+                                   | { type: string; id: string } | null | undefined
 }
 
 export function requirePolicy(
   policyName:   string,
-  options?:     { resource?: (req: FastifyRequest) => Promise<unknown> | unknown },
+  options?:     RequirePolicyOptions,
   rbacOptions?: RbacOptions & { adapter: RbacAdapter },
 ) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
@@ -39,12 +52,22 @@ export function requirePolicy(
     if (!store?.subject?.id) return reply.status(401).send({ message: 'Unauthorized' })
 
     const subject = store.subject
-
     if (subject.is_super) return
 
-    const allowed = await getSubjectPolicies(rbacOptions.adapter, subject.id)
-    if (!allowed.has(policyName)) {
+    const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id)
+
+    if (!policyMap.has(policyName)) {
       return reply.status(403).send({ message: 'Forbidden' })
+    }
+
+    const scope = policyMap.get(policyName)!
+
+    if (scope !== null && options?.resource) {
+      const resource = await options.resource(req)
+      if (!resource) return reply.status(404).send({ message: 'Not found' })
+
+      const owns = await rbacOptions.adapter.isResourceOwner(subject.id, resource.type, resource.id)
+      if (!owns) return reply.status(403).send({ message: 'Forbidden' })
     }
   }
 }

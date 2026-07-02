@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { policies, policyGroups, policyGroupPolicies, userPolicyGroups, userPolicies, resourceOwners } from './schema.js';
 export function createDrizzleAdapter(db) {
     return {
@@ -37,7 +37,7 @@ export function createDrizzleAdapter(db) {
         },
         async getSubjectGroupPolicies(subjectId) {
             return db
-                .select({ name: policies.name })
+                .select({ name: policies.name, scope: policyGroupPolicies.scope })
                 .from(userPolicyGroups)
                 .innerJoin(policyGroups, eq(userPolicyGroups.policy_group_id, policyGroups.id))
                 .innerJoin(policyGroupPolicies, eq(policyGroupPolicies.policy_group_id, policyGroups.id))
@@ -46,10 +46,18 @@ export function createDrizzleAdapter(db) {
         },
         async getSubjectDirectPolicies(subjectId) {
             return db
-                .select({ name: policies.name })
+                .select({ name: policies.name, scope: userPolicies.scope })
                 .from(userPolicies)
                 .innerJoin(policies, eq(userPolicies.policy_id, policies.id))
                 .where(eq(userPolicies.subject_id, subjectId));
+        },
+        async isResourceOwner(subjectId, resourceType, resourceId) {
+            const [row] = await db
+                .select({ id: resourceOwners.id })
+                .from(resourceOwners)
+                .where(and(eq(resourceOwners.subject_id, subjectId), eq(resourceOwners.resource_type, resourceType), eq(resourceOwners.resource_id, resourceId)))
+                .limit(1);
+            return !!row;
         },
         async createResourceOwner(row) {
             await db.insert(resourceOwners).values(row);
