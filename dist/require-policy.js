@@ -36,8 +36,6 @@ export function requirePolicy(policyName, options, rbacOptions) {
         if (!store?.subject?.id)
             return reply.status(401).send({ message: 'Unauthorized' });
         const subject = store.subject;
-        if (subject.is_super)
-            return;
         const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id);
         if (!policyMap.has(policyName)) {
             return reply.status(403).send({ message: 'Forbidden' });
