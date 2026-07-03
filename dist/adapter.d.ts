@@ -35,7 +35,7 @@ export interface RbacAdapter {
     }[]>;
     getGroupPolicies(groupId: string): Promise<GroupPolicyRecord[]>;
     insertGroupPolicies(rows: GroupPolicyInsert[]): Promise<void>;
-    getSubjectGroupPolicies(subjectId: string): Promise<{
+    getSubjectGroupPolicies(subjectId: string, contextId?: string | null): Promise<{
         name: string;
         scope: string | null;
     }[]>;

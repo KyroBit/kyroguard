@@ -38,7 +38,7 @@ export interface RbacAdapter {
   listGroups(): Promise<{ id: string }[]>
   getGroupPolicies(groupId: string): Promise<GroupPolicyRecord[]>
   insertGroupPolicies(rows: GroupPolicyInsert[]): Promise<void>
-  getSubjectGroupPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]>
+  getSubjectGroupPolicies(subjectId: string, contextId?: string | null): Promise<{ name: string; scope: string | null }[]>
   getSubjectDirectPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]>
   isResourceOwner(subjectId: string, resourceType: string, resourceId: string): Promise<boolean>
   createResourceOwner(row: ResourceOwnerRow): Promise<void>

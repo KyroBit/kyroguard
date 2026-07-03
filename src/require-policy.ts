@@ -7,15 +7,21 @@ import type { RbacAdapter } from './adapter.js'
 const cache = new Map<string, Map<string, string | null>>()
 
 export function clearPolicyCache(subjectId?: string): void {
-  if (subjectId) cache.delete(subjectId)
-  else cache.clear()
+  if (subjectId) {
+    for (const key of cache.keys()) {
+      if (key === subjectId || key.startsWith(`${subjectId}:`)) cache.delete(key)
+    }
+  } else {
+    cache.clear()
+  }
 }
 
-async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string): Promise<Map<string, string | null>> {
-  if (cache.has(subjectId)) return cache.get(subjectId)!
+async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string, contextId?: string | null): Promise<Map<string, string | null>> {
+  const cacheKey = contextId ? `${subjectId}:${contextId}` : subjectId
+  if (cache.has(cacheKey)) return cache.get(cacheKey)!
 
   const [groupRows, directRows] = await Promise.all([
-    adapter.getSubjectGroupPolicies(subjectId),
+    adapter.getSubjectGroupPolicies(subjectId, contextId),
     adapter.getSubjectDirectPolicies(subjectId),
   ])
 
@@ -31,7 +37,7 @@ async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string): Pro
     }
   }
 
-  cache.set(subjectId, map)
+  cache.set(cacheKey, map)
   return map
 }
 
@@ -54,7 +60,7 @@ export function requirePolicy(
     const subject = store.subject
     if (subject.is_super) return
 
-    const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id)
+    const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, subject.context_id as string | null)
 
     if (!policyMap.has(policyName)) {
       return reply.status(403).send({ message: 'Forbidden' })

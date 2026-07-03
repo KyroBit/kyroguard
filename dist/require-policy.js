@@ -2,16 +2,22 @@ import { getStore } from './store.js';
 // policy name → scope (null = unrestricted, string = restricted to that scope)
 const cache = new Map();
 export function clearPolicyCache(subjectId) {
-    if (subjectId)
-        cache.delete(subjectId);
-    else
+    if (subjectId) {
+        for (const key of cache.keys()) {
+            if (key === subjectId || key.startsWith(`${subjectId}:`))
+                cache.delete(key);
+        }
+    }
+    else {
         cache.clear();
+    }
 }
-async function getSubjectPolicyMap(adapter, subjectId) {
-    if (cache.has(subjectId))
-        return cache.get(subjectId);
+async function getSubjectPolicyMap(adapter, subjectId, contextId) {
+    const cacheKey = contextId ? `${subjectId}:${contextId}` : subjectId;
+    if (cache.has(cacheKey))
+        return cache.get(cacheKey);
     const [groupRows, directRows] = await Promise.all([
-        adapter.getSubjectGroupPolicies(subjectId),
+        adapter.getSubjectGroupPolicies(subjectId, contextId),
         adapter.getSubjectDirectPolicies(subjectId),
     ]);
     const map = new Map();
@@ -25,7 +31,7 @@ async function getSubjectPolicyMap(adapter, subjectId) {
             map.set(row.name, row.scope === null ? null : existing);
         }
     }
-    cache.set(subjectId, map);
+    cache.set(cacheKey, map);
     return map;
 }
 export function requirePolicy(policyName, options, rbacOptions) {
@@ -38,7 +44,7 @@ export function requirePolicy(policyName, options, rbacOptions) {
         const subject = store.subject;
         if (subject.is_super)
             return;
-        const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id);
+        const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, subject.context_id);
         if (!policyMap.has(policyName)) {
             return reply.status(403).send({ message: 'Forbidden' });
         }

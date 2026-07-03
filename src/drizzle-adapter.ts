@@ -45,14 +45,19 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
       await db.insert(policyGroupPolicies).values(rows)
     },
 
-    async getSubjectGroupPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]> {
+    async getSubjectGroupPolicies(subjectId: string, contextId?: string | null): Promise<{ name: string; scope: string | null }[]> {
+      const { isNull, or } = await import('drizzle-orm')
+      const contextFilter = contextId
+        ? or(isNull(userPolicyGroups.context_id), eq(userPolicyGroups.context_id, contextId))
+        : isNull(userPolicyGroups.context_id)
+
       return db
         .select({ name: policies.name, scope: policyGroupPolicies.scope })
         .from(userPolicyGroups)
         .innerJoin(policyGroups,        eq(userPolicyGroups.policy_group_id, policyGroups.id))
         .innerJoin(policyGroupPolicies, eq(policyGroupPolicies.policy_group_id, policyGroups.id))
         .innerJoin(policies,            eq(policyGroupPolicies.policy_id, policies.id))
-        .where(eq(userPolicyGroups.subject_id, subjectId))
+        .where(and(eq(userPolicyGroups.subject_id, subjectId), contextFilter))
     },
 
     async getSubjectDirectPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]> {

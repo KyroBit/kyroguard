@@ -30,6 +30,7 @@ export const userPolicyGroups = pgTable('rbac_user_policy_groups', {
     id: text('id').primaryKey().$defaultFn(() => createId()),
     subject_id: text('subject_id').notNull(),
     policy_group_id: text('policy_group_id').notNull().references(() => policyGroups.id, restrict),
+    context_id: text('context_id'),
     created_at: timestamp('created_at').defaultNow().notNull(),
 });
 export const userPolicies = pgTable('rbac_user_policies', {
