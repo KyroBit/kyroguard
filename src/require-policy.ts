@@ -52,6 +52,7 @@ export function requirePolicy(
     if (!store?.subject?.id) return reply.status(401).send({ message: 'Unauthorized' })
 
     const subject = store.subject
+    if (subject.is_super) return
 
     const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id)
 
