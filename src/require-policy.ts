@@ -1,7 +1,20 @@
 import { getStore } from './store.js'
 import type { FastifyRequest, FastifyReply } from 'fastify'
-import type { RbacOptions } from './types.js'
+import type { RbacOptions, RbacTypes } from './types.js'
 import type { RbacAdapter } from './adapter.js'
+import type { Scope } from './scope.js'
+
+// Send an error response and hijack the reply so Fastify's wrapThenable
+// doesn't try to send a second response after this preHandler resolves.
+function sendError(reply: FastifyReply, statusCode: number, message: string): void {
+  reply.hijack()
+  const body = JSON.stringify({ message })
+  reply.raw.statusCode = statusCode
+  reply.raw.setHeader('content-type', 'application/json; charset=utf-8')
+  reply.raw.setHeader('content-length', Buffer.byteLength(body).toString())
+  reply.raw.end(body)
+}
+
 
 // policy name → scope (null = unrestricted, string = restricted to that scope)
 const cache = new Map<string, Map<string, string | null>>()
@@ -16,12 +29,12 @@ export function clearPolicyCache(subjectId?: string): void {
   }
 }
 
-async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string, contextId?: string | null): Promise<Map<string, string | null>> {
-  const cacheKey = contextId ? `${subjectId}:${contextId}` : subjectId
+async function getSubjectPolicyMap(adapter: RbacAdapter, subjectId: string, portal?: string | null, contextId?: string | null): Promise<Map<string, string | null>> {
+  const cacheKey = [subjectId, portal, contextId].filter(Boolean).join(':')
   if (cache.has(cacheKey)) return cache.get(cacheKey)!
 
   const [groupRows, directRows] = await Promise.all([
-    adapter.getSubjectGroupPolicies(subjectId, contextId),
+    adapter.getSubjectGroupPolicies(subjectId, portal, contextId),
     adapter.getSubjectDirectPolicies(subjectId),
   ])
 
@@ -47,33 +60,44 @@ export interface RequirePolicyOptions {
 }
 
 export function requirePolicy(
-  policyName:   string,
+  policyName:   RbacTypes['PolicyName'],
   options?:     RequirePolicyOptions,
-  rbacOptions?: RbacOptions & { adapter: RbacAdapter },
+  rbacOptions?: RbacOptions & { adapter: RbacAdapter; scopes?: Scope[]; rawDb?: any },
 ) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
     if (!rbacOptions) throw new Error('[rbac] requirePolicy not initialised — register rbacPlugin first.')
 
     const store = getStore()
-    if (!store?.subject?.id) return reply.status(401).send({ message: 'Unauthorized' })
+    if (!store?.subject?.id) { sendError(reply, 401, 'Unauthorized'); return }
 
     const subject = store.subject
     if (subject.is_super) return
 
-    const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, subject.context_id as string | null)
+    const portal       = subject.portal as string | undefined
+    const resolvedName = portal ? `${portal}.${policyName}` : policyName
+    const policyMap    = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, portal, subject.context_id as string | null)
 
-    if (!policyMap.has(policyName)) {
-      return reply.status(403).send({ message: 'Forbidden' })
+    if (!policyMap.has(resolvedName)) {
+      sendError(reply, 403, 'Forbidden'); return
     }
 
-    const scope = policyMap.get(policyName)!
+    const scopeName = policyMap.get(resolvedName)!
 
-    if (scope !== null && options?.resource) {
+    if (scopeName !== null) {
+      if (!options?.resource) { sendError(reply, 403, 'Forbidden'); return }
+
+      const scopeObj = findScope(rbacOptions.scopes, scopeName)
+      if (!scopeObj) { sendError(reply, 403, 'Forbidden'); return }
+
       const resource = await options.resource(req)
-      if (!resource) return reply.status(404).send({ message: 'Not found' })
+      if (!resource) { sendError(reply, 404, 'Not found'); return }
 
-      const owns = await rbacOptions.adapter.isResourceOwner(subject.id, resource.type, resource.id)
-      if (!owns) return reply.status(403).send({ message: 'Forbidden' })
+      const allowed = await scopeObj.check(subject, resource, rbacOptions.rawDb)
+      if (!allowed) { sendError(reply, 403, 'Forbidden'); return }
     }
   }
+}
+
+function findScope(scopes: Scope[] | undefined, name: string): Scope | undefined {
+  return scopes?.find(s => s.name === name)
 }

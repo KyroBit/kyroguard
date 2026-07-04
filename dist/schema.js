@@ -4,6 +4,7 @@ export const policies = pgTable('rbac_policies', {
     id: text('id').primaryKey().$defaultFn(() => createId()),
     name: text('name').notNull().unique(),
     label: text('label').notNull(),
+    valid_scopes: jsonb('valid_scopes').$type().notNull().default([]),
     depends_on: jsonb('depends_on').$type().notNull().default([]),
     created_at: timestamp('created_at').defaultNow().notNull(),
     updated_at: timestamp('updated_at').defaultNow().notNull(),
@@ -38,16 +39,6 @@ export const userPolicies = pgTable('rbac_user_policies', {
     subject_id: text('subject_id').notNull(),
     policy_id: text('policy_id').notNull().references(() => policies.id, restrict),
     scope: text('scope'),
-    created_at: timestamp('created_at').defaultNow().notNull(),
-});
-export const resourceOwners = pgTable('rbac_resource_owners', {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    resource_type: text('resource_type').notNull(),
-    resource_id: text('resource_id').notNull(),
-    subject_id: text('subject_id'),
-    context_type: text('context_type'),
-    context_id: text('context_id'),
-    meta: jsonb('meta').$type(),
     created_at: timestamp('created_at').defaultNow().notNull(),
 });
 //# sourceMappingURL=schema.js.map

@@ -11,10 +11,11 @@ function resolveWithDeps(names, byName) {
         walk(name);
     return resolved;
 }
-export async function syncPolicies(adapter, resources) {
+export async function syncPolicies(adapter, resources, portal, label = '') {
     const all = resources.flatMap(r => r.policies);
     if (!all.length)
         return;
+    const prefix = portal ? `${portal}.` : '';
     const codeNames = new Set(all.map(p => p.name));
     for (const p of all) {
         for (const dep of p.dependsOn) {
@@ -23,9 +24,18 @@ export async function syncPolicies(adapter, resources) {
             }
         }
     }
-    await adapter.upsertPolicies(all.map(p => ({ name: p.name, label: p.label, depends_on: p.dependsOn })));
+    await adapter.upsertPolicies(all.map(p => ({
+        name: `${prefix}${p.name}`,
+        label: p.label,
+        valid_scopes: p.scopes,
+        depends_on: p.dependsOn.map(d => `${prefix}${d}`),
+    })));
     const allDbPolicies = await adapter.listAllPolicies();
-    const orphans = allDbPolicies.filter(r => !codeNames.has(r.name));
+    const prefixedNames = new Set(all.map(p => `${prefix}${p.name}`));
+    const scopedDbNames = portal
+        ? allDbPolicies.filter(r => r.name.startsWith(prefix))
+        : allDbPolicies.filter(r => !r.name.includes('.') || r.name.indexOf('.') === r.name.lastIndexOf('.'));
+    const orphans = scopedDbNames.filter(r => !prefixedNames.has(r.name));
     if (orphans.length) {
         const orphanIds = orphans.map(r => r.id);
         await adapter.deleteGroupPolicies(orphanIds);
@@ -33,7 +43,7 @@ export async function syncPolicies(adapter, resources) {
         await adapter.deletePolicies(orphanIds);
         console.log(`[rbac] Removed ${orphans.length} orphaned policies: ${orphans.map(r => r.name).join(', ')}`);
     }
-    const livePolicies = allDbPolicies.filter(r => codeNames.has(r.name));
+    const livePolicies = allDbPolicies.filter(r => prefixedNames.has(r.name));
     const depsByName = new Map(livePolicies.map(r => [r.name, r.depends_on]));
     const idByName = new Map(livePolicies.map(r => [r.name, r.id]));
     const groups = await adapter.listGroups();
@@ -48,9 +58,9 @@ export async function syncPolicies(adapter, resources) {
         });
         if (missing.length) {
             await adapter.insertGroupPolicies(missing.map(name => ({ policy_group_id: group.id, policy_id: idByName.get(name), scope: null })));
-            console.log(`[rbac] Filled ${missing.length} missing deps for group ${group.id}: ${missing.join(', ')}`);
+            console.log(`${label}[rbac] Filled ${missing.length} missing deps for group ${group.id}: ${missing.join(', ')}`);
         }
     }
-    console.log(`[rbac] Synced ${all.length} policies.`);
+    console.log(`${label}[rbac] Synced ${all.length} policies.`);
 }
 //# sourceMappingURL=sync.js.map

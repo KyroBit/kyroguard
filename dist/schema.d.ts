@@ -53,6 +53,25 @@ export declare const policies: import("drizzle-orm/pg-core").PgTableWithColumns<
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        valid_scopes: import("drizzle-orm/pg-core").PgColumn<{
+            name: "valid_scopes";
+            tableName: "rbac_policies";
+            dataType: "json";
+            columnType: "PgJsonb";
+            data: string[];
+            driverParam: unknown;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            $type: string[];
+        }>;
         depends_on: import("drizzle-orm/pg-core").PgColumn<{
             name: "depends_on";
             tableName: "rbac_policies";
@@ -511,151 +530,6 @@ export declare const userPolicies: import("drizzle-orm/pg-core").PgTableWithColu
         created_at: import("drizzle-orm/pg-core").PgColumn<{
             name: "created_at";
             tableName: "rbac_user_policies";
-            dataType: "date";
-            columnType: "PgTimestamp";
-            data: Date;
-            driverParam: string;
-            notNull: true;
-            hasDefault: true;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: undefined;
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-    };
-    dialect: "pg";
-}>;
-export declare const resourceOwners: import("drizzle-orm/pg-core").PgTableWithColumns<{
-    name: "rbac_resource_owners";
-    schema: undefined;
-    columns: {
-        id: import("drizzle-orm/pg-core").PgColumn<{
-            name: "id";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: true;
-            hasDefault: true;
-            isPrimaryKey: true;
-            isAutoincrement: false;
-            hasRuntimeDefault: true;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        resource_type: import("drizzle-orm/pg-core").PgColumn<{
-            name: "resource_type";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: true;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        resource_id: import("drizzle-orm/pg-core").PgColumn<{
-            name: "resource_id";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: true;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        subject_id: import("drizzle-orm/pg-core").PgColumn<{
-            name: "subject_id";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: false;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        context_type: import("drizzle-orm/pg-core").PgColumn<{
-            name: "context_type";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: false;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        context_id: import("drizzle-orm/pg-core").PgColumn<{
-            name: "context_id";
-            tableName: "rbac_resource_owners";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: false;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {}>;
-        meta: import("drizzle-orm/pg-core").PgColumn<{
-            name: "meta";
-            tableName: "rbac_resource_owners";
-            dataType: "json";
-            columnType: "PgJsonb";
-            data: Record<string, unknown>;
-            driverParam: unknown;
-            notNull: false;
-            hasDefault: false;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: undefined;
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {
-            $type: Record<string, unknown>;
-        }>;
-        created_at: import("drizzle-orm/pg-core").PgColumn<{
-            name: "created_at";
-            tableName: "rbac_resource_owners";
             dataType: "date";
             columnType: "PgTimestamp";
             data: Date;

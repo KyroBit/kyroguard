@@ -1,6 +1,7 @@
 export interface PolicyRow {
     name: string;
     label: string;
+    valid_scopes: string[];
     depends_on: string[];
 }
 export interface PolicyRecord {
@@ -15,14 +16,6 @@ export interface GroupPolicyInsert {
     policy_group_id: string;
     policy_id: string;
     scope: string | null;
-}
-export interface ResourceOwnerRow {
-    resource_type: string;
-    resource_id: string;
-    subject_id: string | null;
-    context_type: string | null;
-    context_id: string | null;
-    meta: Record<string, unknown> | null;
 }
 export interface RbacAdapter {
     upsertPolicies(rows: PolicyRow[]): Promise<void>;
@@ -43,7 +36,5 @@ export interface RbacAdapter {
         name: string;
         scope: string | null;
     }[]>;
-    isResourceOwner(subjectId: string, resourceType: string, resourceId: string): Promise<boolean>;
-    createResourceOwner(row: ResourceOwnerRow): Promise<void>;
 }
 //# sourceMappingURL=adapter.d.ts.map

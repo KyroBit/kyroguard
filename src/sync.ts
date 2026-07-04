@@ -21,10 +21,14 @@ export interface ResourceDefinition {
 export async function syncPolicies(
   adapter:   RbacAdapter,
   resources: ResourceDefinition[],
+  portal?:   string,
+  label = '',
 ): Promise<void> {
   const all: Policy[] = resources.flatMap(r => r.policies)
 
   if (!all.length) return
+
+  const prefix = portal ? `${portal}.` : ''
 
   const codeNames = new Set(all.map(p => p.name))
   for (const p of all) {
@@ -35,10 +39,19 @@ export async function syncPolicies(
     }
   }
 
-  await adapter.upsertPolicies(all.map(p => ({ name: p.name, label: p.label, depends_on: p.dependsOn })))
+  await adapter.upsertPolicies(all.map(p => ({
+    name:         `${prefix}${p.name}`,
+    label:        p.label,
+    scopeOptions: p.scopeOptions.map(s => s.name),
+    depends_on:   p.dependsOn.map(d => `${prefix}${d}`),
+  })))
 
-  const allDbPolicies = await adapter.listAllPolicies()
-  const orphans       = allDbPolicies.filter(r => !codeNames.has(r.name))
+  const allDbPolicies  = await adapter.listAllPolicies()
+  const prefixedNames  = new Set(all.map(p => `${prefix}${p.name}`))
+  const scopedDbNames  = portal
+    ? allDbPolicies.filter(r => r.name.startsWith(prefix))
+    : allDbPolicies.filter(r => !r.name.includes('.') || r.name.indexOf('.') === r.name.lastIndexOf('.'))
+  const orphans        = scopedDbNames.filter(r => !prefixedNames.has(r.name))
 
   if (orphans.length) {
     const orphanIds = orphans.map(r => r.id)
@@ -48,7 +61,7 @@ export async function syncPolicies(
     console.log(`[rbac] Removed ${orphans.length} orphaned policies: ${orphans.map(r => r.name).join(', ')}`)
   }
 
-  const livePolicies = allDbPolicies.filter(r => codeNames.has(r.name))
+  const livePolicies = allDbPolicies.filter(r => prefixedNames.has(r.name))
   const depsByName   = new Map<string, string[]>(livePolicies.map(r => [r.name, r.depends_on]))
   const idByName     = new Map(livePolicies.map(r => [r.name, r.id]))
 
@@ -69,9 +82,9 @@ export async function syncPolicies(
       await adapter.insertGroupPolicies(
         missing.map(name => ({ policy_group_id: group.id, policy_id: idByName.get(name)!, scope: null }))
       )
-      console.log(`[rbac] Filled ${missing.length} missing deps for group ${group.id}: ${missing.join(', ')}`)
+      console.log(`${label}[rbac] Filled ${missing.length} missing deps for group ${group.id}: ${missing.join(', ')}`)
     }
   }
 
-  console.log(`[rbac] Synced ${all.length} policies.`)
+  console.log(`${label}[rbac] Synced ${all.length} policies.`)
 }

@@ -1,5 +1,10 @@
 import type { FastifyRequest } from 'fastify';
-import type { ResourceDefinition, Subject, ScopeCondition } from './policy.js';
+import type { ResourceDefinition, ScopeCondition } from './policy.js';
+export interface RbacTypes {
+    Portal: string;
+    PolicyName: string;
+    PortalPolicies: Record<string, string>;
+}
 export interface PolicyGroupDefinition {
     name: string;
     label: string;
@@ -8,8 +13,7 @@ export interface PolicyGroupDefinition {
 export interface RbacOptions {
     resources: ResourceDefinition[];
     groups?: PolicyGroupDefinition[];
-    getSubject: (req: FastifyRequest) => Subject;
-    scopes?: Record<string, ScopeCondition>;
+    queryScopes?: Record<string, ScopeCondition>;
     contextExtra?: (req: FastifyRequest) => Record<string, unknown>;
 }
 //# sourceMappingURL=types.d.ts.map

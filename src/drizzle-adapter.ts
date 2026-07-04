@@ -1,16 +1,16 @@
 import { eq, inArray, and } from 'drizzle-orm'
-import { policies, policyGroups, policyGroupPolicies, userPolicyGroups, userPolicies, resourceOwners } from './schema.js'
-import type { RbacAdapter, PolicyRow, PolicyRecord, GroupPolicyRecord, GroupPolicyInsert, ResourceOwnerRow } from './adapter.js'
+import { policies, policyGroups, policyGroupPolicies, userPolicyGroups, userPolicies } from './schema.js'
+import type { RbacAdapter, PolicyRow, PolicyRecord, GroupPolicyRecord, GroupPolicyInsert } from './adapter.js'
 
 export function createDrizzleAdapter(db: any): RbacAdapter {
   return {
     async upsertPolicies(rows: PolicyRow[]): Promise<void> {
       await db
         .insert(policies)
-        .values(rows.map(r => ({ name: r.name, label: r.label, depends_on: r.depends_on })))
+        .values(rows.map(r => ({ name: r.name, label: r.label, scope_options: r.scopeOptions, depends_on: r.depends_on })))
         .onConflictDoUpdate({
           target: policies.name,
-          set: { label: policies.label, depends_on: policies.depends_on, updated_at: new Date() },
+          set: { label: policies.label, scope_options: policies.scope_options, depends_on: policies.depends_on, updated_at: new Date() },
         })
     },
 
@@ -45,11 +45,10 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
       await db.insert(policyGroupPolicies).values(rows)
     },
 
-    async getSubjectGroupPolicies(subjectId: string, contextId?: string | null): Promise<{ name: string; scope: string | null }[]> {
-      const { isNull, or } = await import('drizzle-orm')
-      const contextFilter = contextId
-        ? or(isNull(userPolicyGroups.context_id), eq(userPolicyGroups.context_id, contextId))
-        : isNull(userPolicyGroups.context_id)
+    async getSubjectGroupPolicies(subjectId: string, portal?: string | null, contextId?: string | null): Promise<{ name: string; scope: string | null }[]> {
+      const { isNull } = await import('drizzle-orm')
+      const portalFilter  = portal    ? eq(userPolicyGroups.portal,     portal)    : isNull(userPolicyGroups.portal)
+      const contextFilter = contextId ? eq(userPolicyGroups.context_id, contextId) : isNull(userPolicyGroups.context_id)
 
       return db
         .select({ name: policies.name, scope: policyGroupPolicies.scope })
@@ -57,7 +56,7 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
         .innerJoin(policyGroups,        eq(userPolicyGroups.policy_group_id, policyGroups.id))
         .innerJoin(policyGroupPolicies, eq(policyGroupPolicies.policy_group_id, policyGroups.id))
         .innerJoin(policies,            eq(policyGroupPolicies.policy_id, policies.id))
-        .where(and(eq(userPolicyGroups.subject_id, subjectId), contextFilter))
+        .where(and(eq(userPolicyGroups.subject_id, subjectId), portalFilter, contextFilter))
     },
 
     async getSubjectDirectPolicies(subjectId: string): Promise<{ name: string; scope: string | null }[]> {
@@ -68,21 +67,5 @@ export function createDrizzleAdapter(db: any): RbacAdapter {
         .where(eq(userPolicies.subject_id, subjectId))
     },
 
-    async isResourceOwner(subjectId: string, resourceType: string, resourceId: string): Promise<boolean> {
-      const [row] = await db
-        .select({ id: resourceOwners.id })
-        .from(resourceOwners)
-        .where(and(
-          eq(resourceOwners.subject_id,    subjectId),
-          eq(resourceOwners.resource_type, resourceType),
-          eq(resourceOwners.resource_id,   resourceId),
-        ))
-        .limit(1)
-      return !!row
-    },
-
-    async createResourceOwner(row: ResourceOwnerRow): Promise<void> {
-      await db.insert(resourceOwners).values(row)
-    },
   }
 }

@@ -12,8 +12,8 @@ export function clearPolicyCache(subjectId) {
         cache.clear();
     }
 }
-async function getSubjectPolicyMap(adapter, subjectId, contextId) {
-    const cacheKey = contextId ? `${subjectId}:${contextId}` : subjectId;
+async function getSubjectPolicyMap(adapter, subjectId, portal, contextId) {
+    const cacheKey = [subjectId, portal, contextId].filter(Boolean).join(':');
     if (cache.has(cacheKey))
         return cache.get(cacheKey);
     const [groupRows, directRows] = await Promise.all([
@@ -44,19 +44,29 @@ export function requirePolicy(policyName, options, rbacOptions) {
         const subject = store.subject;
         if (subject.is_super)
             return;
-        const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, subject.context_id);
-        if (!policyMap.has(policyName)) {
+        const portal = subject.portal;
+        const resolvedName = portal ? `${portal}.${policyName}` : policyName;
+        const policyMap = await getSubjectPolicyMap(rbacOptions.adapter, subject.id, portal, subject.context_id);
+        if (!policyMap.has(resolvedName)) {
             return reply.status(403).send({ message: 'Forbidden' });
         }
-        const scope = policyMap.get(policyName);
-        if (scope !== null && options?.resource) {
+        const scopeName = policyMap.get(resolvedName);
+        if (scopeName !== null) {
+            if (!options?.resource)
+                return reply.status(403).send({ message: 'Forbidden' });
+            const scopeObj = findScope(rbacOptions.scopes, scopeName);
+            if (!scopeObj)
+                return reply.status(403).send({ message: 'Forbidden' });
             const resource = await options.resource(req);
             if (!resource)
                 return reply.status(404).send({ message: 'Not found' });
-            const owns = await rbacOptions.adapter.isResourceOwner(subject.id, resource.type, resource.id);
-            if (!owns)
+            const allowed = await scopeObj.check(subject, resource);
+            if (!allowed)
                 return reply.status(403).send({ message: 'Forbidden' });
         }
     };
+}
+function findScope(scopes, name) {
+    return scopes?.find(s => s.name === name);
 }
 //# sourceMappingURL=require-policy.js.map

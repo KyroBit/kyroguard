@@ -2,9 +2,10 @@ export class Policy {
   public readonly label: string
 
   constructor(
-    public readonly name:      string,
-    label?:                    string,
-    public readonly dependsOn: string[] = [],
+    public readonly name:        string,
+    label?:                      string,
+    public readonly dependsOn:   string[] = [],
+    public readonly scopeOptions: import('./scope.js').Scope[] = [],
   ) {
     this.label = label ?? name.split('.').pop()!.replace(/-/g, ' ')
   }
@@ -25,7 +26,8 @@ export type ContextPolicies = Record<string, string[]>
 export type ScopeCondition = (subject: Subject, db: unknown) => unknown
 
 export interface Subject {
-  id:        string
-  is_super?: boolean
+  id:         string
+  portal?:    string
+  is_super?:  boolean
   [key: string]: unknown
 }
