@@ -3,23 +3,23 @@ import { Policy } from '../../src/core/policy.js'
 import { Scope } from '../../src/core/scope.js'
 
 describe('Policy labels', () => {
-  test('derived from resource.action names: action first, then resource', () => {
-    expect(new Policy('sales.create').label).toBe('Create sales')
-    expect(new Policy('sales.void').label).toBe('Void sales')
-    expect(new Policy('products.update').label).toBe('Update products')
+  test('derived from the action part only — admin UIs group by resource', () => {
+    expect(new Policy('sales.create').label).toBe('Create')
+    expect(new Policy('sales.void').label).toBe('Void')
+    expect(new Policy('products.update').label).toBe('Update')
   })
 
-  test('hyphens become spaces in both parts', () => {
-    expect(new Policy('blog-category.read').label).toBe('Read blog category')
-    expect(new Policy('sales.mark-paid').label).toBe('Mark paid sales')
+  test('hyphens become spaces', () => {
+    expect(new Policy('sales.mark-paid').label).toBe('Mark paid')
+    expect(new Policy('blog-category.read').label).toBe('Read')
   })
 
   test('single-segment names are just capitalized', () => {
     expect(new Policy('dashboard').label).toBe('Dashboard')
   })
 
-  test('deeper names keep everything before the action as the resource', () => {
-    expect(new Policy('reports.finance.view').label).toBe('View reports finance')
+  test('deeper names still use only the last segment', () => {
+    expect(new Policy('reports.finance.view').label).toBe('View')
   })
 
   test('an explicit label always wins', () => {

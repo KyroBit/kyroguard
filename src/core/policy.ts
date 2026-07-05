@@ -12,10 +12,11 @@ export class Policy {
   readonly scopeOptions: Scope[]
 
   /**
-   * The label is derived from the name when omitted:
-   * 'sales.create' → "Create sales", 'blog-category.read' → "Read blog category".
+   * The label is derived from the action part of the name when omitted:
+   * 'sales.create' → "Create", 'sales.mark-paid' → "Mark paid" — admin UIs
+   * group permissions by resource, so repeating it would be noise.
    * Both forms are equivalent:
-   *   new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
+   *   new Policy('sales.void', 'Void', ['sales.view'], [Scope.owned()])
    *   new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
    */
   constructor(name: string, options?: PolicyOptions)
@@ -38,13 +39,10 @@ export class Policy {
   }
 }
 
-/** 'sales.create' → "Create sales"; 'dashboard' → "Dashboard". */
+/** 'sales.create' → "Create"; 'sales.mark-paid' → "Mark paid"; 'dashboard' → "Dashboard". */
 function humanize(name: string): string {
-  const segments = name.split('.')
-  const action = (segments.pop() ?? name).replace(/-/g, ' ')
-  if (segments.length === 0) return capitalize(action)
-  const resource = segments.join(' ').replace(/-/g, ' ')
-  return `${capitalize(action)} ${resource}`
+  const action = (name.split('.').pop() ?? name).replace(/-/g, ' ')
+  return capitalize(action)
 }
 
 function capitalize(text: string): string {

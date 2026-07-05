@@ -30,11 +30,11 @@ Write names without a domain prefix. Domains add theirs for you. See [Multi-tena
 
 ## Labels
 
-The label is the display name for your admin screens. It is derived from the name:
+The label is the display name for your admin screens. It is the action part of the name, capitalized — admin screens group permissions by resource, so the label only needs the verb:
 
 ```ts
-new Policy('sales.create')        // label: "Create sales"
-new Policy('blog-category.read')  // label: "Read blog category"
+new Policy('sales.create')    // label: "Create"
+new Policy('sales.mark-paid') // label: "Mark paid"
 ```
 
 Pass your own when the derived one reads wrong:

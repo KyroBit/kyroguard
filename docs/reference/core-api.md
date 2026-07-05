@@ -91,7 +91,7 @@ Domain instances offer the same methods with unqualified names. Prefer those in 
 ```ts
 class Policy {
   constructor(name: string, options?: {
-    label?: string         // default: derived — 'sales.create' → "Create sales"
+    label?: string         // default: the action, capitalized — 'sales.create' → "Create"
     dependsOn?: string[]   // policies this one requires
     scopeOptions?: Scope[] // scopes a grant may be restricted to
   })
