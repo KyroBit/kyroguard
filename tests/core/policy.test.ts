@@ -34,7 +34,7 @@ describe('Policy options form', () => {
       dependsOn: ['sales.view'],
       scopeOptions: [owned],
     })
-    expect(policy.label).toBe('Void sales')
+    expect(policy.label).toBe('Void')
     expect(policy.dependsOn).toEqual(['sales.view'])
     expect(policy.scopeOptions).toEqual([owned])
   })

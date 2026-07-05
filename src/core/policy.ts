@@ -11,14 +11,6 @@ export class Policy {
   readonly dependsOn: string[]
   readonly scopeOptions: Scope[]
 
-  /**
-   * The label is derived from the action part of the name when omitted:
-   * 'sales.create' → "Create", 'sales.mark-paid' → "Mark paid" — admin UIs
-   * group permissions by resource, so repeating it would be noise.
-   * Both forms are equivalent:
-   *   new Policy('sales.void', 'Void', ['sales.view'], [Scope.owned()])
-   *   new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
-   */
   constructor(name: string, options?: PolicyOptions)
   constructor(name: string, label?: string, dependsOn?: string[], scopeOptions?: Scope[])
   constructor(
@@ -39,7 +31,6 @@ export class Policy {
   }
 }
 
-/** 'sales.create' → "Create"; 'sales.mark-paid' → "Mark paid"; 'dashboard' → "Dashboard". */
 function humanize(name: string): string {
   const action = (name.split('.').pop() ?? name).replace(/-/g, ' ')
   return capitalize(action)
