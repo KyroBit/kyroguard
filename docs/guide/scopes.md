@@ -118,5 +118,5 @@ A failed check → 403 with `RBAC_SCOPE_DENIED`. A resolver that finds no row �
 ## Next steps
 
 - [Ownership](/guide/ownership) — how rows get owners for `Scope.owned()`.
-- [Groups](/guide/groups) — where scoped grants live.
+- [Assigning access](/guide/assigning-access) — the scope travels with the grant: a group entry, or a direct assignment.
 - [Owners and superusers](/guide/owners) — when no scope is enough: the owner.
