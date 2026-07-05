@@ -99,5 +99,5 @@ Set `isActive: false` and the group grants nothing. Members keep the assignment 
 ## Next steps
 
 - [Assigning access](/guide/assigning-access) — give staff groups and direct grants
-- [Scopes](/guide/scopes) — row-level limits like `'owned'`
+- [Scopes](/guide/scopes) — conditions like `'owned'` or `'business-hours'`
 - [Sync](/guide/sync) — how seeding runs

@@ -15,8 +15,9 @@ TypeScript types in sync.
   `RBAC_SCOPE_DENIED`, …) through your framework's own error pipeline.
 - **Bounded cache** (LRU + TTL, instance-scoped) with a pluggable
   cross-instance invalidation bus.
-- **Ownership tracking** and row-level scopes (`Scope.owned()`) that work on
-  every storage backend.
+- **Scoped grants** — conditions on a permission: own rows only
+  (`Scope.owned()`, backed by ownership tracking on every storage
+  backend), business hours, amount caps — one line in a role definition.
 
 ## Install
 

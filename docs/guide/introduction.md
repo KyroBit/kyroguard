@@ -49,7 +49,7 @@ Six words cover everything this library does.
 - **Group** — a job title, like `cashier`: its policies, assigned as one. See [Groups](/guide/groups).
 - **Domain** — the app staff sign in to: `admin` (head office) or `branch` (in-store). See [Multi-tenancy](/guide/multi-tenancy).
 - **Tenant** — the store a grant applies to, like `branch-1`. See [Multi-tenancy](/guide/multi-tenancy).
-- **Scope** — a row-level limit: a cashier voids only their own sales. See [Scopes](/guide/scopes).
+- **Scope** — a condition on a permission: a cashier voids only their own sales, only under 5,000, only during opening hours. See [Scopes](/guide/scopes).
 - **Subject** — the logged-in staff member, as this library sees it. See [Protecting routes](/guide/protecting-routes).
 
 ## How a request flows

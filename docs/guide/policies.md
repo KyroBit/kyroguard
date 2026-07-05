@@ -73,7 +73,7 @@ import { Scope } from '@kyrobit/rbac'
 new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
-The fourth argument, `scopeOptions`, lists the row-level limits this policy allows. With `Scope.owned()`, a cashier granted `'owned'` access voids only their own sales. A manager granted it without a scope voids any sale ([Scopes](/guide/scopes)).
+`scopeOptions` lists the conditions this policy may be granted with. A condition can be about the row — `Scope.owned()` lets a cashier void only their own sales — or about anything else: only during opening hours, only under an amount. A grant without a scope has no condition: a manager voids any sale ([Scopes](/guide/scopes)).
 
 ## A complete policies.ts
 

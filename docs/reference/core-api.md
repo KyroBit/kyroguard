@@ -121,7 +121,7 @@ type ScopeCheckFn = (
 ) => Awaitable<boolean>
 ```
 
-A scope is a named row-level check. `Scope.owned()` allows a request only when the user owns the target resource. Grant `sales.void` at scope `owned`: a cashier voids only their own sales. A manager, unrestricted, voids any sale. See [Scopes](/guide/scopes).
+A scope is a named condition on a grant — about the row (`Scope.owned()`: only sales the user recorded) or about anything else (time of day, an amount, a subject attribute). The check receives the resource when the guard resolves one, or `null`. See [Scopes](/guide/scopes).
 
 ## GroupDefinition
 

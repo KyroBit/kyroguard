@@ -25,7 +25,7 @@ const rbac = createRbac({ adapter: prismaAdapter(new PrismaClient()) })
 The returned adapter:
 
 - `id`: `'prisma'`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false }`. There is no automatic query scoping for Prisma. Use guard-time [scopes](/guide/scopes) for row-level restrictions.
+- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false }`. There is no automatic query scoping for Prisma. Use guard-time [scopes](/guide/scopes) instead.
 - Does not create tables. Run `prisma migrate` before `rbac sync`.
 - Does not call `$disconnect()`. You own the client lifecycle.
 - Multi-step writes run in `$transaction`. Concurrent duplicate assignments are safe.
