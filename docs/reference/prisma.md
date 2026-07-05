@@ -25,13 +25,27 @@ const rbac = createRbac({ adapter: prismaAdapter(new PrismaClient()) })
 The returned adapter:
 
 - `id`: `'prisma'`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false }`. There is no automatic query scoping for Prisma. Use guard-time [scopes](/guide/scopes) instead.
+- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false, listFiltering: true }`.
 - Does not create tables. Run `prisma migrate` before `rbac sync`.
 - Does not call `$disconnect()`. You own the client lifecycle.
 - Multi-step writes run in `$transaction`. Concurrent duplicate assignments are safe.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
 The package never imports `@prisma/client`. The `PrismaClientLike` contract is structural, so any client generated from the six models fits without casts.
+
+### List filters
+
+The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). Prisma's `WhereInput` cannot express an EXISTS against the polymorphic ownership table, so the built-in scopes take the ID-list route: one query against `RbacResourceOwner` for the matching resource ids, returned as
+
+```ts
+{ id: { in: ['…', '…'] } }
+```
+
+The id field name comes from the resource's `prisma.idField` registration and defaults to `'id'`.
+
+The list is capped at `PRISMA_ID_LIST_CAP` (10,000) ids per filter. Hitting the cap logs a one-time warning and may truncate results — past that ceiling, denormalize an owner column onto the model and ship a two-line custom scope filter instead. `PRISMA_ID_LIST_CAP` is exported from the subpath.
+
+There is no portable "match nothing" predicate in Prisma, so short-circuit `kind: 'none'` to `[]` yourself instead of running the query — see [Filtering lists](/guide/scopes#filtering-lists).
 
 ## rbacPrismaExtension()
 
@@ -103,6 +117,6 @@ The adapter addresses rows through the compound-unique input names Prisma derive
 | --- | --- |
 | `RbacUserPolicyGroup` | `subjectId_policyGroupId_domain_tenantId` |
 | `RbacUserPolicy` | `subjectId_policyId_domain_tenantId` |
-| `RbacResourceOwner` | `resourceType_resourceId_ownerId` |
+| `RbacResourceOwner` | `resourceType_resourceId_ownerId_relation` |
 
 **Do not add a `name:` argument to the `@@unique` blocks. Renaming these inputs breaks the adapter.**

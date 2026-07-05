@@ -12,12 +12,14 @@ import type {
   Awaitable,
   DecisionEvent,
   DecisionHook,
+  FilterResult,
   PolicyMap,
   QualifiedPolicyName,
   ResourceRef,
   Subject,
   SubjectRef,
 } from './types.js'
+import type { ResourceDefinition } from './policy.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from '../cache/types.js'
 import type { PolicyGrant, StorageAdapter } from '../storage/contract.js'
 import type { Scope } from './scope.js'
@@ -138,37 +140,123 @@ export class RbacEngine {
       throw new PolicyDeniedError(policy)
     }
 
-    const scopeName = map.get(policy)!
-    if (scopeName === null) {
+    const scopeNames = map.get(policy)!
+    if (scopeNames === null) {
       this.emitDecision(subject, policy, 'allow', 'granted', null, cacheHit, startedAt)
       return
     }
 
-    // Scoped grant: an unknown scope name is a deny, never a bypass.
-    const scope = this.scopes.get(scopeName)
-    if (!scope) {
-      this.emitDecision(subject, policy, 'deny', 'scope-denied', scopeName, cacheHit, startedAt)
-      throw new ScopeDeniedError(policy, scopeName)
-    }
-
-    // No resolver: the scope decides on null (row-based scopes fail closed).
+    // No resolver: the scopes decide on null (row-based scopes fail closed).
     // A resolver that finds nothing is a 404.
     let resource: ResourceRef | null = null
     if (options?.resource) {
       resource = (await options.resource()) ?? null
       if (!resource) {
-        this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeName, cacheHit, startedAt)
+        this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeNames[0] ?? null, cacheHit, startedAt)
         throw new ResourceNotFoundError()
       }
     }
 
-    const allowed = await scope.check(subject, resource, { db: this.db, adapter: this.adapter })
-    if (!allowed) {
-      this.emitDecision(subject, policy, 'deny', 'scope-denied', scopeName, cacheHit, startedAt)
-      throw new ScopeDeniedError(policy, scopeName)
+    // Scopes OR together: the first passing scope allows. An unknown scope
+    // name contributes a deny, never a bypass.
+    const ctx = { db: this.db, adapter: this.adapter }
+    for (const scopeName of scopeNames) {
+      const scope = this.scopes.get(scopeName)
+      if (!scope) continue
+      if (await scope.check(subject, resource, ctx)) {
+        this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt)
+        return
+      }
     }
 
-    this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt)
+    const deniedScope = scopeNames[0] ?? ''
+    this.emitDecision(subject, policy, 'deny', 'scope-denied', deniedScope, cacheHit, startedAt)
+    throw new ScopeDeniedError(policy, deniedScope)
+  }
+
+  /**
+   * List-path decision procedure. Throws UnauthenticatedError for a missing
+   * subject ONLY; every other outcome is a FilterResult.
+   */
+  async filterFor(
+    subject: Subject | null | undefined,
+    policy: QualifiedPolicyName,
+    resource: ResourceDefinition,
+  ): Promise<FilterResult> {
+    const startedAt = performance.now()
+
+    if (!subject?.id) {
+      this.emitDecision(subject, policy, 'deny', 'no-subject', null, false, startedAt, 'list')
+      throw new UnauthenticatedError()
+    }
+
+    if (this.superBypass && subject.is_super === true) {
+      this.emitDecision(subject, policy, 'allow', 'super', null, false, startedAt, 'list')
+      return { kind: 'all' }
+    }
+
+    const ref = toSubjectRef(subject)
+    const { map, cacheHit } = await this.getPolicyMap(ref)
+
+    if (!map.has(policy)) {
+      this.emitDecision(subject, policy, 'deny', 'no-policy', null, cacheHit, startedAt, 'list')
+      return { kind: 'none', reason: 'no-policy' }
+    }
+
+    const scopeNames = map.get(policy)!
+    if (scopeNames === null) {
+      this.emitDecision(subject, policy, 'allow', 'granted', null, cacheHit, startedAt, 'list')
+      return { kind: 'all' }
+    }
+
+    const ctx = { db: this.db, adapter: this.adapter }
+    const fragments: unknown[] = []
+    const fragmentScopes: string[] = []
+    for (const scopeName of scopeNames) {
+      const scope = this.scopes.get(scopeName)
+      if (!scope) {
+        this.warnOnce(
+          `unknown-scope:${scopeName}`,
+          `[rbac] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
+        )
+        continue
+      }
+      // A scope without a filter half folds through check(subject, null, ctx):
+      // condition scopes decide once per request, row scopes fail closed.
+      const result = scope.filter
+        ? await scope.filter(subject, { ...ctx, resource })
+        : await scope.check(subject, null, ctx)
+      if (result === true) {
+        this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt, 'list')
+        return { kind: 'all' }
+      }
+      if (result === false) continue
+      fragments.push(result.where)
+      fragmentScopes.push(scopeName)
+    }
+
+    if (fragments.length === 0) {
+      this.emitDecision(subject, policy, 'deny', 'scope-denied', scopeNames[0] ?? null, cacheHit, startedAt, 'list')
+      return { kind: 'none', reason: 'scope-denied' }
+    }
+
+    if (fragments.length === 1) {
+      this.emitDecision(subject, policy, 'allow', 'granted', fragmentScopes[0]!, cacheHit, startedAt, 'list')
+      return { kind: 'where', where: fragments[0] }
+    }
+
+    const support = this.adapter.listFilters
+    if (!support) {
+      this.warnOnce(
+        `unfilterable:${this.adapter.id}`,
+        `[rbac] Adapter "${this.adapter.id}" has no listFilters — cannot OR-combine ${fragments.length} scope fragments; the list is empty.`,
+      )
+      this.emitDecision(subject, policy, 'deny', 'scope-denied', fragmentScopes.join(','), cacheHit, startedAt, 'list')
+      return { kind: 'none', reason: 'unfilterable' }
+    }
+
+    this.emitDecision(subject, policy, 'allow', 'granted', fragmentScopes.join(','), cacheHit, startedAt, 'list')
+    return { kind: 'where', where: support.or(fragments) }
   }
 
   // ── Mutations (invalidate + publish, always) ────────────────────────────────
@@ -225,6 +313,14 @@ export class RbacEngine {
     return qualifyPolicyName(domain, policy)
   }
 
+  private readonly warned = new Set<string>()
+
+  private warnOnce(key: string, message: string): void {
+    if (this.warned.has(key)) return
+    this.warned.add(key)
+    console.warn(message)
+  }
+
   private emitDecision(
     subject: Subject | null | undefined,
     policy: QualifiedPolicyName,
@@ -233,6 +329,7 @@ export class RbacEngine {
     scope: string | null,
     cacheHit: boolean,
     startedAt: number,
+    mode: DecisionEvent['mode'] = 'guard',
   ): void {
     if (!this.onDecision) return
     try {
@@ -243,6 +340,7 @@ export class RbacEngine {
         policy,
         decision,
         reason,
+        mode,
         scope,
         cacheHit,
         durationMs: performance.now() - startedAt,
@@ -262,15 +360,19 @@ export class RbacEngine {
   }
 }
 
-/** Null scope (unrestricted) wins over any named scope; first named scope otherwise. */
+/** Null scope (unrestricted) wins entirely; otherwise the deduped union of scope names in grant order. */
 export function mergeGrants(grants: PolicyGrant[]): PolicyMap {
   const map: PolicyMap = new Map()
   for (const grant of grants) {
     const existing = map.get(grant.name)
-    if (existing === undefined) {
-      map.set(grant.name, grant.scope)
-    } else if (existing !== null && grant.scope === null) {
+    if (grant.scope === null || existing === null) {
       map.set(grant.name, null)
+      continue
+    }
+    if (existing === undefined) {
+      map.set(grant.name, [grant.scope])
+    } else if (!existing.includes(grant.scope)) {
+      existing.push(grant.scope)
     }
   }
   return map

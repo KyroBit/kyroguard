@@ -2,7 +2,7 @@
  * Structural contract for the Prisma client. `@prisma/client` is an optional
  * peer with per-project generated types, so nothing under src/ may import it.
  * The `any`s are deliberate: Prisma's generated signatures are generic over
- * the select shape, which a structural type cannot capture; the S1–S20 suite
+ * the select shape, which a structural type cannot capture; the S1–S23 suite
  * pins runtime behavior.
  */
 

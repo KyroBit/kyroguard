@@ -2,6 +2,7 @@ import { UnknownPolicyError } from '../contract.js'
 import { rbacModels } from './models.js'
 import type { Connection, Types } from 'mongoose'
 import type { ResourceRef, SubjectRef } from '../../core/types.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type {
   GroupPolicyEntry,
   GroupRecord,
@@ -56,11 +57,35 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
     return group._id
   }
 
+  function castResourceIds(resource: ResourceDefinition, ids: string[]): unknown[] {
+    const table = resource.table as
+      | { schema?: { path?: (name: string) => { instance?: string } | undefined } }
+      | undefined
+    const instance = table?.schema?.path?.('_id')?.instance
+    if (instance !== 'ObjectId' && instance !== 'ObjectID') return ids
+    const { ObjectId } = connection.base.Types
+    return ids.map(id => (ObjectId.isValid(id) ? new ObjectId(id) : id))
+  }
+
+  async function idListWhere(
+    resource: ResourceDefinition,
+    match: Record<string, unknown>,
+  ): Promise<{ where: unknown }> {
+    const ids: string[] = await models.resourceOwner.distinct('resourceId', match)
+    return { where: { _id: { $in: castResourceIds(resource, ids) } } }
+  }
+
   return {
     id: 'mongoose',
-    capabilities: { autoOwnershipTracking: true, queryScoping: true },
+    capabilities: { autoOwnershipTracking: true, queryScoping: true, listFiltering: true },
 
     async ensureSchema(): Promise<void> {
+      // S22 migration: pre-relation rows are 'owner' rows — backfill before
+      // syncIndexes builds the unique index that includes `relation`.
+      await models.resourceOwner.updateMany(
+        { relation: { $exists: false } },
+        { $set: { relation: 'owner' } },
+      )
       await Promise.all(Object.values(models).map(model => model.syncIndexes()))
     },
 
@@ -284,6 +309,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
               resourceType: entry.resourceType,
               resourceId: entry.resourceId,
               ownerId: entry.ownerId,
+              relation: entry.relation ?? 'owner',
             },
             update: { $set: { domain: entry.domain, tenantId: entry.tenantId } },
             upsert: true,
@@ -297,6 +323,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
         ownerId,
         resourceType: resource.type,
         resourceId: resource.id,
+        relation: 'owner',
       })
       return found !== null
     },
@@ -306,6 +333,58 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
         resourceType: resource.type,
         resourceId: resource.id,
       })
+    },
+
+    async getAccess(resource: ResourceRef): Promise<OwnershipEntry[]> {
+      const docs = await models.resourceOwner
+        .find({ resourceType: resource.type, resourceId: resource.id })
+        .lean()
+      return docs.map(doc => ({
+        resourceType: doc.resourceType,
+        resourceId: doc.resourceId,
+        ownerId: doc.ownerId,
+        relation: doc.relation ?? 'owner',
+        domain: doc.domain ?? '',
+        tenantId: doc.tenantId ?? '',
+      }))
+    },
+
+    async removeAccess(ownerId: string, resource: ResourceRef, relation?: string): Promise<void> {
+      const filter: Record<string, unknown> = {
+        ownerId,
+        resourceType: resource.type,
+        resourceId: resource.id,
+      }
+      if (relation !== undefined) filter['relation'] = relation
+      await models.resourceOwner.deleteMany(filter)
+    },
+
+    listFilters: {
+      owned(subjectId, resource) {
+        return idListWhere(resource, {
+          resourceType: resource.type,
+          ownerId: subjectId,
+          relation: 'owner',
+        })
+      },
+      inTenant(tenantId, resource) {
+        // '' sentinel means "no tenant" — it must never match sentinel rows.
+        if (tenantId === '') return { where: { _id: { $in: [] } } }
+        return idListWhere(resource, { resourceType: resource.type, tenantId })
+      },
+      granted(subjectId, resource) {
+        return idListWhere(resource, {
+          resourceType: resource.type,
+          ownerId: subjectId,
+          relation: 'granted',
+        })
+      },
+      or(fragments) {
+        return { $or: fragments }
+      },
+      none() {
+        return { _id: { $in: [] } }
+      },
     },
   }
 }

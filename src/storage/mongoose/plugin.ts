@@ -8,11 +8,19 @@ export interface RbacMongoosePluginOptions {
   rbac: { engine: RbacEngine; adapter: StorageAdapter }
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
-  /** Named query-scope builders: scope name → subject → Mongo filter. */
+  /**
+   * Named query-scope builders: scope name → subject → Mongo filter.
+   * @deprecated Superseded by filterFor — removed next major.
+   */
   queryScopes?: Record<string, (subject: Subject) => Record<string, unknown>>
-  /** domain → policy name → scope names (mirrors ResourceDefinition.domains). */
+  /**
+   * domain → policy name → scope names (mirrors ResourceDefinition.domains).
+   * @deprecated Superseded by filterFor — removed next major.
+   */
   domains?: Record<string, Record<string, string[]>>
 }
+
+let warnedDeprecatedQueryScoping = false
 
 function documentId(doc: unknown): string | null {
   if (typeof doc !== 'object' || doc === null) return null
@@ -22,12 +30,20 @@ function documentId(doc: unknown): string | null {
 }
 
 /**
- * Mongoose schema plugin: automatic ownership tracking + query scoping.
+ * Mongoose schema plugin: automatic ownership tracking + deprecated query
+ * scoping (pre-find hook — superseded by filterFor, removed next major).
  * updateMany/deleteMany/bulkWrite and raw collection ops fire NO document
  * middleware, so they are not tracked — see docs/reference/mongoose.md.
  */
 export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void {
   const { engine, adapter } = options.rbac
+
+  if ((options.domains !== undefined || options.queryScopes !== undefined) && !warnedDeprecatedQueryScoping) {
+    warnedDeprecatedQueryScoping = true
+    console.warn(
+      '[rbac] rbacMongoosePlugin `domains`/`queryScopes` query scoping is deprecated — use filterFor() in the list handler instead. The pre-find hook will be removed in the next major.',
+    )
+  }
 
   async function recordOwnershipFor(docs: unknown[]): Promise<void> {
     const subject = engine.store.getSubject()

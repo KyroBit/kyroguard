@@ -3,10 +3,10 @@
  * Reference-adapter specifics that are NOT portable enough for the shared
  * contract suite:
  *
- * - S13 ownership upsert last-write-wins on the domain/tenant fields: recording the
- *   same (resourceType, resourceId, ownerId) again with different
- *   domain/tenantId updates the single existing row instead of
- *   inserting a duplicate or throwing.
+ * - S13/S22 ownership upsert last-write-wins on the domain/tenant fields:
+ *   recording the same (resourceType, resourceId, ownerId, relation) again
+ *   with different domain/tenantId updates the single existing row instead
+ *   of inserting a duplicate or throwing.
  * - Defensive copying: grants returned by getSubjectPolicies (and entries
  *   from getGroupPolicies) are copies — mutating a returned object never
  *   corrupts the store. Input entries are copied too — mutating an argument
@@ -32,8 +32,9 @@ describe('memory adapter extras', () => {
         tenantId: '',
       }
       await adapter.recordOwnership([entry])
-      // Same identity tuple, new domain/tenant — must take the update path, never
-      // duplicate. Last write wins on the domain/tenant fields.
+      // Same identity tuple (relation defaults to 'owner' each time), new
+      // domain/tenant — must take the update path, never duplicate. Last
+      // write wins on the domain/tenant fields.
       await adapter.recordOwnership([{ ...entry, domain: 'admin', tenantId: 'c1' }])
       await adapter.recordOwnership([{ ...entry, domain: 'branch', tenantId: 'c2' }])
       expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)

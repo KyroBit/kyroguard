@@ -2,8 +2,9 @@
 /**
  * rbacMongoosePlugin behavior on a real mongod (mongodb-memory-server):
  * automatic ownership tracking through document middleware, ownership cleanup
- * on findOneAndDelete, query scoping via pre(/^find/), and the DOCUMENTED gap
- * that updateMany fires no document middleware and therefore records nothing.
+ * on findOneAndDelete, deprecated query scoping via pre(/^find/) (still works,
+ * warns once), and the DOCUMENTED gap that updateMany fires no document
+ * middleware and therefore records nothing.
  */
 
 import mongoose from 'mongoose'
@@ -45,22 +46,38 @@ if (!available) {
     authorId: { type: String, required: true },
     branchId: { type: String, required: true },
   })
-  rbacMongoosePlugin(postSchema as unknown as mongoose.Schema, {
-    rbac: { engine, adapter },
-    type: 'post',
-    queryScopes: {
-      own: subject => ({ authorId: subject.id }),
-      branch: subject => ({ branchId: subject.tenant_id }),
-    },
-    domains: {
-      // Two policies listing overlapping scopes: the plugin must dedupe the
-      // scope names and $or-combine the two distinct filters.
-      admin: {
-        'admin.posts.read': ['own', 'branch'],
-        'admin.posts.write': ['own'],
+  // Capture the deprecation warn fired by the first (and only the first)
+  // query-scoping registration in this process.
+  const deprecationWarns: string[] = []
+  const originalWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    deprecationWarns.push(args.map(String).join(' '))
+  }
+  try {
+    rbacMongoosePlugin(postSchema as unknown as mongoose.Schema, {
+      rbac: { engine, adapter },
+      type: 'post',
+      queryScopes: {
+        own: subject => ({ authorId: subject.id }),
+        branch: subject => ({ branchId: subject.tenant_id }),
       },
-    },
-  })
+      domains: {
+        // Two policies listing overlapping scopes: the plugin must dedupe the
+        // scope names and $or-combine the two distinct filters.
+        admin: {
+          'admin.posts.read': ['own', 'branch'],
+          'admin.posts.write': ['own'],
+        },
+      },
+    })
+    rbacMongoosePlugin(new mongoose.Schema({}) as unknown as mongoose.Schema, {
+      rbac: { engine, adapter },
+      type: 'other',
+      domains: { admin: {} },
+    })
+  } finally {
+    console.warn = originalWarn
+  }
   const Post = connection.model<PostDoc>('Post', postSchema)
 
   const subject: Subject = { id: 'u1', domain: 'admin', tenant_id: 'b1' }
@@ -79,6 +96,13 @@ if (!available) {
     beforeEach(async () => {
       await Post.deleteMany({})
       await models.resourceOwner.deleteMany({})
+    })
+
+    test('(g) domains/queryScopes config warns exactly once per process', () => {
+      const rbacWarns = deprecationWarns.filter(line => line.includes('deprecated'))
+      expect(rbacWarns).toHaveLength(1)
+      expect(rbacWarns[0]).toContain('rbacMongoosePlugin')
+      expect(rbacWarns[0]).toContain('filterFor')
     })
 
     test("(a) doc.save() inside engine.store context records ownership with the subject's domain/tenant", async () => {

@@ -46,7 +46,9 @@ export interface ResourceDefinition {
   policies: Policy[]
   /** Drizzle table or Mongoose model — consumed by trackedDb / the plugin. */
   table?: unknown
-  /** domain name → policy name → scope names (query-scoping config). */
+  /** Abstract field name → native column / path / field name, read by resource-generic scope filters. */
+  fields?: Record<string, unknown>
+  /** @deprecated Query-scoping config — replaced by filterFor. Removed next major. */
   domains?: Record<string, PolicyScopeMap>
 }
 

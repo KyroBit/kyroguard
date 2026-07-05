@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the executable storage contract (S1–S20) against the Mongoose adapter
+ * Runs the executable storage contract (S1–S23) against the Mongoose adapter
  * on a real mongod (mongodb-memory-server). Every case gets a fresh
  * connection + unique database via the shared helper, with ensureSchema()
  * (syncIndexes) completed before the adapter is used — the S10/S13 idempotent

@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { MisconfiguredError, RbacError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type { Rbac } from '../../index.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
@@ -124,6 +125,11 @@ function createDomain<P extends string>(
       }
     },
 
+    async filterFor(req, policy) {
+      const subject = await resolveSubject(req)
+      return rbac.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(rbac, policy))
+    },
+
     assignGroup: (subjectId, group, opts) =>
       rbac.admin.assignGroup({ subjectId, domain: name, tenantId: opts?.tenantId }, group),
 
@@ -143,4 +149,16 @@ function createDomain<P extends string>(
         qualifyPolicyName(name, policy),
       ),
   }
+}
+
+function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
+  const resource = rbac.resources.find(candidate =>
+    candidate.policies.some(candidatePolicy => candidatePolicy.name === policy),
+  )
+  if (!resource) {
+    throw new MisconfiguredError(
+      `[rbac] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
+    )
+  }
+  return resource
 }

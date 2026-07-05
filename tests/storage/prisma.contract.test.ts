@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the executable storage contract (S1–S20) against the Prisma adapter on
+ * Runs the executable storage contract (S1–S23) against the Prisma adapter on
  * SQLite. The fixture generates the client from
  * helpers/prisma-fixture/schema.prisma and pushes it to a unique tmp database
  * file; every contract case starts from wiped tables (children before

@@ -4,7 +4,7 @@
  */
 
 import type { RbacError } from '../core/errors.js'
-import type { Awaitable, DomainPolicyName, ResourceRef, SubjectInput } from '../core/types.js'
+import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInput } from '../core/types.js'
 
 export interface GuardOptions<TReq> {
   /** Resolves the row-level target; required when the resolved grant is scoped. */
@@ -24,6 +24,13 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
 
   /** Resolves and sets the subject without guarding; register in an encapsulated scope, never app-wide. */
   subjectHook(): TGuard
+
+  /**
+   * List-path counterpart of requirePolicy: same subject resolution and the
+   * same UnauthenticatedError, answering with the FilterResult trichotomy.
+   * Optional until every integration ships it (next phase of the RFC).
+   */
+  filterFor?(req: TReq, policy: DomainPolicyName<P>): Promise<FilterResult>
 
   assignGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   removeGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>

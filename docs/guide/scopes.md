@@ -115,8 +115,119 @@ Row rules must fail closed: return `false` when `resource` is `null`, like the e
 
 A failed check → 403 with `RBAC_SCOPE_DENIED`. A resolver that finds no row → 404. Registering a scope: list it in the policy's allowed scopes (shown in Rule 1) — the [reference](/reference/core-api) has the full `Scope` API.
 
+## Filtering lists
+
+A guard answers "may this user touch **this** row." A list endpoint asks the same grant the other question — *which rows?* Ask with `filterFor`:
+
+::: code-group
+
+```ts [Fastify]
+app.get('/sales', async req => {
+  const f = await staff.filterFor(req, 'sales.view')
+  if (f.kind === 'none') return [] // nothing qualifies — skip the query
+  return db.select().from(sales)
+    .where(f.kind === 'all' ? undefined : f.where as SQL)
+    .orderBy(desc(sales.createdAt))
+    .limit(20)
+})
+```
+
+```ts [Express]
+app.get('/sales', async (req, res) => {
+  const f = await staff.filterFor(req, 'sales.view')
+  if (f.kind === 'none') return res.json([])
+  const rows = await db.select().from(sales)
+    .where(f.kind === 'all' ? undefined : f.where as SQL)
+    .limit(20)
+  res.json(rows)
+})
+```
+
+:::
+
+The answer is one of three:
+
+| Kind | Meaning | What to do |
+|---|---|---|
+| `{ kind: 'all' }` | The grant has no row restriction | Query unfiltered |
+| `{ kind: 'none', reason }` | Nothing qualifies right now | Return `[]` — skip the database |
+| `{ kind: 'where', where }` | A native condition for your ORM | `AND` it into your query |
+
+Your own conditions go alongside: `and(eq(sales.status, 'open'), f.where as SQL)`. Never spread `f.where` into another object — later keys can overwrite earlier ones and quietly widen access.
+
+### The cashier's list
+
+The void guard from Rule 1 already knows cashiers only touch their own sales. On the list route, the cashier's `'sales.view': 'owned'` grant comes back as `{ kind: 'where' }` carrying one EXISTS against the ownership store. The page holds only their own sales — and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's.
+
+`filterFor` finds the resource by the policy it defines. The `sale` resource from [Ownership](/guide/ownership) already carries its `table` — that is all the built-in filters need.
+
+### The manager's list
+
+Same route, no new code. The manager's grant is `'sales.view': null` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. Nothing built, nothing enumerated, nothing to pay. One grant with a scope and another without? The unrestricted one wins, exactly as it does at the guard.
+
+### Outside business hours
+
+The fraud rule from Rule 2 — `'sales.view': 'business-hours'` — never looks at a row, so it never becomes SQL. At noon it folds to no restriction. At 23:00 it folds to `{ kind: 'none', reason: 'scope-denied' }` and the endpoint returns an empty list without touching the database. The fallback rule makes this free: a scope with no filter half runs its ordinary `check` once, with no resource — `true` means no restriction, `false` means no rows.
+
+No `sales.view` grant at all is also an empty list — `{ kind: 'none', reason: 'no-policy' }`. Lists answer with emptiness where guards answer with errors; only a missing login still throws (401). Want a 403 instead? Branch on it:
+
+```ts
+if (f.kind === 'none' && f.reason === 'no-policy') {
+  return reply.code(403).send({ code: 'RBAC_POLICY_DENIED' })
+}
+```
+
+### Filters for custom row scopes
+
+`Scope.owned()` ships its own filter. A custom row scope gets one as the fourth constructor argument — the same rule, written as a condition your ORM understands. Rule 3's scope, with its list half:
+
+```ts
+import { lt } from 'drizzle-orm'
+
+export const smallSale = new Scope(
+  'small-sale',
+  'Under 5,000',
+  async (user, resource) => { /* the check from Rule 3 */ },
+  () => ({ where: lt(sales.total, 5000) }),
+)
+```
+
+One scope, two paths: the check guards single rows, the filter powers lists. A row scope without a filter contributes no rows to a list — the list stays empty rather than leaking.
+
+The two halves must agree: a row passes the check exactly when the filtered query returns it. The built-ins agree by construction. For your own filters, one `assertScopeParity` test per scope keeps them honest — see [Testing](/reference/testing).
+
+## Chosen records
+
+Ownership covers rows a user created. For rows someone *picks* — share this report, assign this ticket — grant access directly:
+
+```ts
+await rbac.access.grant(amina.id, { type: 'report', id: '7' })
+```
+
+`Scope.granted()` is the built-in that checks those grants:
+
+```ts
+new Policy('reports.view', { scopeOptions: [Scope.granted()] })
+
+// groups.ts
+analyst: { policies: { 'reports.view': 'granted' } },
+```
+
+Amina now sees report 7 — at the guard and in her lists — until `rbac.access.revoke(amina.id, { type: 'report', id: '7' })`. [Ownership](/guide/ownership#the-access-api) has the full API.
+
+## The built-in scopes
+
+| Scope | Name | Passes when |
+|---|---|---|
+| `Scope.owned()` | `owned` | the user created the row — [Ownership](/guide/ownership) |
+| `Scope.granted()` | `granted` | the row was shared with the user via `rbac.access.grant()` |
+| `Scope.inTenant()` | `in-tenant` | the row belongs to the request's tenant — [Multi-tenancy](/guide/multi-tenancy) |
+
+All three guard single rows and filter lists.
+
 ## Next steps
 
-- [Ownership](/guide/ownership) — how rows get owners for `Scope.owned()`.
+- [Ownership](/guide/ownership) — how rows get owners for `Scope.owned()`, and the access API behind `Scope.granted()`.
 - [Assigning access](/guide/assigning-access) — the scope travels with the grant: a group entry, or a direct assignment.
 - [Owners and superusers](/guide/owners) — when no scope is enough: the owner.
+- [One Scope, Two Paths](/rfc/one-scope-two-paths) — the design notes behind `filterFor`, for the curious.

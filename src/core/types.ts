@@ -75,8 +75,21 @@ export function qualifyPolicyName(domain: string, policy: string): QualifiedPoli
   return domain === '' ? policy : `${domain}.${policy}`
 }
 
-/** Resolved grants for one subject: policy name → scope (null = unrestricted). */
-export type PolicyMap = Map<string, string | null>
+/**
+ * Resolved grants for one subject: policy name → null (unrestricted) or every
+ * granted scope name (deduped, OR semantics on both paths).
+ */
+export type PolicyMap = Map<string, string[] | null>
+
+/**
+ * The list-path decision trichotomy returned by filterFor. `none` is an
+ * answer (serve an empty list), never an error — guards answer with errors,
+ * lists answer with emptiness.
+ */
+export type FilterResult =
+  | { kind: 'all' }
+  | { kind: 'none'; reason: 'no-policy' | 'scope-denied' | 'unfilterable' }
+  | { kind: 'where'; where: unknown }
 
 export interface ResourceRef {
   type: string
@@ -94,6 +107,8 @@ export interface DecisionEvent {
   policy: QualifiedPolicyName
   decision: 'allow' | 'deny'
   reason: 'granted' | 'super' | 'no-policy' | 'scope-denied' | 'no-subject' | 'resource-not-found'
+  /** Which evaluation path decided: authorize() = 'guard', filterFor() = 'list'. */
+  mode: 'guard' | 'list'
   scope: string | null
   cacheHit: boolean
   durationMs: number

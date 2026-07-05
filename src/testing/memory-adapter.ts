@@ -1,6 +1,11 @@
 /**
- * In-memory reference implementation of the storage contract (S1–S20);
+ * In-memory reference implementation of the storage contract (S1–S23);
  * every behavior here is normative via runStorageAdapterContractSuite.
+ *
+ * listFilters fragments are plain predicates — `{ where: (row: { id: string })
+ * => boolean }` — so engine.filterFor is fully testable without a database:
+ * apply the returned predicate to your seeded rows. `or` folds predicates,
+ * `none` is the always-false predicate.
  */
 
 import { UnknownPolicyError } from '../index.js'
@@ -11,6 +16,9 @@ import type {
   PolicyGrant,
   StorageAdapter,
 } from '../storage/contract.js'
+
+/** The memory adapter's native list-filter fragment: a row predicate. */
+export type MemoryWhere = (row: { id: string }) => boolean
 
 interface StoredPolicy {
   id: string
@@ -45,6 +53,10 @@ interface DirectAssignment extends AssignmentTuple {
   scope: string | null
 }
 
+interface StoredOwnership extends OwnershipEntry {
+  relation: string
+}
+
 export function memoryAdapter(): StorageAdapter {
   let counter = 0
   const nextId = (): string => `mem_${++counter}`
@@ -54,7 +66,16 @@ export function memoryAdapter(): StorageAdapter {
   const groupPolicies = new Map<string, GroupPolicyEntry[]>()
   const groupAssignments: GroupAssignment[] = []
   const directAssignments: DirectAssignment[] = []
-  const ownership: OwnershipEntry[] = []
+  const ownership: StoredOwnership[] = []
+
+  const accessMatches = (
+    resourceType: string,
+    resourceId: string,
+    match: (row: StoredOwnership) => boolean,
+  ): boolean =>
+    ownership.some(
+      row => row.resourceType === resourceType && row.resourceId === resourceId && match(row),
+    )
 
   // S2: plain equality on every component — no fallback in either direction.
   const sameTuple = (assignment: AssignmentTuple, ref: SubjectRef): boolean =>
@@ -73,7 +94,7 @@ export function memoryAdapter(): StorageAdapter {
 
   return {
     id: 'memory',
-    capabilities: { autoOwnershipTracking: false, queryScoping: false },
+    capabilities: { autoOwnershipTracking: false, queryScoping: false, listFiltering: true },
 
     // S17: nothing to create in memory; safe on every sync run.
     async ensureSchema() {},
@@ -264,36 +285,90 @@ export function memoryAdapter(): StorageAdapter {
 
     async recordOwnership(entries) {
       for (const entry of entries) {
-        // S13: upsert on (resourceType, resourceId, ownerId).
+        const relation = entry.relation ?? 'owner' // S22: omitted relation is stored as 'owner'.
+        // S22: upsert on (resourceType, resourceId, ownerId, relation).
         const existing = ownership.find(
           row =>
             row.resourceType === entry.resourceType &&
             row.resourceId === entry.resourceId &&
-            row.ownerId === entry.ownerId,
+            row.ownerId === entry.ownerId &&
+            row.relation === relation,
         )
         if (existing) {
           existing.domain = entry.domain
           existing.tenantId = entry.tenantId
         } else {
-          ownership.push({ ...entry })
+          ownership.push({ ...entry, relation })
         }
       }
     },
 
     async isOwner(ownerId, resource) {
-      return ownership.some(
-        row =>
-          row.ownerId === ownerId &&
-          row.resourceType === resource.type &&
-          row.resourceId === resource.id,
+      // S22: only relation-'owner' rows make isOwner true.
+      return accessMatches(
+        resource.type,
+        resource.id,
+        row => row.ownerId === ownerId && row.relation === 'owner',
       )
     },
 
     async removeOwnership(resource) {
+      // S13: every entry for the resource, all relations.
       removeWhere(
         ownership,
         row => row.resourceType === resource.type && row.resourceId === resource.id,
       )
+    },
+
+    async getAccess(resource) {
+      // S21: every entry, all relations, relation populated.
+      return ownership
+        .filter(row => row.resourceType === resource.type && row.resourceId === resource.id)
+        .map(row => ({ ...row }))
+    },
+
+    async removeAccess(ownerId, resource, relation) {
+      // S23: only the matching (ownerId, type, id[, relation]) entries.
+      removeWhere(
+        ownership,
+        row =>
+          row.resourceType === resource.type &&
+          row.resourceId === resource.id &&
+          row.ownerId === ownerId &&
+          (relation === undefined || row.relation === relation),
+      )
+    },
+
+    listFilters: {
+      owned: (subjectId, resource) => ({
+        where: ((row) =>
+          accessMatches(
+            resource.type,
+            row.id,
+            entry => entry.ownerId === subjectId && entry.relation === 'owner',
+          )) satisfies MemoryWhere,
+      }),
+      inTenant: (tenantId, resource) => {
+        // '' is the no-tenant sentinel — it must never match stored '' rows.
+        if (tenantId === '') return false
+        return {
+          where: ((row) =>
+            accessMatches(resource.type, row.id, entry => entry.tenantId === tenantId)) satisfies MemoryWhere,
+        }
+      },
+      granted: (subjectId, resource) => ({
+        where: ((row) =>
+          accessMatches(
+            resource.type,
+            row.id,
+            entry => entry.ownerId === subjectId && entry.relation === 'granted',
+          )) satisfies MemoryWhere,
+      }),
+      or: fragments => {
+        const predicates = fragments as MemoryWhere[]
+        return ((row) => predicates.some(predicate => predicate(row))) satisfies MemoryWhere
+      },
+      none: () => (() => false) satisfies MemoryWhere,
     },
   }
 }

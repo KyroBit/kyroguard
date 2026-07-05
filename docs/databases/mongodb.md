@@ -87,7 +87,7 @@ await rbac.ownership.remove({ type: 'sale', id: saleId })
 ```
 :::
 
-The plugin can also filter `find` queries per user through its `queryScopes` option. See the [Mongoose reference](/reference/mongoose).
+The plugin's `queryScopes`/`domains` find-filtering is deprecated — filter list queries with `filterFor` instead. See [Filtering lists](/guide/scopes#filtering-lists) and the [Mongoose reference](/reference/mongoose).
 
 ## Next steps
 

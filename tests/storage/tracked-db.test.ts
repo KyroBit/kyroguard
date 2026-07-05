@@ -122,6 +122,7 @@ describe('trackedDb — ownership tracking on insert', () => {
       resourceType: 'post',
       resourceId: id,
       ownerId: 'u1',
+      relation: 'owner',
       domain: 'admin',
       tenantId: 'c1',
     })

@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the executable storage contract (S1–S20) against the in-memory
+ * Runs the executable storage contract (S1–S23) against the in-memory
  * reference adapter under bun:test. The reference adapter must pass its own
  * specification — this is the anchor every other adapter is measured against.
  */

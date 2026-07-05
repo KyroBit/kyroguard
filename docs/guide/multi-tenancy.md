@@ -67,4 +67,6 @@ Amina requests `/sales` with `tenant_id: 'branch-1'`. Allowed. The same request 
 
 A store can also have an owner — one user who passes every check in that store. See [Owners](/guide/assigning-access#owners).
 
+Rows carry the tenant too: ownership records store the tenant they were created in. `Scope.inTenant()` uses that — grant `'sales.view': 'in-tenant'` and a branch-1 manager sees every branch-1 sale, at the guard and in lists, and nothing from branch-2. See [the built-in scopes](/guide/scopes#the-built-in-scopes).
+
 One thing to watch: omitting `tenantId` when assigning does not make a grant global. It makes a grant for requests that carry no store. To make Amina a manager in three stores, assign three times. Assignment details are in [Assigning access](/guide/assigning-access).

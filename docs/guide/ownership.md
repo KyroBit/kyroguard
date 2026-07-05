@@ -92,7 +92,28 @@ const mine = await rbac.ownership.isOwner(user.id, { type: 'sale', id: sale.id }
 await rbac.ownership.remove({ type: 'sale', id: sale.id })
 ```
 
-Recording twice is safe. `remove` clears every owner of the row.
+Recording twice is safe. `remove` clears everyone from the row — owners and grants alike.
+
+## Owner entries and granted entries
+
+Every record carries a relation. `rbac.ownership.record()` writes relation `'owner'`: the row's creator, what `Scope.owned()` checks. `rbac.access.grant()` writes relation `'granted'`: a row someone chose to share, what `Scope.granted()` checks. Same store, different meaning — a granted entry never passes an owned check.
+
+## The access API
+
+```ts
+// Share a report with Amina:
+await rbac.access.grant(amina.id, { type: 'report', id: '7' })
+
+// Take it back:
+await rbac.access.revoke(amina.id, { type: 'report', id: '7' })
+
+// Everyone on the report — owners and grants:
+const entries = await rbac.access.list({ type: 'report', id: '7' })
+```
+
+`grant` takes options: `relation` for a custom relation name, `domain` and `tenantId` to place the entry. `revoke` without a relation removes that user's entries under every relation; pass one to remove just it. Granting twice is safe, like recording.
+
+[Chosen records](/guide/scopes#chosen-records) shows the scope that turns these grants into access.
 
 ## Background jobs
 

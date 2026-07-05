@@ -1,14 +1,17 @@
-import { and, asc, eq, inArray, notInArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, notInArray, or, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import { UnknownPolicyError } from '../contract.js'
 import type {
   GroupPolicyEntry,
   GroupRecord,
+  ListFilters,
   OwnershipEntry,
   PolicyDefinitionRow,
   PolicyGrant,
   PolicyRecord,
   StorageAdapter,
 } from '../contract.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type { ResourceRef, SubjectRef } from '../../core/types.js'
 
 export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
@@ -102,6 +105,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
 
   const writeOwnership = async (ex: Db, entries: OwnershipEntry[]): Promise<void> => {
     for (const entry of entries) {
+      const relation = entry.relation ?? 'owner'
       const existing = await ex
         .select({ id: t.resourceOwners.id })
         .from(t.resourceOwners)
@@ -110,6 +114,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
             eq(t.resourceOwners.resourceType, entry.resourceType),
             eq(t.resourceOwners.resourceId, entry.resourceId),
             eq(t.resourceOwners.ownerId, entry.ownerId),
+            // S22: the upsert key includes relation.
+            eq(t.resourceOwners.relation, relation),
           ),
         )
         .limit(1)
@@ -118,15 +124,60 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         resourceType: entry.resourceType,
         resourceId: entry.resourceId,
         ownerId: entry.ownerId,
+        relation,
         domain: entry.domain,
         tenantId: entry.tenantId,
       })
     }
   }
 
+  const dialect = options.schema.dialect
+  // MySQL has no `text` cast type; CHAR(191) matches the schemas' id width.
+  const castIdToText = (idColumn: unknown): SQL =>
+    dialect === 'mysql' ? sql`cast(${idColumn} as char(191))` : sql`cast(${idColumn} as text)`
+
+  const resourceIdColumn = (resource: ResourceDefinition): unknown => {
+    const mapped = resource.fields?.['id']
+    if (mapped != null) return mapped
+    return (resource.table as Record<string, unknown> | null | undefined)?.['id'] ?? null
+  }
+
+  const accessExists = (resource: ResourceDefinition, match: SQL): { where: SQL } | false => {
+    const idColumn = resourceIdColumn(resource)
+    if (idColumn == null) return false
+    return {
+      where: sql`exists (select 1 from ${t.resourceOwners} where ${and(
+        eq(t.resourceOwners.resourceType, resource.type),
+        sql`${t.resourceOwners.resourceId} = ${castIdToText(idColumn)}`,
+        match,
+      )!})`,
+    }
+  }
+
+  const listFilters: ListFilters = {
+    owned: (subjectId, resource) =>
+      accessExists(resource, and(
+        eq(t.resourceOwners.ownerId, subjectId),
+        // S22: ownership means relation-'owner' rows only.
+        eq(t.resourceOwners.relation, 'owner'),
+      )!),
+    inTenant: (tenantId, resource) =>
+      // '' is the no-tenant sentinel — it must never match stored '' rows.
+      tenantId === '' ? false : accessExists(resource, eq(t.resourceOwners.tenantId, tenantId)),
+    granted: (subjectId, resource) =>
+      accessExists(resource, and(
+        eq(t.resourceOwners.ownerId, subjectId),
+        eq(t.resourceOwners.relation, 'granted'),
+      )!),
+    // Zero fragments must not become an undefined (unrestricted) where — fail closed.
+    or: fragments => (fragments.length ? or(...(fragments as SQL[])) : sql`1 = 0`),
+    none: () => sql`1 = 0`,
+  }
+
   return {
     id: `drizzle-${options.schema.dialect}`,
-    capabilities: { autoOwnershipTracking: true, queryScoping: true },
+    capabilities: { autoOwnershipTracking: true, queryScoping: true, listFiltering: true },
+    listFilters,
 
     async upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void> {
       if (!rows.length) return
@@ -500,6 +551,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
             eq(t.resourceOwners.ownerId, ownerId),
             eq(t.resourceOwners.resourceType, resource.type),
             eq(t.resourceOwners.resourceId, resource.id),
+            // S22: a 'granted' entry never makes isOwner true.
+            eq(t.resourceOwners.relation, 'owner'),
           ),
         )
         .limit(1)
@@ -513,6 +566,47 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           and(
             eq(t.resourceOwners.resourceType, resource.type),
             eq(t.resourceOwners.resourceId, resource.id),
+          ),
+        )
+    },
+
+    async getAccess(resource: ResourceRef): Promise<OwnershipEntry[]> {
+      const rows = await client
+        .select({
+          resourceType: t.resourceOwners.resourceType,
+          resourceId: t.resourceOwners.resourceId,
+          ownerId: t.resourceOwners.ownerId,
+          relation: t.resourceOwners.relation,
+          domain: t.resourceOwners.domain,
+          tenantId: t.resourceOwners.tenantId,
+        })
+        .from(t.resourceOwners)
+        .where(
+          and(
+            eq(t.resourceOwners.resourceType, resource.type),
+            eq(t.resourceOwners.resourceId, resource.id),
+          ),
+        )
+        .orderBy(asc(t.resourceOwners.ownerId), asc(t.resourceOwners.relation))
+      return rows.map((r: any) => ({
+        resourceType: String(r.resourceType),
+        resourceId: String(r.resourceId),
+        ownerId: String(r.ownerId),
+        relation: String(r.relation),
+        domain: String(r.domain ?? ''),
+        tenantId: String(r.tenantId ?? ''),
+      }))
+    },
+
+    async removeAccess(ownerId: string, resource: ResourceRef, relation?: string): Promise<void> {
+      await client
+        .delete(t.resourceOwners)
+        .where(
+          and(
+            eq(t.resourceOwners.ownerId, ownerId),
+            eq(t.resourceOwners.resourceType, resource.type),
+            eq(t.resourceOwners.resourceId, resource.id),
+            ...(relation === undefined ? [] : [eq(t.resourceOwners.relation, relation)]),
           ),
         )
     },

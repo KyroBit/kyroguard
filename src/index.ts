@@ -1,6 +1,7 @@
 /** @kyrobit/rbac — framework-agnostic core entry; integrations live at subpaths. */
 
 import { RbacEngine } from './core/engine.js'
+import { MisconfiguredError } from './core/errors.js'
 import { collectScopes } from './core/scope.js'
 import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 import { seedGroups } from './core/seed-groups.js'
@@ -15,7 +16,7 @@ import type {
   Subject,
 } from './core/types.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from './cache/types.js'
-import type { StorageAdapter } from './storage/contract.js'
+import type { OwnershipEntry, StorageAdapter } from './storage/contract.js'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -66,13 +67,24 @@ export interface Rbac {
     removePolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName): Promise<void>
   }
 
-  /** Portable ownership API — works on every storage backend. */
+  /** Portable ownership API — works on every storage backend. Records relation 'owner'. */
   ownership: {
     record(owner: Subject | string, resource: ResourceRef, at?: { domain?: string; tenantId?: string }): Promise<void>
     isOwner(ownerId: string, resource: ResourceRef): Promise<boolean>
     remove(resource: ResourceRef): Promise<void>
     /** One-shot extra columns for the next tracked insert in this request. */
     addExtra(extra: Record<string, unknown>): void
+  }
+
+  /** Relation-based access API over the same store — default relation 'granted'. */
+  access: {
+    grant(
+      userId: string,
+      resource: ResourceRef,
+      options?: { relation?: string; domain?: string; tenantId?: string },
+    ): Promise<void>
+    revoke(userId: string, resource: ResourceRef, relation?: string): Promise<void>
+    list(resource: ResourceRef): Promise<OwnershipEntry[]>
   }
 
   cache: {
@@ -170,6 +182,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
             resourceType: resource.type,
             resourceId: resource.id,
             ownerId,
+            relation: 'owner',
             domain: at?.domain ?? (subject?.domain as string | undefined) ?? '',
             tenantId: at?.tenantId ?? (subject?.tenant_id as string | undefined) ?? '',
           },
@@ -178,6 +191,36 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       isOwner: (ownerId, resource) => options.adapter.isOwner(ownerId, resource),
       remove: resource => options.adapter.removeOwnership(resource),
       addExtra: extra => engine.store.addExtra(extra),
+    },
+
+    access: {
+      grant: (userId, resource, accessOptions) =>
+        options.adapter.recordOwnership([
+          {
+            resourceType: resource.type,
+            resourceId: resource.id,
+            ownerId: userId,
+            relation: accessOptions?.relation ?? 'granted',
+            domain: accessOptions?.domain ?? '',
+            tenantId: accessOptions?.tenantId ?? '',
+          },
+        ]),
+      revoke: async (userId, resource, relation) => {
+        if (!options.adapter.removeAccess) {
+          throw new MisconfiguredError(
+            `[rbac] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use rbac.access.`,
+          )
+        }
+        await options.adapter.removeAccess(userId, resource, relation)
+      },
+      list: async resource => {
+        if (!options.adapter.getAccess) {
+          throw new MisconfiguredError(
+            `[rbac] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use rbac.access.`,
+          )
+        }
+        return options.adapter.getAccess(resource)
+      },
     },
 
     cache: {
@@ -194,7 +237,13 @@ export function createRbac(options: CreateRbacOptions): Rbac {
 export { Policy } from './core/policy.js'
 export type { ResourceDefinition, PolicyScopeMap } from './core/policy.js'
 export { Scope, collectScopes } from './core/scope.js'
-export type { ScopeCheckFn, ScopeCheckContext } from './core/scope.js'
+export type {
+  ScopeCheckFn,
+  ScopeCheckContext,
+  ScopeFilterFn,
+  ScopeFilterContext,
+  ScopeFilterResult,
+} from './core/scope.js'
 export {
   RbacError,
   UnauthenticatedError,
@@ -219,6 +268,7 @@ export type {
   Awaitable,
   DecisionEvent,
   DecisionHook,
+  FilterResult,
   PolicyMap,
   DomainName,
   DomainPolicyName,
@@ -236,6 +286,7 @@ export type {
   AdapterCapabilities,
   GroupPolicyEntry,
   GroupRecord,
+  ListFilters,
   OwnershipEntry,
   PolicyDefinitionRow,
   PolicyGrant,

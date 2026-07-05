@@ -3,7 +3,7 @@
  *
  * Every storage backend (Drizzle pg/mysql/sqlite, Mongoose, in-memory test
  * adapter, future backends) implements this interface. The numbered clauses
- * S1–S20 below are the normative semantics; each clause maps 1:1 to a case in
+ * S1–S23 below are the normative semantics; each clause maps 1:1 to a case in
  * the contract test suite (`@kyrobit/rbac/testing`,
  * runStorageAdapterContractSuite). An adapter is conforming exactly when it
  * passes that suite.
@@ -43,10 +43,10 @@
  *     (subject, target, domain, tenantId) tuple.
  * S12 assignPolicy takes a fully-qualified policy name and throws
  *     UnknownPolicyError if the policy does not exist (sync must run first).
- * S13 Ownership: recordOwnership upserts on (resourceType, resourceId,
- *     ownerId) — recording twice leaves one row. isOwner returns true only
- *     for an exact (ownerId, type, id) match. removeOwnership removes all
- *     owners of the resource.
+ * S13 Ownership: recordOwnership upserts — recording the same entry twice
+ *     leaves one row (upsert key: S22). isOwner returns true only for an
+ *     exact (ownerId, type, id) match (relation restriction: S22).
+ *     removeOwnership removes every entry for the resource, all relations.
  * S14 listPolicies returns id, name and dependsOn for every policy; ids are
  *     opaque non-empty strings, stable across calls.
  * S15 After upsertPolicies changes dependsOn, listPolicies reflects the new
@@ -65,9 +65,19 @@
  * S20 getSubjectPolicies excludes group grants from groups whose isActive is
  *     false (emergency kill-switch for a whole role). Direct grants are
  *     unaffected.
+ * S21 getAccess returns every stored entry for the resource — all owners,
+ *     all relations, with `relation` populated on each entry.
+ * S22 recordOwnership upserts on (resourceType, resourceId, ownerId,
+ *     relation); an omitted `relation` is stored as 'owner'. isOwner matches
+ *     ONLY relation-'owner' rows — a 'granted' entry never makes isOwner
+ *     true.
+ * S23 removeAccess removes only the entries matching (ownerId, resourceType,
+ *     resourceId) and, when a relation is given, that relation; entries for
+ *     other owners or other relations survive.
  */
 
-import type { ResourceRef, SubjectRef } from '../core/types.js'
+import type { Awaitable, ResourceRef, SubjectRef } from '../core/types.js'
+import type { ResourceDefinition } from '../core/policy.js'
 
 export interface PolicyDefinitionRow {
   /** Fully qualified, e.g. 'admin.posts.read' — the engine does all prefixing. */
@@ -110,17 +120,38 @@ export interface OwnershipEntry {
   resourceType: string
   resourceId: string
   ownerId: string
+  /** Access relation; omitted means 'owner' — adapters store 'owner' (S22). */
+  relation?: string
   /** '' sentinel — usually the domain the resource was created from. */
   domain: string
   /** '' sentinel — the tenant the resource was created in. */
   tenantId: string
 }
 
+/**
+ * Optional list-filtering capability: native query fragments for the
+ * built-in scopes plus fragment composition. owned/inTenant/granted return
+ * a ScopeFilterResult-compatible `{ where }` (a native fragment for the
+ * adapter's backend) or `false` when the rows cannot be expressed as a
+ * fragment (fail closed).
+ */
+export interface ListFilters {
+  owned(subjectId: string, resource: ResourceDefinition, db: unknown): Awaitable<{ where: unknown } | false>
+  inTenant(tenantId: string, resource: ResourceDefinition, db: unknown): Awaitable<{ where: unknown } | false>
+  granted(subjectId: string, resource: ResourceDefinition, db: unknown): Awaitable<{ where: unknown } | false>
+  /** OR-combine collected fragments: drizzle or(...), Prisma { OR: [...] }, Mongo { $or: [...] }. */
+  or(fragments: unknown[]): unknown
+  /** Canonical impossible predicate: sql`1 = 0` / { $expr: { $eq: [0, 1] } }. */
+  none(): unknown
+}
+
 export interface AdapterCapabilities {
   /** trackedDb (Drizzle) / rbacMongoosePlugin (Mongoose) available. */
   autoOwnershipTracking: boolean
-  /** Automatic query scoping available for this backend. */
+  /** @deprecated Superseded by listFiltering. */
   queryScoping: boolean
+  /** listFilters implemented for this backend. Absent means false. */
+  listFiltering?: boolean
 }
 
 export class UnknownPolicyError extends Error {
@@ -168,4 +199,11 @@ export interface StorageAdapter {
   recordOwnership(entries: OwnershipEntry[]): Promise<void>
   isOwner(ownerId: string, resource: ResourceRef): Promise<boolean>
   removeOwnership(resource: ResourceRef): Promise<void>
+  /** Every entry for the resource, all relations (S21). Conforming adapters implement this; consumers fail closed when absent. */
+  getAccess?(resource: ResourceRef): Promise<OwnershipEntry[]>
+  /** Remove the matching entries only (S23). Conforming adapters implement this; consumers fail closed when absent. */
+  removeAccess?(ownerId: string, resource: ResourceRef, relation?: string): Promise<void>
+
+  /** List-filtering capability — absent when the backend cannot compile scope fragments. */
+  listFilters?: ListFilters
 }

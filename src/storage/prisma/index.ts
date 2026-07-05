@@ -1,4 +1,4 @@
-export { prismaAdapter } from './adapter.js'
+export { prismaAdapter, PRISMA_ID_LIST_CAP } from './adapter.js'
 export { rbacPrismaExtension } from './extension.js'
 export type {
   RbacPrismaExtension,

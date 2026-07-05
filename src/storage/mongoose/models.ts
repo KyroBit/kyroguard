@@ -42,6 +42,7 @@ export interface RbacResourceOwnerDoc {
   resourceType: string
   resourceId: string
   ownerId: string
+  relation: string
   domain: string
   tenantId: string
 }
@@ -110,11 +111,17 @@ const resourceOwnerSchema = new Schema<RbacResourceOwnerDoc>({
   resourceType: { type: String, required: true },
   resourceId: { type: String, required: true },
   ownerId: { type: String, required: true },
+  relation: { type: String, required: true, default: 'owner' },
   domain: { type: String, required: true, default: '' },
   tenantId: { type: String, required: true, default: '' },
 })
-resourceOwnerSchema.index({ resourceType: 1, resourceId: 1, ownerId: 1 }, { unique: true })
+resourceOwnerSchema.index(
+  { resourceType: 1, resourceId: 1, ownerId: 1, relation: 1 },
+  { unique: true },
+)
 resourceOwnerSchema.index({ resourceType: 1, resourceId: 1 })
+resourceOwnerSchema.index({ resourceType: 1, ownerId: 1, relation: 1 })
+resourceOwnerSchema.index({ resourceType: 1, tenantId: 1 })
 
 function scopedModel<T>(connection: Connection, name: string, schema: Schema<T>): Model<T> {
   const existing = connection.models[name] as Model<T> | undefined

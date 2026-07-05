@@ -86,7 +86,7 @@ export const resources: ResourceDefinition[] = [
   {
     type: 'sale',
     // table: sales,  // your Drizzle table or Mongoose model (optional):
-    //                // enables ownership tracking and query scoping
+    //                // enables ownership tracking
     policies: [
       new Policy('sales.view'),
       new Policy('sales.create', { dependsOn: ['sales.view'] }),

@@ -28,7 +28,7 @@ src/cli/         imports core + jiti — never a DB driver or ORM
 src/testing/     imports the public core surface only
 ```
 
-`src/storage/contract.ts` is normative: its numbered clauses (S1–S20) map
+`src/storage/contract.ts` is normative: its numbered clauses (S1–S23) map
 1:1 to cases in `src/testing/adapter-suite.ts`. Changing adapter behavior
 means changing the clause, the suite, and every adapter together.
 

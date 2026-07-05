@@ -100,13 +100,15 @@ export const rbacResourceOwners = mysqlTable(
     resourceType: varchar('resource_type', { length: 191 }).notNull(),
     resourceId: varchar('resource_id', { length: 191 }).notNull(),
     ownerId: varchar('owner_id', { length: 191 }).notNull(),
+    relation: varchar('relation', { length: 191 }).notNull().default('owner'),
     domain: varchar('domain', { length: 191 }).notNull().default(''),
     tenantId: varchar('tenant_id', { length: 191 }).notNull().default(''),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [
-    uniqueIndex('rbac_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId),
+    uniqueIndex('rbac_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId, table.relation),
     index('rbac_ro_resource_idx').on(table.resourceType, table.resourceId),
+    index('rbac_ro_owner_idx').on(table.resourceType, table.ownerId),
   ],
 )
 

@@ -77,12 +77,14 @@ CREATE TABLE rbac_resource_owners (
   resource_type text NOT NULL,
   resource_id text NOT NULL,
   owner_id text NOT NULL,
+  relation text NOT NULL DEFAULT 'owner',
   domain text NOT NULL DEFAULT '',
   tenant_id text NOT NULL DEFAULT '',
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_ro_tuple_uq ON rbac_resource_owners (resource_type, resource_id, owner_id);
+CREATE UNIQUE INDEX rbac_ro_tuple_uq ON rbac_resource_owners (resource_type, resource_id, owner_id, relation);
 CREATE INDEX rbac_ro_resource_idx ON rbac_resource_owners (resource_type, resource_id);
+CREATE INDEX rbac_ro_owner_idx ON rbac_resource_owners (resource_type, owner_id);
 `
 
 export interface SqliteTestDb {
@@ -90,11 +92,15 @@ export interface SqliteTestDb {
   sqlite: Database
 }
 
-/** Fresh, fully-migrated in-memory database per call — no shared state. */
-export function makeSqliteDb(): SqliteTestDb {
+/**
+ * Fresh, fully-migrated in-memory database per call — no shared state.
+ * `extraDdl` lets a test add its own user tables (docs, ...) up front.
+ */
+export function makeSqliteDb(extraDdl?: string): SqliteTestDb {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA foreign_keys = ON;')
   sqlite.exec(DDL)
+  if (extraDdl) sqlite.exec(extraDdl)
   const db = drizzle(sqlite)
   return { db, sqlite }
 }

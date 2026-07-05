@@ -103,12 +103,14 @@ model RbacResourceOwner {
   resourceType String   @map("resource_type")
   resourceId   String   @map("resource_id")
   ownerId      String   @map("owner_id")
+  relation     String   @default("owner")
   domain       String   @default("")
   tenantId     String   @default("") @map("tenant_id")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  @@unique([resourceType, resourceId, ownerId], map: "rbac_ro_tuple_uq")
+  @@unique([resourceType, resourceId, ownerId, relation], map: "rbac_ro_tuple_uq")
   @@index([resourceType, resourceId], map: "rbac_ro_resource_idx")
+  @@index([resourceType, ownerId], map: "rbac_ro_owner_idx")
   @@map("rbac_resource_owners")
 }
 

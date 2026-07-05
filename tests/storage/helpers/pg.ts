@@ -87,14 +87,17 @@ CREATE TABLE "rbac_resource_owners" (
   "resource_type" text NOT NULL,
   "resource_id" text NOT NULL,
   "owner_id" text NOT NULL,
+  "relation" text NOT NULL DEFAULT 'owner',
   "domain" text NOT NULL DEFAULT '',
   "tenant_id" text NOT NULL DEFAULT '',
   "created_at" timestamp NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX "rbac_ro_tuple_uq"
-  ON "rbac_resource_owners" ("resource_type", "resource_id", "owner_id");
+  ON "rbac_resource_owners" ("resource_type", "resource_id", "owner_id", "relation");
 CREATE INDEX "rbac_ro_resource_idx"
   ON "rbac_resource_owners" ("resource_type", "resource_id");
+CREATE INDEX "rbac_ro_owner_idx"
+  ON "rbac_resource_owners" ("resource_type", "owner_id");
 `
 
 /**

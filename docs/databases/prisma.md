@@ -105,13 +105,19 @@ await rbac.ownership.remove({ type: 'sale', id: sale.id })
 ```
 :::
 
-## Lists are not filtered automatically
+## Filtering lists
 
-Query scoping is not available with Prisma, so `findMany` returns all rows. Scopes still work at guard time: an `owned` grant is checked before your handler runs. For list routes, add the filter to your own query:
+`findMany` is never filtered for you — ask the grant which rows qualify with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
 
 ```ts
-const sales = await db.sale.findMany({ where: { cashierId: user.id } })
+const f = await staff.filterFor(req, 'sales.view')
+if (f.kind === 'none') return [] // nothing qualifies — skip the query
+const sales = await db.sale.findMany({
+  where: f.kind === 'all' ? undefined : (f.where as Prisma.SaleWhereInput),
+})
 ```
+
+Built-in scopes answer with an ID-list fragment (`{ id: { in: [...] } }`) — see [List filters](/reference/prisma#list-filters) for the cap and the `idField` registration, and [Filtering lists](/guide/scopes#filtering-lists) for the three answer kinds.
 
 ## Next steps
 

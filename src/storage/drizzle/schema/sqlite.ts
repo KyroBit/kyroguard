@@ -90,13 +90,15 @@ export const rbacResourceOwners = sqliteTable(
     resourceType: text('resource_type').notNull(),
     resourceId: text('resource_id').notNull(),
     ownerId: text('owner_id').notNull(),
+    relation: text('relation').notNull().default('owner'),
     domain: text('domain').notNull().default(''),
     tenantId: text('tenant_id').notNull().default(''),
     createdAt: timestampCol('created_at'),
   },
   table => [
-    uniqueIndex('rbac_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId),
+    uniqueIndex('rbac_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId, table.relation),
     index('rbac_ro_resource_idx').on(table.resourceType, table.resourceId),
+    index('rbac_ro_owner_idx').on(table.resourceType, table.ownerId),
   ],
 )
 

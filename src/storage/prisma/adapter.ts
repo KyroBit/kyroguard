@@ -9,7 +9,10 @@ import type {
   StorageAdapter,
 } from '../contract.js'
 import type { ResourceRef, SubjectRef } from '../../core/types.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type { PrismaClientLike, PrismaRbacModelDelegates } from './client-contract.js'
+
+export const PRISMA_ID_LIST_CAP = 10_000
 
 /** Prisma's unique-constraint violation (PrismaClientKnownRequestError P2002). */
 function isUniqueViolation(error: unknown): boolean {
@@ -80,9 +83,50 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     return idByName
   }
 
+  let warnedIdListCap = false
+
+  /**
+   * RFC §2.5 honest ID-list path: Prisma's WhereInput cannot express an EXISTS
+   * against the polymorphic ownership table, so filters enumerate matching
+   * resource ids (capped — beyond the cap results silently miss rows, hence
+   * the one-time warning).
+   */
+  const accessIdFilter = async (
+    resource: ResourceDefinition,
+    match: Record<string, string>,
+  ): Promise<{ where: unknown }> => {
+    const rows: Array<{ resourceId: unknown }> = await client.rbacResourceOwner.findMany({
+      where: { resourceType: resource.type, ...match },
+      select: { resourceId: true },
+      take: PRISMA_ID_LIST_CAP,
+    })
+    if (rows.length >= PRISMA_ID_LIST_CAP && !warnedIdListCap) {
+      warnedIdListCap = true
+      console.warn(
+        `[rbac] Prisma list filter for "${resource.type}" hit the ${PRISMA_ID_LIST_CAP}-id ceiling — ` +
+          'results may be truncated. Denormalize an owner column and ship a custom scope filter.',
+      )
+    }
+    const idField =
+      (resource as { prisma?: { idField?: string } }).prisma?.idField ?? 'id'
+    return { where: { [idField]: { in: rows.map(row => String(row.resourceId)) } } }
+  }
+
   return {
     id: 'prisma',
-    capabilities: { autoOwnershipTracking: true, queryScoping: false },
+    capabilities: { autoOwnershipTracking: true, queryScoping: false, listFiltering: true },
+
+    listFilters: {
+      owned: (subjectId, resource) =>
+        accessIdFilter(resource, { ownerId: subjectId, relation: 'owner' }),
+      // '' is the no-tenant sentinel — it must never match sentinel rows (fail closed).
+      inTenant: (tenantId, resource) =>
+        tenantId === '' ? false : accessIdFilter(resource, { tenantId }),
+      granted: (subjectId, resource) =>
+        accessIdFilter(resource, { ownerId: subjectId, relation: 'granted' }),
+      or: fragments => ({ OR: fragments }),
+      none: () => ({ id: { in: [] } }),
+    },
 
     async upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void> {
       if (rows.length === 0) return
@@ -449,14 +493,17 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     async recordOwnership(entries: OwnershipEntry[]): Promise<void> {
       if (entries.length === 0) return
       for (const entry of entries) {
+        const relation = entry.relation ?? 'owner'
         try {
-          // S13: upsert on (resourceType, resourceId, ownerId); last write wins on domain/tenant.
+          // S13/S22: upsert on (resourceType, resourceId, ownerId, relation);
+          // last write wins on domain/tenant.
           await client.rbacResourceOwner.upsert({
             where: {
-              resourceType_resourceId_ownerId: {
+              resourceType_resourceId_ownerId_relation: {
                 resourceType: entry.resourceType,
                 resourceId: entry.resourceId,
                 ownerId: entry.ownerId,
+                relation,
               },
             },
             update: { domain: entry.domain, tenantId: entry.tenantId },
@@ -464,23 +511,73 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
               resourceType: entry.resourceType,
               resourceId: entry.resourceId,
               ownerId: entry.ownerId,
+              relation,
               domain: entry.domain,
               tenantId: entry.tenantId,
             },
           })
         } catch (error) {
-          // Concurrent record of the same (type, id, owner): loser's P2002 ≡ success.
+          // Concurrent record of the same (type, id, owner, relation): loser's P2002 ≡ success.
           if (!isUniqueViolation(error)) throw error
         }
       }
     },
 
     async isOwner(ownerId: string, resource: ResourceRef): Promise<boolean> {
+      // S22: ownership means relation 'owner' — a 'granted' entry never passes.
       const row: { id: unknown } | null = await client.rbacResourceOwner.findFirst({
-        where: { ownerId, resourceType: resource.type, resourceId: resource.id },
+        where: {
+          ownerId,
+          resourceType: resource.type,
+          resourceId: resource.id,
+          relation: 'owner',
+        },
         select: { id: true },
       })
       return row !== null
+    },
+
+    async getAccess(resource: ResourceRef): Promise<OwnershipEntry[]> {
+      // S21: every entry for the resource, all relations.
+      const rows: Array<{
+        resourceType: unknown
+        resourceId: unknown
+        ownerId: unknown
+        relation: unknown
+        domain: unknown
+        tenantId: unknown
+      }> = await client.rbacResourceOwner.findMany({
+        where: { resourceType: resource.type, resourceId: resource.id },
+        select: {
+          resourceType: true,
+          resourceId: true,
+          ownerId: true,
+          relation: true,
+          domain: true,
+          tenantId: true,
+        },
+        orderBy: [{ ownerId: 'asc' }, { relation: 'asc' }],
+      })
+      return rows.map(row => ({
+        resourceType: String(row.resourceType),
+        resourceId: String(row.resourceId),
+        ownerId: String(row.ownerId),
+        relation: String(row.relation ?? 'owner'),
+        domain: String(row.domain ?? ''),
+        tenantId: String(row.tenantId ?? ''),
+      }))
+    },
+
+    async removeAccess(ownerId: string, resource: ResourceRef, relation?: string): Promise<void> {
+      // S23: only the matching (owner, resource[, relation]) entries.
+      await client.rbacResourceOwner.deleteMany({
+        where: {
+          ownerId,
+          resourceType: resource.type,
+          resourceId: resource.id,
+          ...(relation === undefined ? {} : { relation }),
+        },
+      })
     },
 
     async removeOwnership(resource: ResourceRef): Promise<void> {

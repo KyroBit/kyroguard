@@ -2,6 +2,7 @@ import { MisconfiguredError, RbacError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type { Rbac } from '../../index.js'
 import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
 
@@ -111,6 +112,11 @@ function createDomain<P extends string>(
       })
     },
 
+    filterFor: async (req: Request, policy: string) => {
+      const subject = await resolveSubject(req)
+      return rbac.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(rbac, policy))
+    },
+
     assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
       rbac.admin.assignGroup(adminRef(subjectId, opts?.tenantId), group),
     removeGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
@@ -128,6 +134,18 @@ function createDomain<P extends string>(
     removePolicy: (subjectId: string, policy: string, opts?: { tenantId?: string }) =>
       rbac.admin.removePolicy(adminRef(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
   }
+}
+
+function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
+  const resource = rbac.resources.find(candidate =>
+    candidate.policies.some(candidatePolicy => candidatePolicy.name === policy),
+  )
+  if (!resource) {
+    throw new MisconfiguredError(
+      `[rbac] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
+    )
+  }
+  return resource
 }
 
 /**

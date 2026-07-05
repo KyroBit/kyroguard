@@ -333,12 +333,32 @@ describe('mergeGrants precedence', () => {
     expect(mergeGrants(b).get('p')).toBeNull()
   })
 
-  test('first named scope wins between two named scopes', () => {
+  test('null wins even after scopes accumulated, and later named scopes never displace it', () => {
+    const grants: PolicyGrant[] = [
+      { name: 'p', scope: 'first' },
+      { name: 'p', scope: 'second' },
+      { name: 'p', scope: null },
+      { name: 'p', scope: 'third' },
+    ]
+    expect(mergeGrants(grants).get('p')).toBeNull()
+  })
+
+  test('two named scopes union in grant order', () => {
     const grants: PolicyGrant[] = [
       { name: 'p', scope: 'first' },
       { name: 'p', scope: 'second' },
     ]
-    expect(mergeGrants(grants).get('p')).toBe('first')
+    expect(mergeGrants(grants).get('p')).toEqual(['first', 'second'])
+  })
+
+  test('union dedupes while keeping first-seen order stable', () => {
+    const grants: PolicyGrant[] = [
+      { name: 'p', scope: 'b' },
+      { name: 'p', scope: 'a' },
+      { name: 'p', scope: 'b' },
+      { name: 'p', scope: 'a' },
+    ]
+    expect(mergeGrants(grants).get('p')).toEqual(['b', 'a'])
   })
 
   test('duplicate grants collapse to one entry', () => {
@@ -350,7 +370,81 @@ describe('mergeGrants precedence', () => {
     ]
     const map = mergeGrants(grants)
     expect(map.size).toBe(2)
-    expect(map.get('p')).toBe('owned')
+    expect(map.get('p')).toEqual(['owned'])
     expect(map.get('q')).toBeNull()
+  })
+})
+
+describe('authorize() any-scope-passes', () => {
+  const subject: Subject = { id: 'u1', domain: 'admin' }
+  const resource: ResourceRef = { type: 'post', id: 'p1' }
+
+  /** Adapter whose getSubjectPolicies returns fixed grants — the only way to hold one policy under two scopes. */
+  function multiGrantAdapter(grants: PolicyGrant[]): StorageAdapter {
+    return { ...memoryAdapter(), getSubjectPolicies: async () => grants }
+  }
+
+  test('two scopes, first fails, second passes → allow', async () => {
+    const scopes = new Map([
+      ['first', new Scope('first', 'First', () => false)],
+      ['second', new Scope('second', 'Second', () => true)],
+    ])
+    const adapter = multiGrantAdapter([
+      { name: 'admin.posts.update', scope: 'first' },
+      { name: 'admin.posts.update', scope: 'second' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
+  })
+
+  test('all scopes fail → ScopeDeniedError naming the first scope', async () => {
+    const scopes = new Map([
+      ['first', new Scope('first', 'First', () => false)],
+      ['second', new Scope('second', 'Second', () => false)],
+    ])
+    const adapter = multiGrantAdapter([
+      { name: 'admin.posts.update', scope: 'first' },
+      { name: 'admin.posts.update', scope: 'second' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+    const err = await engine
+      .authorize(subject, 'admin.posts.update', { resource: () => resource })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      )
+    expect(err).toBeInstanceOf(ScopeDeniedError)
+    expect((err as ScopeDeniedError).scope).toBe('first')
+  })
+
+  test('an unknown scope name alongside a passing scope contributes deny, not a crash or bypass', async () => {
+    const scopes = new Map([['known', new Scope('known', 'Known', () => true)]])
+    const adapter = multiGrantAdapter([
+      { name: 'admin.posts.update', scope: 'mystery' },
+      { name: 'admin.posts.update', scope: 'known' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
+  })
+
+  test('a passing scope short-circuits: later scopes are not evaluated', async () => {
+    let secondRan = false
+    const scopes = new Map([
+      ['first', new Scope('first', 'First', () => true)],
+      [
+        'second',
+        new Scope('second', 'Second', () => {
+          secondRan = true
+          return true
+        }),
+      ],
+    ])
+    const adapter = multiGrantAdapter([
+      { name: 'admin.posts.update', scope: 'first' },
+      { name: 'admin.posts.update', scope: 'second' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
+    expect(secondRan).toBe(false)
   })
 })

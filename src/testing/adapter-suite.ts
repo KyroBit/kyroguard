@@ -1,10 +1,22 @@
 /**
- * Executable specification of src/storage/contract.ts: every clause S1–S20
+ * Executable specification of src/storage/contract.ts: every clause S1–S23
  * has at least one case named with its clause id.
+ *
+ * listFilters fragments are backend-native and therefore NOT portable enough
+ * for this suite; the memory reference adapter's shape is `{ where: (row:
+ * { id: string }) => boolean }` (with `or` folding predicates and `none` the
+ * always-false predicate), which is what lets engine.filterFor be exercised
+ * without a database. Backend adapters snapshot-test their fragments in their
+ * own suites; check/filter parity is the caller's job via assertScopeParity.
  */
 
 import type { SubjectRef } from '../index.js'
-import type { GroupPolicyEntry, PolicyDefinitionRow, StorageAdapter } from '../storage/contract.js'
+import type {
+  GroupPolicyEntry,
+  OwnershipEntry,
+  PolicyDefinitionRow,
+  StorageAdapter,
+} from '../storage/contract.js'
 
 export interface SuiteTestApi {
   describe: (name: string, fn: () => void) => void
@@ -481,7 +493,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
     })
 
     describe('S13 — ownership upsert semantics', () => {
-      it('S13: recordOwnership upserts on (resourceType, resourceId, ownerId) — recording twice leaves one row', () =>
+      it('S13: recordOwnership upserts — recording the same entry twice leaves one row', () =>
         withAdapter(async adapter => {
           const entry = {
             resourceType: 'post',
@@ -493,6 +505,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           await adapter.recordOwnership([entry])
           await adapter.recordOwnership([{ ...entry, domain: 'admin', tenantId: 'c1' }])
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
+          expect(await adapter.getAccess?.({ type: 'post', id: '1' })).toHaveLength(1)
           await adapter.removeOwnership({ type: 'post', id: '1' })
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(false)
         }))
@@ -508,16 +521,25 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(await adapter.isOwner('u1', { type: 'comment', id: '1' })).toBe(false)
         }))
 
-      it('S13: removeOwnership removes ALL owners of the resource and nothing else', () =>
+      it('S13: removeOwnership removes ALL owners and ALL relations of the resource and nothing else', () =>
         withAdapter(async adapter => {
           await adapter.recordOwnership([
             { resourceType: 'post', resourceId: '1', ownerId: 'u1', domain: '', tenantId: '' },
             { resourceType: 'post', resourceId: '1', ownerId: 'u2', domain: '', tenantId: '' },
+            {
+              resourceType: 'post',
+              resourceId: '1',
+              ownerId: 'u3',
+              relation: 'granted',
+              domain: '',
+              tenantId: '',
+            },
             { resourceType: 'post', resourceId: '2', ownerId: 'u1', domain: '', tenantId: '' },
           ])
           await adapter.removeOwnership({ type: 'post', id: '1' })
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(false)
           expect(await adapter.isOwner('u2', { type: 'post', id: '1' })).toBe(false)
+          expect(await adapter.getAccess?.({ type: 'post', id: '1' })).toEqual([])
           expect(await adapter.isOwner('u1', { type: 'post', id: '2' })).toBe(true)
         }))
     })
@@ -632,6 +654,135 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(names(await adapter.getSubjectPolicies(ref('u1')))).toEqual(['b.read'])
           await adapter.upsertGroup({ name: 'g', label: 'g', isActive: true })
           expect(names(await adapter.getSubjectPolicies(ref('u1')))).toEqual(['a.read', 'b.read'])
+        }))
+    })
+
+    const access = (
+      ownerId: string,
+      relation?: string,
+      over: Partial<Pick<OwnershipEntry, 'resourceType' | 'resourceId' | 'domain' | 'tenantId'>> = {},
+    ): OwnershipEntry => ({
+      resourceType: 'post',
+      resourceId: '1',
+      ownerId,
+      ...(relation === undefined ? {} : { relation }),
+      domain: '',
+      tenantId: '',
+      ...over,
+    })
+
+    const byOwnerAndRelation = (entries: OwnershipEntry[]): [string, string | undefined][] =>
+      entries
+        .map((entry): [string, string | undefined] => [entry.ownerId, entry.relation])
+        .sort((a, b) => `${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`))
+
+    describe('S21 — getAccess returns every relation', () => {
+      it("S21: getAccess returns every stored entry for the resource — all owners, all relations, relation populated", () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([
+            access('u1'),
+            access('u2', 'granted'),
+            access('u3', 'reviewer'),
+            access('u1', undefined, { resourceId: '2' }),
+          ])
+          const entries = await adapter.getAccess!({ type: 'post', id: '1' })
+          expect(byOwnerAndRelation(entries)).toEqual([
+            ['u1', 'owner'],
+            ['u2', 'granted'],
+            ['u3', 'reviewer'],
+          ])
+        }))
+
+      it('S21: getAccess returns [] for a resource with no entries', () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([access('u1')])
+          expect(await adapter.getAccess!({ type: 'post', id: '404' })).toEqual([])
+          expect(await adapter.getAccess!({ type: 'comment', id: '1' })).toEqual([])
+        }))
+    })
+
+    describe('S22 — relation-keyed upsert; isOwner is relation-owner-only', () => {
+      it('S22: recordOwnership upserts on (resourceType, resourceId, ownerId, relation) — same tuple twice leaves one row', () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([access('u1', 'granted')])
+          await adapter.recordOwnership([
+            access('u1', 'granted', { domain: 'admin', tenantId: 'c1' }),
+          ])
+          expect(await adapter.getAccess!({ type: 'post', id: '1' })).toHaveLength(1)
+        }))
+
+      it('S22: one owner may hold several relations on one resource — distinct relations are distinct rows', () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([access('u1', 'owner'), access('u1', 'granted')])
+          expect(byOwnerAndRelation(await adapter.getAccess!({ type: 'post', id: '1' }))).toEqual([
+            ['u1', 'granted'],
+            ['u1', 'owner'],
+          ])
+        }))
+
+      it("S22: an omitted relation is stored as 'owner'", () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([access('u1')])
+          const entries = await adapter.getAccess!({ type: 'post', id: '1' })
+          expect(entries).toHaveLength(1)
+          expect(entries[0]?.relation).toBe('owner')
+          expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
+        }))
+
+      it("S22: isOwner matches ONLY relation-'owner' rows — a 'granted' entry never makes isOwner true", () =>
+        withAdapter(async adapter => {
+          await adapter.recordOwnership([access('u1', 'granted')])
+          expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(false)
+          await adapter.recordOwnership([access('u1', 'owner')])
+          expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
+        }))
+    })
+
+    describe('S23 — removeAccess matches exactly', () => {
+      const seedAccess = (adapter: StorageAdapter): Promise<void> =>
+        adapter.recordOwnership([
+          access('u1', 'owner'),
+          access('u1', 'granted'),
+          access('u2', 'granted'),
+          access('u1', 'owner', { resourceId: '2' }),
+        ])
+
+      it("S23: removeAccess with a relation removes only that owner's entries in that relation", () =>
+        withAdapter(async adapter => {
+          await seedAccess(adapter)
+          await adapter.removeAccess!('u1', { type: 'post', id: '1' }, 'granted')
+          expect(byOwnerAndRelation(await adapter.getAccess!({ type: 'post', id: '1' }))).toEqual([
+            ['u1', 'owner'],
+            ['u2', 'granted'],
+          ])
+          expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
+        }))
+
+      it("S23: removeAccess without a relation removes every relation for that owner — other owners survive", () =>
+        withAdapter(async adapter => {
+          await seedAccess(adapter)
+          await adapter.removeAccess!('u1', { type: 'post', id: '1' })
+          expect(byOwnerAndRelation(await adapter.getAccess!({ type: 'post', id: '1' }))).toEqual([
+            ['u2', 'granted'],
+          ])
+        }))
+
+      it('S23: removeAccess never touches other resources', () =>
+        withAdapter(async adapter => {
+          await seedAccess(adapter)
+          await adapter.removeAccess!('u1', { type: 'post', id: '1' })
+          expect(await adapter.isOwner('u1', { type: 'post', id: '2' })).toBe(true)
+        }))
+
+      it('S23: removeAccess with a non-matching relation is a no-op', () =>
+        withAdapter(async adapter => {
+          await seedAccess(adapter)
+          await adapter.removeAccess!('u2', { type: 'post', id: '1' }, 'owner')
+          expect(byOwnerAndRelation(await adapter.getAccess!({ type: 'post', id: '1' }))).toEqual([
+            ['u1', 'granted'],
+            ['u1', 'owner'],
+            ['u2', 'granted'],
+          ])
         }))
     })
   })
