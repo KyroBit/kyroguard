@@ -1,0 +1,122 @@
+// Test fixture schema for the Prisma storage adapter.
+//
+// The six Rbac* models below are a paste of `prismaSchemaSnippet`
+// (src/storage/prisma/schema-snippet.ts) — KEEP THEM IN SYNC. The `Post`
+// model at the bottom is fixture-only, used by the extension tests as a
+// tracked resource model.
+//
+// The datasource url comes from RBAC_PRISMA_DB_URL so each test run points
+// at its own unique tmp sqlite file (a hardcoded file url is not
+// parallel-safe). The client is generated INTO this directory (gitignored).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("RBAC_PRISMA_DB_URL")
+}
+
+// ── @kyrobit/rbac models (from prismaSchemaSnippet) ──────────────────────────
+
+model RbacPolicy {
+  id           String   @id @default(cuid())
+  name         String   @unique(map: "rbac_policies_name_unique")
+  portal       String   @default("")
+  label        String
+  scopeOptions Json     @default("[]") @map("scope_options")
+  dependsOn    Json     @default("[]") @map("depends_on")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @map("updated_at")
+
+  groupEntries    RbacPolicyGroupPolicy[]
+  userAssignments RbacUserPolicy[]
+
+  @@map("rbac_policies")
+}
+
+model RbacPolicyGroup {
+  id          String   @id @default(cuid())
+  name        String   @unique(map: "rbac_policy_groups_name_unique")
+  label       String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  entries         RbacPolicyGroupPolicy[]
+  userAssignments RbacUserPolicyGroup[]
+
+  @@map("rbac_policy_groups")
+}
+
+model RbacPolicyGroupPolicy {
+  id            String   @id @default(cuid())
+  policyGroupId String   @map("policy_group_id")
+  policyId      String   @map("policy_id")
+  scope         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  policyGroup RbacPolicyGroup @relation(fields: [policyGroupId], references: [id])
+  policy      RbacPolicy      @relation(fields: [policyId], references: [id])
+
+  @@unique([policyGroupId, policyId], map: "rbac_pgp_group_policy_uq")
+  @@map("rbac_policy_group_policies")
+}
+
+model RbacUserPolicyGroup {
+  id            String   @id @default(cuid())
+  subjectId     String   @map("subject_id")
+  policyGroupId String   @map("policy_group_id")
+  portal        String   @default("")
+  contextId     String   @default("") @map("context_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  policyGroup RbacPolicyGroup @relation(fields: [policyGroupId], references: [id])
+
+  @@unique([subjectId, policyGroupId, portal, contextId], map: "rbac_upg_tuple_uq")
+  @@index([subjectId], map: "rbac_upg_subject_idx")
+  @@map("rbac_user_policy_groups")
+}
+
+model RbacUserPolicy {
+  id        String   @id @default(cuid())
+  subjectId String   @map("subject_id")
+  policyId  String   @map("policy_id")
+  portal    String   @default("")
+  contextId String   @default("") @map("context_id")
+  scope     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  policy RbacPolicy @relation(fields: [policyId], references: [id])
+
+  @@unique([subjectId, policyId, portal, contextId], map: "rbac_up_tuple_uq")
+  @@index([subjectId], map: "rbac_up_subject_idx")
+  @@map("rbac_user_policies")
+}
+
+model RbacResourceOwner {
+  id           String   @id @default(cuid())
+  resourceType String   @map("resource_type")
+  resourceId   String   @map("resource_id")
+  ownerId      String   @map("owner_id")
+  contextType  String   @default("") @map("context_type")
+  contextId    String   @default("") @map("context_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([resourceType, resourceId, ownerId], map: "rbac_ro_tuple_uq")
+  @@index([resourceType, resourceId], map: "rbac_ro_resource_idx")
+  @@map("rbac_resource_owners")
+}
+
+// ── Fixture-only resource model (extension tests) ────────────────────────────
+
+model Post {
+  id    String @id @default(cuid())
+  title String
+
+  @@map("fixture_posts")
+}

@@ -1,64 +1,85 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title:       '@kyrobit/rbac',
-  description: 'Policy-based access control for Fastify + Drizzle',
+  title: '@kyrobit/rbac',
+  description:
+    'Policy-based access control with portals, tenant contexts, scopes and resource ownership. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite), Prisma and Mongoose integrations.',
 
   themeConfig: {
     nav: [
-      { text: 'Guide',    link: '/guide/introduction' },
-      { text: 'Examples', link: '/examples/blog-cms' },
-      { text: 'GitHub',   link: 'https://github.com/KyroBit/rbac' },
+      { text: 'Guide', link: '/guide/introduction' },
+      { text: 'Reference', link: '/reference/core-api' },
+      { text: 'GitHub', link: 'https://github.com/KyroBit/rbac' },
     ],
 
     sidebar: [
       {
-        text: 'Getting Started',
+        text: 'Getting started',
         items: [
-          { text: 'Introduction',   link: '/guide/introduction' },
-          { text: 'Getting Started', link: '/guide/getting-started' },
+          { text: 'Introduction', link: '/guide/introduction' },
+          { text: 'Installation', link: '/guide/installation' },
+          { text: 'Quick start', link: '/guide/quick-start' },
         ],
       },
       {
-        text: 'Core',
+        text: 'Guides',
         items: [
-          { text: 'Policies',                   link: '/guide/policies' },
-          { text: 'Groups',                     link: '/guide/groups' },
-          { text: 'Configuration & Sync',       link: '/guide/configuration' },
-          { text: 'Plugin Setup',               link: '/guide/plugin' },
-          { text: 'Identifying the Current User', link: '/guide/subject' },
-          { text: 'Protecting Routes',          link: '/guide/protecting-routes' },
-          { text: 'Assigning Users',            link: '/guide/assigning-users' },
+          { text: 'Defining policies', link: '/guide/defining-policies' },
+          { text: 'Organizing groups', link: '/guide/organizing-groups' },
+          { text: 'Syncing policies', link: '/guide/syncing-policies' },
+          { text: 'Setting up Fastify', link: '/guide/setting-up-fastify' },
+          { text: 'Setting up Express', link: '/guide/setting-up-express' },
+          { text: 'Resolving the subject', link: '/guide/resolving-the-subject' },
+          { text: 'Protecting routes', link: '/guide/protecting-routes' },
+          { text: 'Assigning access', link: '/guide/assigning-access' },
+          { text: 'Portals', link: '/guide/portals' },
+          { text: 'Tenant contexts', link: '/guide/tenant-contexts' },
+          { text: 'Writing scopes', link: '/guide/writing-scopes' },
+          { text: 'Tracking ownership', link: '/guide/tracking-ownership' },
+          { text: 'Caching', link: '/guide/caching' },
+          { text: 'Observability', link: '/guide/observability' },
+          { text: 'Super users', link: '/guide/super-users' },
+          { text: 'TypeScript', link: '/guide/typescript' },
+          { text: 'Writing a storage adapter', link: '/guide/writing-a-storage-adapter' },
+          { text: 'Testing your app', link: '/guide/testing-your-app' },
         ],
       },
       {
-        text: 'Multi-Tenant',
+        text: 'Databases',
         items: [
-          { text: 'Portals & Context',  link: '/guide/multi-tenant' },
-          { text: 'is_super',           link: '/guide/is-super' },
+          { text: 'Drizzle + PostgreSQL', link: '/databases/drizzle-postgres' },
+          { text: 'Drizzle + MySQL', link: '/databases/drizzle-mysql' },
+          { text: 'Drizzle + SQLite', link: '/databases/drizzle-sqlite' },
+          { text: 'Prisma', link: '/databases/prisma' },
+          { text: 'Mongoose', link: '/databases/mongoose' },
         ],
       },
       {
-        text: 'Advanced',
+        text: 'Reference',
         items: [
-          { text: 'Scopes',          link: '/guide/scopes' },
-          { text: 'Custom Adapter',  link: '/guide/adapter' },
-          { text: 'Policy Cache',    link: '/guide/cache' },
+          { text: 'Core API', link: '/reference/core-api' },
+          { text: 'Fastify', link: '/reference/fastify' },
+          { text: 'Express', link: '/reference/express' },
+          { text: 'Drizzle', link: '/reference/drizzle' },
+          { text: 'Prisma', link: '/reference/prisma' },
+          { text: 'Mongoose', link: '/reference/mongoose' },
+          { text: 'Cache', link: '/reference/cache' },
+          { text: 'Testing', link: '/reference/testing' },
+          { text: 'CLI', link: '/reference/cli' },
+          { text: 'Configuration', link: '/reference/configuration' },
+          { text: 'Database schema', link: '/reference/database-schema' },
+          { text: 'Errors', link: '/reference/errors' },
+          { text: 'Compatibility', link: '/reference/compatibility' },
         ],
       },
       {
-        text: 'Examples',
-        items: [
-          { text: 'Blog CMS',             link: '/examples/blog-cms' },
-          { text: 'Multi-Portal App',     link: '/examples/multi-portal' },
-          { text: 'Ownership Scope',      link: '/examples/own-scope' },
-          { text: 'Multi-Tenant Branches', link: '/examples/multi-tenant' },
-        ],
+        text: 'Migration',
+        items: [{ text: 'Migrating from v0', link: '/guide/migrating-from-v0' }],
       },
     ],
 
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/KyroBit/rbac' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/KyroBit/rbac' }],
+
+    outline: { level: [2, 3] },
   },
 })

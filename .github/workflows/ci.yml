@@ -9,9 +9,8 @@ on:
 
 jobs:
   test:
-    name: Test
+    name: Typecheck & test (Bun)
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -20,24 +19,17 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Type check
+      - name: Typecheck
         run: bun run typecheck
 
-      - name: Run tests
+      - name: Test
         run: bun run test:ci
 
-  publish:
-    name: Publish to GitHub Packages
-    needs: test                          # ← tests must pass first
+  package:
+    name: Package lint & Node smoke test
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    permissions:
-      packages: write
-      contents: read
-
     steps:
       - uses: actions/checkout@v4
 
@@ -45,17 +37,47 @@ jobs:
         with:
           bun-version: latest
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Build
         run: bun run build
 
-      - name: Configure npm auth for GitHub Packages
-        run: |
-          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lint package (publint + arethetypeswrong)
+        run: bun run lint:package
+
+      - name: Smoke test built package under Node
+        run: node scripts/smoke/run.mjs
+
+  publish:
+    name: Publish to GitHub Packages
+    needs: [test, package]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Publish
         run: npm publish

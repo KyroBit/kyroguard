@@ -1,19 +1,24 @@
 {
   "compilerOptions": {
-    "target":            "ES2022",
-    "module":            "NodeNext",
-    "moduleResolution":  "NodeNext",
-    "lib":               ["ES2022"],
-    "types":             ["node"],
-    "rootDir":           "./src",
-    "outDir":            "./dist",
-    "declaration":       true,
-    "declarationMap":    true,
-    "sourceMap":         true,
-    "strict":            true,
-    "esModuleInterop":   true,
-    "skipLibCheck":      true
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node", "bun-types"]
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "docs", "src/cli/templates"]
 }

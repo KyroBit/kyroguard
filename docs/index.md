@@ -2,24 +2,24 @@
 layout: home
 
 hero:
-  name: "@kyrobit/rbac"
-  text: Role-based access control for Fastify
-  tagline: Define permissions in code, group them into roles, assign them to users, and enforce them on routes. One command keeps your database in sync.
+  name: '@kyrobit/rbac'
+  text: Policy-based access control for Node.js APIs
+  tagline: Define policies in code, sync them to your database, and guard Fastify or Express routes with grants that are isolated per portal and per tenant.
   actions:
     - theme: brand
-      text: Get Started
-      link: /guide/introduction
+      text: Get started
+      link: /guide/installation
     - theme: alt
-      text: See Examples
-      link: /examples/blog-cms
+      text: Quick start
+      link: /guide/quick-start
 
 features:
-  - title: Permissions as code
-    details: Policies like transaction.view or blog.publish live in your codebase. Dependencies resolve automatically — granting blog.publish also grants blog.read.
-  - title: One command to sync
-    details: Define policies and groups in TypeScript. Run rbac sync before every deploy to push changes to the database and generate types for autocompletion.
-  - title: Scopes for fine-grained control
-    details: Need "only their own records" or "only during business hours"? Scopes are plain functions you write — query your tables, check time, call anything.
-  - title: Multi-portal, zero bleed
-    details: Admin, branch, cashier — each portal has its own isolated policies and groups. Assignments in one portal never affect another.
+  - title: Policies synced from code
+    details: Your policy definitions live in TypeScript files. `rbac sync` upserts them into storage, removes orphans for the synced portal, back-fills group dependencies and writes a typed rbac.d.ts for autocompletion.
+  - title: Strict portal and tenant isolation
+    details: Grants are matched on (subject, portal, context) by plain equality — a grant on the admin portal never satisfies a branch route, and a grant in tenant A never applies to tenant B. There is no fallback in either direction.
+  - title: Your framework, your database
+    details: Guards for Fastify 5 and Express 4/5. Storage adapters for Drizzle (PostgreSQL, MySQL, SQLite), Prisma and Mongoose, plus an in-memory adapter for tests — all validated against one executable contract suite.
+  - title: Guard-time decisions with a bounded cache
+    details: Every decision happens at guard time and either passes or throws a typed error with a stable RBAC_* code. Policy lookups go through a bounded in-memory LRU (10,000 entries, 30 s TTL by default) with cross-instance invalidation hooks.
 ---
