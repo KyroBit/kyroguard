@@ -13,8 +13,8 @@ One policy, different conditions per role. That is the whole idea. Here are thos
 `Scope.owned()` is built in. It passes when the user created the row:
 
 ```ts
-// policies.ts — Policy(name, label, dependsOn, allowed scopes)
-new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
+// policies.ts — the policy lists the scopes it may be granted with
+new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
 ```ts

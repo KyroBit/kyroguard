@@ -62,8 +62,8 @@ export const resources: ResourceDefinition[] = [
     type: 'sale',
     policies: [
       new Policy('sales.view'),
-      new Policy('sales.create', 'Create sales', ['sales.view']),
-      new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()]),
+      new Policy('sales.create', { dependsOn: ['sales.view'] }),
+      new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
     ],
   },
 ]

@@ -10,7 +10,7 @@ new Policy('sales.create')
 
 That is a complete policy. Routes check it. Groups bundle it. You grant it to staff.
 
-Only the name is required. The other three arguments are a label, dependencies, and scopes. Each gets a section below.
+Only the name is required. Everything else — label, dependencies, scopes — is optional, passed as an options object. Each gets a section below.
 
 ## Names
 
@@ -30,24 +30,33 @@ Write names without a domain prefix. Domains add theirs for you. See [Multi-tena
 
 ## Labels
 
+The label is the display name for your admin screens. It is derived from the name:
+
 ```ts
-new Policy('sales.create', 'Create sales')
+new Policy('sales.create')        // label: "Create sales"
+new Policy('blog-category.read')  // label: "Read blog category"
 ```
 
-The label is the display name. Use it in admin screens. Omit it and the action part of the name is used.
+Pass your own when the derived one reads wrong:
+
+```ts
+new Policy('sales.create', 'Record a sale')
+// or in the options form:
+new Policy('sales.create', { label: 'Record a sale' })
+```
 
 ## Dependencies
 
 ```ts
-new Policy('sales.void', 'Void sales', ['sales.view'])
+new Policy('sales.void', { dependsOn: ['sales.view'] })
 ```
 
-You must see a sale to void it. The third argument, `dependsOn`, declares that once. At sync, every group that has `sales.void` gets `sales.view` added. `sales.create` depends on `sales.view` the same way. See [Sync](/guide/sync).
+You must see a sale to void it. `dependsOn` declares that once. At sync, every group that has `sales.void` gets `sales.view` added. `sales.create` depends on `sales.view` the same way. See [Sync](/guide/sync).
 
 Dependencies chain:
 
 ```ts
-new Policy('sales.refund', 'Refund sales', ['sales.void'])
+new Policy('sales.refund', { dependsOn: ['sales.void'] })
 ```
 
 A group with `sales.refund` also gets `sales.void` and `sales.view`.
@@ -61,7 +70,7 @@ A dependency must name a policy you defined. Sync fails if it does not.
 ```ts
 import { Scope } from '@kyrobit/rbac'
 
-new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
+new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
 The fourth argument, `scopeOptions`, lists the row-level limits this policy allows. With `Scope.owned()`, a cashier granted `'owned'` access voids only their own sales. A manager granted it without a scope voids any sale ([Scopes](/guide/scopes)).
@@ -80,15 +89,15 @@ export const resources: ResourceDefinition[] = [
     //                // enables ownership tracking and query scoping
     policies: [
       new Policy('sales.view'),
-      new Policy('sales.create', 'Create sales', ['sales.view']),
-      new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()]),
+      new Policy('sales.create', { dependsOn: ['sales.view'] }),
+      new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
     ],
   },
   {
     type: 'product',
     policies: [
       new Policy('products.view'),
-      new Policy('products.update', 'Update products', ['products.view']),
+      new Policy('products.update', { dependsOn: ['products.view'] }),
     ],
   },
 ]

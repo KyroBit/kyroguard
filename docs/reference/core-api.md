@@ -31,8 +31,8 @@ const rbac = createRbac({
   adapter: memoryAdapter(),
   policies: [
     new Policy('sales.view'),
-    new Policy('sales.create', undefined, ['sales.view']),
-    new Policy('sales.void', undefined, ['sales.view'], [Scope.owned()]),
+    new Policy('sales.create', { dependsOn: ['sales.view'] }),
+    new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
   ],
   groups: {
     cashier: {
@@ -90,17 +90,18 @@ Domain instances offer the same methods with unqualified names. Prefer those in 
 
 ```ts
 class Policy {
-  constructor(
-    name: string,          // unqualified, e.g. 'sales.view'
-    label?: string,        // default: derived from the name
-    dependsOn?: string[],  // policies this one requires
+  constructor(name: string, options?: {
+    label?: string         // default: derived — 'sales.create' → "Create sales"
+    dependsOn?: string[]   // policies this one requires
     scopeOptions?: Scope[] // scopes a grant may be restricted to
-  )
+  })
+  // positional form also accepted:
+  constructor(name: string, label?: string, dependsOn?: string[], scopeOptions?: Scope[])
 }
 ```
 
 ```ts
-const voidSale = new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
+const voidSale = new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
 See [Policies](/guide/policies).
