@@ -12,9 +12,9 @@ export default defineConfig({
     ).asPromise()
     return mongooseAdapter(connection)
   },
-  portals: [
+  domains: [
     {
-      name: '{{PORTAL}}',
+      name: '{{DOMAIN}}',
       policies: './src/rbac/policies.ts',
       groups: './src/rbac/groups.ts',
     },

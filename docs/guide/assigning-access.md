@@ -1,31 +1,31 @@
 # Assigning access
 
-Give a user a role through the portal:
+Hiring a cashier for branch-1 is one call:
 
 ```ts
-await admin.assignGroup(user.id, 'editor')
+await branch.assignGroup(user.id, 'cashier', { tenantId: 'branch-1' })
 ```
 
-Groups are roles. This makes the user an editor on the `admin` portal. Most apps only need `assignGroup` and `assignPolicy` on a portal.
+Groups are job titles. This makes the user a cashier in branch-1, on the `branch` domain. Most apps only need `assignGroup` and `assignPolicy` on a domain.
 
 ```ts
-// a single policy instead of a role
-await admin.assignPolicy(user.id, 'posts.publish')
+// a single policy instead of a job title
+await branch.assignPolicy(user.id, 'products.update')
 
-// scoped: only rows the user owns
-await admin.assignPolicy(user.id, 'posts.edit', { scope: 'owned' })
+// scoped: only sales the user rang up
+await branch.assignPolicy(user.id, 'sales.void', { scope: 'owned' })
 
-// per tenant
-await admin.assignGroup(user.id, 'manager', { contextId: 'branch-1' })
+// a promotion, valid in one store only
+await branch.assignGroup(user.id, 'manager', { tenantId: 'branch-1' })
 ```
 
-Policy names stay short. The portal adds its own prefix. Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Syncing policies](/guide/sync).
+Policy names stay short. The domain adds its own prefix. Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Syncing policies](/guide/sync).
 
-Removal mirrors assignment:
+Removal mirrors assignment. Someone leaves, you take the job title back:
 
 ```ts
-await admin.removeGroup(user.id, 'editor')
-await admin.removePolicy(user.id, 'posts.publish')
+await branch.removeGroup(user.id, 'cashier', { tenantId: 'branch-1' })
+await branch.removePolicy(user.id, 'products.update')
 ```
 
 Assigning twice is safe. The second call does nothing.
@@ -34,33 +34,24 @@ Changes apply immediately on this server. Running several servers? See [Producti
 
 ## Scripts and admin panels
 
-Outside a request handler there is often no portal instance. Use `rbac.admin.*` there:
+Outside a request handler there is often no domain instance. Use `rbac.admin.*` there:
 
 ```ts
 import { rbac } from './rbac.js'
 
 await rbac.admin.assignGroup(
-  { subjectId: 'user-42', portal: 'admin' },
-  'editor',
+  { subjectId: 'user-42', domain: 'branch', tenantId: 'branch-1' },
+  'cashier',
 )
 
 await rbac.admin.assignPolicy(
-  { subjectId: 'user-42', portal: 'admin', contextId: 'branch-1' },
-  'admin.posts.read',
+  { subjectId: 'user-42', domain: 'branch', tenantId: 'branch-1' },
+  'branch.sales.view',
 )
 ```
 
-Same operations, made explicit. `rbac.admin` takes full policy names like `admin.posts.read`. Portal instances add the prefix for you. This API does not.
+Same operations, made explicit. `rbac.admin` takes full policy names like `branch.sales.view`. Domain instances add the prefix for you. This API does not.
 
-## Super users
+## Owners
 
-```ts
-const admin = app.rbac.portal('admin', {
-  getSubject: async req => {
-    const user = await getUser(req)
-    return user ? { id: user.id, is_super: user.isSuper } : null
-  },
-})
-```
-
-Return `is_super: true` and the user passes every policy check. Reserve it for a handful of trusted accounts. To turn the bypass off entirely, pass `superBypass: false` to `createRbac()`.
+Roles cover the staff. The person the branch belongs to is different — an owner passes every check in their own tenant without holding a single policy. That is `is_super`, and it has its own page: [Owners and superusers](/guide/owners).

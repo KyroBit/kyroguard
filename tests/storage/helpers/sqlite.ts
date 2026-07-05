@@ -6,7 +6,7 @@
  *   - text primary keys (cuid2 generated at runtime via $defaultFn — no SQL default)
  *   - integer booleans (mode: 'boolean') with DDL defaults 0 / 1
  *   - text json columns (mode: 'json') with DEFAULT '[]'
- *   - NOT NULL DEFAULT '' sentinel columns for portal / context_id / context_type
+ *   - NOT NULL DEFAULT '' sentinel columns for domain / tenant_id
  *   - integer timestamps (mode: 'timestamp'), NOT NULL, populated at runtime
  *   - the same unique + plain indexes the drizzle schema declares
  */
@@ -19,7 +19,7 @@ const DDL = `
 CREATE TABLE rbac_policies (
   id text PRIMARY KEY NOT NULL,
   name text NOT NULL,
-  portal text NOT NULL DEFAULT '',
+  domain text NOT NULL DEFAULT '',
   label text NOT NULL,
   scope_options text NOT NULL DEFAULT '[]',
   depends_on text NOT NULL DEFAULT '[]',
@@ -53,23 +53,23 @@ CREATE TABLE rbac_user_policy_groups (
   id text PRIMARY KEY NOT NULL,
   subject_id text NOT NULL,
   policy_group_id text NOT NULL REFERENCES rbac_policy_groups(id),
-  portal text NOT NULL DEFAULT '',
-  context_id text NOT NULL DEFAULT '',
+  domain text NOT NULL DEFAULT '',
+  tenant_id text NOT NULL DEFAULT '',
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_upg_tuple_uq ON rbac_user_policy_groups (subject_id, policy_group_id, portal, context_id);
+CREATE UNIQUE INDEX rbac_upg_tuple_uq ON rbac_user_policy_groups (subject_id, policy_group_id, domain, tenant_id);
 CREATE INDEX rbac_upg_subject_idx ON rbac_user_policy_groups (subject_id);
 
 CREATE TABLE rbac_user_policies (
   id text PRIMARY KEY NOT NULL,
   subject_id text NOT NULL,
   policy_id text NOT NULL REFERENCES rbac_policies(id),
-  portal text NOT NULL DEFAULT '',
-  context_id text NOT NULL DEFAULT '',
+  domain text NOT NULL DEFAULT '',
+  tenant_id text NOT NULL DEFAULT '',
   scope text,
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_up_tuple_uq ON rbac_user_policies (subject_id, policy_id, portal, context_id);
+CREATE UNIQUE INDEX rbac_up_tuple_uq ON rbac_user_policies (subject_id, policy_id, domain, tenant_id);
 CREATE INDEX rbac_up_subject_idx ON rbac_user_policies (subject_id);
 
 CREATE TABLE rbac_resource_owners (
@@ -77,8 +77,8 @@ CREATE TABLE rbac_resource_owners (
   resource_type text NOT NULL,
   resource_id text NOT NULL,
   owner_id text NOT NULL,
-  context_type text NOT NULL DEFAULT '',
-  context_id text NOT NULL DEFAULT '',
+  domain text NOT NULL DEFAULT '',
+  tenant_id text NOT NULL DEFAULT '',
   created_at integer NOT NULL
 );
 CREATE UNIQUE INDEX rbac_ro_tuple_uq ON rbac_resource_owners (resource_type, resource_id, owner_id);

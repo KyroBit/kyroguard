@@ -20,7 +20,8 @@ function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 | Member | Description |
 | --- | --- |
 | `context()` | Middleware that opens the request context. Register once, before any guard. |
-| `portal(name, options)` | Create a [portal instance](#portal-instance). `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per portal. |
+| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `branch`. |
+| `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `errorHandler()` | Error middleware that sends the denial response. Register after your routes. |
 
 ```ts
@@ -29,34 +30,41 @@ import { rbacExpress } from '@kyrobit/rbac/express'
 import { rbac } from './rbac.js'
 
 const app = express()
-const { context, portal, errorHandler } = rbacExpress(rbac)
+const { context, domain, errorHandler } = rbacExpress(rbac)
 
 app.use(context()) // before any guard
 
-const admin = portal('admin', {
+const staff = domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
-    return user ? { id: user.id, context_id: user.branchId } : null
+    return user ? { id: user.id, tenant_id: user.branchId } : null
   },
 })
 
-app.get('/posts', admin.requirePolicy('posts.read'), (req, res) => {
+app.get('/sales', staff.requirePolicy('sales.view'), (req, res) => {
   res.json({ ok: true })
 })
 
 app.use(errorHandler()) // after the routes
 ```
 
-## Portal instance
+## Domain instance
+
+```ts
+const staff = domain({ getSubject })          // single-area app
+const admin = domain('admin', { getSubject }) // multi-area app
+```
+
+`options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
 | Method | Description |
 | --- | --- |
-| `name` | The portal name. |
-| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`posts.read`, not `admin.posts.read`). `options.resource(req)` resolves the target row; required for scoped grants. |
-| `contextHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Mount on specific routers, never app-wide. |
-| `assignGroup(subjectId, group, options?)` | Assign a group in this portal. `options.contextId` targets a tenant. |
+| `name` | The domain name. `''` for the domain-less overload. |
+| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. |
+| `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Mount on specific routers, never app-wide. |
+| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one store, like `branch-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
-| `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `contextId`, `scope`. |
+| `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |
 
 Guards never write responses. A denial travels through `next(err)` into your error pipeline. Behavior is identical on Express 4 and Express 5.
@@ -86,7 +94,7 @@ Scoped denials produce `RBAC_SCOPE_DENIED` (403) and `RBAC_RESOURCE_NOT_FOUND` (
 Pass `formatError` to shape the denial response yourself:
 
 ```ts
-const { context, portal, errorHandler } = rbacExpress(rbac, {
+const { context, domain, errorHandler } = rbacExpress(rbac, {
   formatError: (error, req) => ({
     status: error.statusCode,
     body: { code: error.code, path: req.path },

@@ -1,7 +1,7 @@
 {
   "name": "@kyrobit/rbac",
   "version": "1.0.0",
-  "description": "Policy-based access control with portals, tenant contexts, scopes and resource ownership. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite) and Mongoose integrations.",
+  "description": "Policy-based access control with domains, tenants, scopes and resource ownership. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite) and Mongoose integrations.",
   "license": "UNLICENSED",
   "type": "module",
   "sideEffects": false,

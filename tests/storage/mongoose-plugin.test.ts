@@ -50,9 +50,9 @@ if (!available) {
     type: 'post',
     queryScopes: {
       own: subject => ({ authorId: subject.id }),
-      branch: subject => ({ branchId: subject.context_id }),
+      branch: subject => ({ branchId: subject.tenant_id }),
     },
-    context: {
+    domains: {
       // Two policies listing overlapping scopes: the plugin must dedupe the
       // scope names and $or-combine the two distinct filters.
       admin: {
@@ -63,7 +63,7 @@ if (!available) {
   })
   const Post = connection.model<PostDoc>('Post', postSchema)
 
-  const subject: Subject = { id: 'u1', portal: 'admin', context_id: 'b1' }
+  const subject: Subject = { id: 'u1', domain: 'admin', tenant_id: 'b1' }
 
   /** Runs fn in a fresh request context with the given subject set. */
   const asSubject = <T>(who: Subject, fn: () => Promise<T>): Promise<T> =>
@@ -81,7 +81,7 @@ if (!available) {
       await models.resourceOwner.deleteMany({})
     })
 
-    test("(a) doc.save() inside engine.store context records ownership with the subject's portal/context", async () => {
+    test("(a) doc.save() inside engine.store context records ownership with the subject's domain/tenant", async () => {
       const post = await asSubject(subject, () =>
         Post.create({ title: 'one', authorId: 'u1', branchId: 'b1' }),
       )
@@ -94,8 +94,8 @@ if (!available) {
         .lean()
       expect(row).not.toBeNull()
       expect(row?.ownerId).toBe('u1')
-      expect(row?.contextType).toBe('admin')
-      expect(row?.contextId).toBe('b1')
+      expect(row?.domain).toBe('admin')
+      expect(row?.tenantId).toBe('b1')
     })
 
     test('(b) Model.insertMany records ownership for every inserted doc', async () => {
@@ -139,7 +139,7 @@ if (!available) {
       expect(await isOwner('u1', kept._id)).toBe(true)
     })
 
-    test('(e) find() applies the $or of both configured scope filters for a matching portal', async () => {
+    test('(e) find() applies the $or of both configured scope filters for a matching domain', async () => {
       // Seeded outside any subject context so no ownership noise is recorded.
       await Post.create({ title: 'mine-other-branch', authorId: 'u1', branchId: 'b9' })
       await Post.create({ title: 'branch-b1', authorId: 'u2', branchId: 'b1' })
@@ -161,13 +161,13 @@ if (!available) {
       expect(narrowed).toEqual(['branch-b1'])
     })
 
-    test('(e) find() is unfiltered for a subject whose portal has no context config', async () => {
+    test('(e) find() is unfiltered for a subject whose domain has no domains config', async () => {
       await Post.create({ title: 'a', authorId: 'u1', branchId: 'b9' })
       await Post.create({ title: 'b', authorId: 'u2', branchId: 'b1' })
       await Post.create({ title: 'c', authorId: 'u2', branchId: 'b9' })
 
       const titles = await asSubject(
-        { id: 'u9', portal: 'customer', context_id: 'b1' },
+        { id: 'u9', domain: 'customer', tenant_id: 'b1' },
         async () => {
           const found = await Post.find({}).lean()
           return found.map(doc => doc.title).sort()
@@ -175,9 +175,9 @@ if (!available) {
       )
       expect(titles).toEqual(['a', 'b', 'c'])
 
-      // Portal-less subject ('' sentinel) has no entry either → unfiltered.
-      const portalless = await asSubject({ id: 'u9' }, () => Post.countDocuments({}))
-      expect(portalless).toBe(3)
+      // Domain-less subject ('' sentinel) has no entry either → unfiltered.
+      const domainless = await asSubject({ id: 'u9' }, () => Post.countDocuments({}))
+      expect(domainless).toBe(3)
     })
 
     test('(f) updateMany does NOT record ownership — documented middleware gap', async () => {

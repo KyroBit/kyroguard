@@ -5,14 +5,14 @@
 Without it, any string compiles:
 
 ```ts
-admin.requirePolicy('psts.read') // typo — compiles, fails at runtime
+admin.requirePolicy('reprts.view') // typo — compiles, fails at runtime
 ```
 
 With it, the typo is a compile error and your editor autocompletes real names:
 
 ```ts
-admin.requirePolicy('psts.read')
-// error: '"psts.read"' is not assignable to '"posts.read" | "posts.update"'
+admin.requirePolicy('reprts.view')
+// error: '"reprts.view"' is not assignable to '"reports.view" | "staff.manage"'
 ```
 
 ## Generating the file
@@ -42,8 +42,8 @@ If `include` already covers the directory the file is written to, you are done.
 
 ## What gets typed
 
-- Portal names in `portal(name, ...)` (Fastify: `app.rbac.portal`).
-- Policy names in `requirePolicy()`, per portal. The `admin` portal only accepts `admin` policies.
-- Policy names in the portal's `assignPolicy()` / `removePolicy()`.
+- Domain names in `domain(name, ...)` (Fastify: `app.rbac.domain`).
+- Policy names in `requirePolicy()`, per domain. The `admin` domain only accepts `admin` policies.
+- Policy names in the domain's `assignPolicy()` / `removePolicy()`.
 
 Before the file exists, all of these accept plain strings. Nothing breaks. You just get no checking.

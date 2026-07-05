@@ -41,7 +41,7 @@ import { trackedDb } from '@kyrobit/rbac/drizzle'
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
 
-Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user. Selects on registered resources get per-portal query scoping. `db.untracked` is the raw handle.
+Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user. Selects on registered resources get per-domain query scoping. `db.untracked` is the raw handle.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ Wraps your Drizzle database. Inserts into registered resource tables record owne
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { eq } from 'drizzle-orm'
 import { trackedDb } from '@kyrobit/rbac/drizzle'
-import { posts } from './schema.js'
+import { sales } from './schema.js'
 import { rbac, resources } from './rbac.js'
 
 const rawDb = drizzle(process.env.DATABASE_URL!)
@@ -63,7 +63,7 @@ export const db = trackedDb(rawDb, {
   rbac,
   resources,
   queryScopes: {
-    'same-branch': subject => eq(posts.branchId, subject.context_id as string),
+    'same-branch': subject => eq(sales.branchId, subject.tenant_id as string),
   },
 })
 ```
@@ -90,11 +90,11 @@ An insert without ids in `values()` and without `.returning()` cannot be attribu
 
 For a select on a registered resource, the wrapper:
 
-1. Looks up the resource's `context` entry for the user's portal.
+1. Looks up the resource's `domains` entry for the user's domain.
 2. Collects the scope names it lists that also exist in `queryScopes`.
 3. Builds each scope's condition, OR-combines them, and AND-s the result into your `where()`.
 
-No user, no matching portal, or no matching scopes: the select runs unscoped. See [Scopes](/guide/scopes).
+No user, no matching domain, or no matching scopes: the select runs unscoped. See [Scopes](/guide/scopes).
 
 ## Schema subpaths
 

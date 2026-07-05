@@ -13,19 +13,19 @@
  *
  * The compound `@@unique` constraints double as the client's compound-unique
  * inputs the adapter relies on (default names):
- * - RbacUserPolicyGroup → `subjectId_policyGroupId_portal_contextId`
- * - RbacUserPolicy      → `subjectId_policyId_portal_contextId`
+ * - RbacUserPolicyGroup → `subjectId_policyGroupId_domain_tenantId`
+ * - RbacUserPolicy      → `subjectId_policyId_domain_tenantId`
  * - RbacResourceOwner   → `resourceType_resourceId_ownerId`
  */
 export const prismaSchemaSnippet = `// ── @kyrobit/rbac models ─────────────────────────────────────────────────────
 // Generated tables interoperate with the Drizzle schema: identical table
 // names, snake_case columns, defaults and unique constraints.
-// portal / contextId / contextType use the '' sentinel (never NULL).
+// domain / tenantId use the '' sentinel (never NULL).
 
 model RbacPolicy {
   id           String   @id @default(cuid())
   name         String   @unique(map: "rbac_policies_name_unique")
-  portal       String   @default("")
+  domain       String   @default("")
   label        String
   scopeOptions Json     @default("[]") @map("scope_options")
   dependsOn    Json     @default("[]") @map("depends_on")
@@ -72,13 +72,13 @@ model RbacUserPolicyGroup {
   id            String   @id @default(cuid())
   subjectId     String   @map("subject_id")
   policyGroupId String   @map("policy_group_id")
-  portal        String   @default("")
-  contextId     String   @default("") @map("context_id")
+  domain        String   @default("")
+  tenantId      String   @default("") @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")
 
   policyGroup RbacPolicyGroup @relation(fields: [policyGroupId], references: [id])
 
-  @@unique([subjectId, policyGroupId, portal, contextId], map: "rbac_upg_tuple_uq")
+  @@unique([subjectId, policyGroupId, domain, tenantId], map: "rbac_upg_tuple_uq")
   @@index([subjectId], map: "rbac_upg_subject_idx")
   @@map("rbac_user_policy_groups")
 }
@@ -87,14 +87,14 @@ model RbacUserPolicy {
   id        String   @id @default(cuid())
   subjectId String   @map("subject_id")
   policyId  String   @map("policy_id")
-  portal    String   @default("")
-  contextId String   @default("") @map("context_id")
+  domain    String   @default("")
+  tenantId  String   @default("") @map("tenant_id")
   scope     String?
   createdAt DateTime @default(now()) @map("created_at")
 
   policy RbacPolicy @relation(fields: [policyId], references: [id])
 
-  @@unique([subjectId, policyId, portal, contextId], map: "rbac_up_tuple_uq")
+  @@unique([subjectId, policyId, domain, tenantId], map: "rbac_up_tuple_uq")
   @@index([subjectId], map: "rbac_up_subject_idx")
   @@map("rbac_user_policies")
 }
@@ -104,8 +104,8 @@ model RbacResourceOwner {
   resourceType String   @map("resource_type")
   resourceId   String   @map("resource_id")
   ownerId      String   @map("owner_id")
-  contextType  String   @default("") @map("context_type")
-  contextId    String   @default("") @map("context_id")
+  domain       String   @default("")
+  tenantId     String   @default("") @map("tenant_id")
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@unique([resourceType, resourceId, ownerId], map: "rbac_ro_tuple_uq")

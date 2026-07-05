@@ -11,7 +11,9 @@ function createRbac(options: CreateRbacOptions): Rbac
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `adapter` | `StorageAdapter` | required | Storage backend. |
-| `resources` | `ResourceDefinition[]` | `[]` | Your resource definitions. Declares your policies and scopes. |
+| `policies` | `Policy[]` | `[]` | Plain policy list — what staff can do. Use it for guard-only apps. |
+| `groups` | `GroupsDefinition` | — | Group definitions — job titles. `sync()` seeds them after policies. |
+| `resources` | `ResourceDefinition[]` | `[]` | Resource definitions. Only needed for ownership tracking or query scoping. |
 | `cache` | `PolicyCache \| false` | in-memory | Policy cache. `false` disables caching. |
 | `cacheTtlMs` | `number` | `30_000` | TTL for the default cache. Ignored when `cache` is set. |
 | `cacheMaxEntries` | `number` | `10_000` | Size limit for the default cache. Ignored when `cache` is set. |
@@ -27,16 +29,20 @@ import { memoryAdapter } from '@kyrobit/rbac/testing'
 
 const rbac = createRbac({
   adapter: memoryAdapter(),
-  resources: [
-    {
-      type: 'post',
-      policies: [
-        new Policy('posts.read'),
-        new Policy('posts.update', undefined, [], [Scope.owned()]),
-      ],
-    },
+  policies: [
+    new Policy('sales.view'),
+    new Policy('sales.create', undefined, ['sales.view']),
+    new Policy('sales.void', undefined, ['sales.view'], [Scope.owned()]),
   ],
+  groups: {
+    cashier: {
+      label: 'Cashier',
+      policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+    },
+    manager: { label: 'Manager', policies: 'all' },
+  },
 })
+await rbac.sync()
 ```
 
 ## Rbac
@@ -47,14 +53,16 @@ The instance returned by `createRbac()`.
 | --- | --- |
 | `engine` | The authorization engine (`RbacEngine`). |
 | `adapter` | The adapter passed to `createRbac()`. |
-| `resources` | The resource definitions passed to `createRbac()`. |
-| `sync(resources, portal?)` | Sync policies into storage. Also available as [`rbac sync`](/reference/cli). |
-| `seedGroups(groups, allPolicies?, portal?)` | Seed groups. Replaces each group's policies exactly. |
+| `resources` | The resource definitions, including the `policies` shorthand. |
+| `sync()` | Load the `createRbac` policies and seed its groups. Same as [`rbac sync`](/reference/cli). |
+| `sync(domain)` | The same, qualified under a domain name. |
+| `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
+| `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
 | `admin.assignGroup(subject, group)` | Assign a group. |
 | `admin.removeGroup(subject, group)` | Remove a group. |
 | `admin.assignPolicy(subject, policy, scope?)` | Grant one policy directly. |
 | `admin.removePolicy(subject, policy)` | Remove a direct grant. |
-| `ownership.record(owner, resource, context?)` | Record who owns a resource. |
+| `ownership.record(owner, resource, at?)` | Record who owns a resource. `at`: `domain`, `tenantId`. |
 | `ownership.isOwner(ownerId, resource)` | Check ownership. |
 | `ownership.remove(resource)` | Remove all owners of a resource. |
 | `ownership.addExtra(extra)` | Override the next tracked insert's ownership row. Applies once. See [Drizzle](/reference/drizzle). |
@@ -62,19 +70,19 @@ The instance returned by `createRbac()`.
 | `cache.clear()` | Drop all cached policies on every instance. |
 | `dispose()` | Detach bus subscriptions (shutdown, tests). |
 
-`rbac.admin` is the low-level API. It takes qualified policy names — portal prefix included, like `admin.posts.read` — and an explicit portal/context:
+`rbac.admin` is the low-level API. It takes qualified policy names — domain prefix included, like `admin.reports.view` — and an explicit domain/tenant:
 
 ```ts
 interface AdminSubjectRef {
   subjectId: string
-  portal?: string
-  contextId?: string
+  domain?: string
+  tenantId?: string
 }
 
-await rbac.admin.assignPolicy({ subjectId: 'u1', portal: 'admin' }, 'admin.posts.read')
+await rbac.admin.assignPolicy({ subjectId: 'amina', domain: 'admin' }, 'admin.reports.view')
 ```
 
-Portal instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
+Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
 
 **Throws** `UnknownPolicyError` from `assignPolicy` when the policy was never synced.
 
@@ -83,7 +91,7 @@ Portal instances offer the same methods with unqualified names. Prefer those in 
 ```ts
 class Policy {
   constructor(
-    name: string,          // unqualified, e.g. 'posts.read'
+    name: string,          // unqualified, e.g. 'sales.view'
     label?: string,        // default: derived from the name
     dependsOn?: string[],  // policies this one requires
     scopeOptions?: Scope[] // scopes a grant may be restricted to
@@ -92,7 +100,7 @@ class Policy {
 ```
 
 ```ts
-const update = new Policy('posts.update', 'Update posts', ['posts.read'], [Scope.owned()])
+const voidSale = new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
 ```
 
 See [Policies](/guide/policies).
@@ -112,17 +120,31 @@ type ScopeCheckFn = (
 ) => Awaitable<boolean>
 ```
 
-A scope is a named row-level check. `Scope.owned()` allows a request only when the user owns the target resource. See [Scopes](/guide/scopes).
+A scope is a named row-level check. `Scope.owned()` allows a request only when the user owns the target resource. Grant `sales.void` at scope `owned`: a cashier voids only their own sales. A manager, unrestricted, voids any sale. See [Scopes](/guide/scopes).
+
+## GroupDefinition
+
+```ts
+type GroupsDefinition = Record<string, GroupDefinition>
+
+interface GroupDefinition {
+  label: string
+  description?: string
+  policies: 'all' | string[] | Record<string, string | null>
+}
+```
+
+Groups are job titles: `cashier`, `manager`. `'all'` grants every synced policy. An array grants those policies, unrestricted. A record maps each policy to a scope; `null` means unrestricted. See [Groups](/guide/groups).
 
 ## Subject
 
-The logged-in user, as guards see it. Your portal's `getSubject` callback returns this shape, minus `portal`. The portal fills `portal` in. See [Express](/reference/express) or [Fastify](/reference/fastify).
+The logged-in user, as guards see it. Your domain's `getSubject` callback returns this shape, minus `domain`. The domain fills `domain` in. See [Express](/reference/express) or [Fastify](/reference/fastify).
 
 ```ts
 interface Subject {
   id: string
-  portal?: string
-  context_id?: string
+  domain?: string
+  tenant_id?: string
   is_super?: boolean // skips all policy checks
   [key: string]: unknown
 }
@@ -146,13 +168,13 @@ All guards throw subclasses of `RbacError`. Each carries `statusCode` and a stab
 
 Functions:
 
-- `syncPolicies(adapter, resources, portal?, options?)` — sync one portal's policies into storage. `rbac.sync()` calls this. See [Sync](/guide/sync).
-- `seedGroups(adapter, groups, allPolicies?, portal?)` — upsert groups and replace their policies. `rbac.seedGroups()` calls this.
-- `backfillGroupDependencies(adapter, resources, portal?, options?)` — add missing policy dependencies to every group.
+- `syncPolicies(adapter, resources, domain?, options?)` — sync one domain's policies into storage. `rbac.sync()` calls this. See [Sync](/guide/sync).
+- `seedGroups(adapter, groups, allPolicies?, domain?)` — upsert groups and replace their policies. `rbac.seedGroups()` calls this.
+- `backfillGroupDependencies(adapter, resources, domain?, options?)` — add missing policy dependencies to every group.
 - `collectScopes(resources)` — build the scope registry from resource definitions. `createRbac()` calls this.
-- `qualifyPolicyName(portal, policy)` — returns `` `${portal}.${policy}` ``, or `policy` when there is no portal.
-- `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, portal, contextId }`.
-- `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing portal or context.
+- `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
+- `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
+- `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
 - `mergeGrants(grants)` — merge grant rows into a `PolicyMap`. An unrestricted grant wins over a scoped one.
 - `defineConfig(config)` — returns `config` unchanged, with types. Use it in `rbac.config.ts`. See [Configuration](/reference/configuration).
 - `createId()` — random string id generator (cuid2). Used by generated schemas.
@@ -165,11 +187,11 @@ Classes:
 Types:
 
 - Subjects: `Subject`, `SubjectInput`, `SubjectRef`.
-- Policies: `ResourceDefinition`, `ContextPolicies`, `PolicyMap`, `ResourceRef`.
+- Policies: `ResourceDefinition`, `PolicyScopeMap`, `PolicyMap`, `ResourceRef`.
 - Groups: `GroupsDefinition`, `GroupDefinition`, `GroupPoliciesInput`.
-- Names: `RbacTypes`, `PortalName`, `AnyPolicyName`, `PortalPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
+- Names: `RbacTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
 - Storage contract: `StorageAdapter`, `AdapterCapabilities`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`, `OwnershipEntry`. See [Custom adapters](/guide/custom-adapters).
 - Cache: `PolicyCache`, `PolicyCacheKey`, `InvalidationBus`, `InvalidationEvent`, `CacheEvent`, `CacheHook`. See [Cache](/reference/cache).
 - Hooks: `DecisionEvent`, `DecisionHook`, `RbacErrorCode`.
 - Engine: `EngineOptions`, `AuthorizeOptions`, `RequestStore`, `ScopeCheckFn`, `ScopeCheckContext`, `Awaitable`.
-- Config: `RbacConfig`, `PortalConfig`.
+- Config: `RbacConfig`, `DomainConfig`.

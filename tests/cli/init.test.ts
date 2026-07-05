@@ -90,18 +90,20 @@ describe('rbac init --yes', () => {
     // Drizzle config variant with substitutions applied (no leftover markers).
     expect(config).toContain('drizzleAdapter')
     expect(config).toContain("name: 'admin'")
-    expect(config).not.toContain('{{PORTAL}}')
+    expect(config).not.toContain('{{DOMAIN}}')
     expect(config).not.toContain('{{DIALECT}}')
 
     expect(policies).toContain('resources')
     expect(policies).toContain('new Policy(')
     expect(groups).toContain('GroupsDefinition')
-    expect(groups).toContain("policies: 'all'")
+    // Hardware-store starter groups: cashier (scoped) + manager (unrestricted).
+    expect(groups).toContain('cashier:')
+    expect(groups).toContain("'sales.void': 'owned'")
 
     // Fastify wiring variant.
     expect(wiring).toContain('rbacFastify')
     expect(wiring).not.toContain('rbacExpress')
-    expect(wiring).not.toContain('{{PORTAL}}')
+    expect(wiring).not.toContain('{{DOMAIN}}')
 
     // The pg schema defines exactly the 6 rbac tables.
     expect(schema).toContain('pgTable')
@@ -189,7 +191,7 @@ describe('rbac init --yes', () => {
     expect(config).toContain('prismaAdapter(new PrismaClient())')
     expect(config).not.toContain('drizzleAdapter')
     expect(config).toContain("name: 'admin'")
-    expect(config).not.toContain('{{PORTAL}}')
+    expect(config).not.toContain('{{DOMAIN}}')
 
     // The snippet lands in prisma/ with all six models mapped to the rbac tables.
     const snippet = await readFile(join(cwd, 'prisma', 'rbac.prisma'), 'utf8')

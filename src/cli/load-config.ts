@@ -75,16 +75,16 @@ function assertConfigShape(config: unknown, path: string): asserts config is Rba
       `[rbac] ${path} is missing "adapter" — expected a function returning a StorageAdapter, e.g. \`adapter: async () => drizzleAdapter(db)\`.`,
     )
   }
-  if (!Array.isArray(candidate.portals)) {
+  if (!Array.isArray(candidate.domains)) {
     throw new Error(
-      `[rbac] ${path} is missing "portals" — expected an array of { name?, policies, groups? }.`,
+      `[rbac] ${path} is missing "domains" — expected an array of { name?, policies, groups? }.`,
     )
   }
-  candidate.portals.forEach((portal: unknown, index: number) => {
-    const entry = portal as { policies?: unknown } | null
+  candidate.domains.forEach((domain: unknown, index: number) => {
+    const entry = domain as { policies?: unknown } | null
     if (typeof entry !== 'object' || entry === null || typeof entry.policies !== 'string') {
       throw new Error(
-        `[rbac] ${path}: portals[${index}] is missing "policies" — expected a path to the module exporting your ResourceDefinition[].`,
+        `[rbac] ${path}: domains[${index}] is missing "policies" — expected a path to the module exporting your ResourceDefinition[].`,
       )
     }
   })

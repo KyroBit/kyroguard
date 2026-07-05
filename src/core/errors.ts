@@ -40,7 +40,7 @@ export class UnauthenticatedError extends RbacError {
   }
 }
 
-/** Subject lacks the required policy in this portal + context. → 403 */
+/** Subject lacks the required policy in this domain + tenant. → 403 */
 export class PolicyDeniedError extends RbacError {
   readonly statusCode = 403
   readonly code = 'RBAC_POLICY_DENIED'

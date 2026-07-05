@@ -21,5 +21,5 @@ features:
   - title: Your database
     details: Adapters for Drizzle, Prisma and MongoDB, plus an in-memory adapter for tests.
   - title: Multi-tenant
-    details: Portals and contexts keep access separate per app and per tenant.
+    details: Domains and tenants keep access separate per app and per store.
 ---

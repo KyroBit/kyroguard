@@ -63,9 +63,9 @@ Pushes your policy and group files to the database, then writes `rbac.d.ts`. New
 
 ```
 $ rbac sync
-[rbac] Removed 1 orphaned policies: admin.posts.archive
-[rbac] Synced 4 policies.
-[rbac] Seeded 2 groups for portal "admin".
+[rbac] Removed 1 orphaned policies: branch.sales.refund
+[rbac] Synced 5 policies.
+[rbac] Seeded 2 groups for domain "branch".
 [rbac] Wrote /home/you/app/rbac.d.ts
 ```
 
@@ -79,7 +79,7 @@ $ rbac sync
 ```
 :::
 
-A policies module that exports an empty list is skipped. `sync` never wipes a portal because a file exported nothing. See [Syncing policies](/guide/sync) for what changes in the database, step by step.
+A policies module that exports an empty list is skipped. `sync` never wipes a domain because a file exported nothing. See [Syncing policies](/guide/sync) for what changes in the database, step by step.
 
 ## rbac generate
 
@@ -120,7 +120,7 @@ policies:     4
 groups:       2
 ```
 
-Adapter ids: `drizzle-pg`, `drizzle-mysql`, `drizzle-sqlite`, `prisma`, `mongoose`, or `memory` in tests. Counts are totals across all portals.
+Adapter ids: `drizzle-pg`, `drizzle-mysql`, `drizzle-sqlite`, `prisma`, `mongoose`, or `memory` in tests. Counts are totals across all domains.
 
 ## Global flags
 

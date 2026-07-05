@@ -4,8 +4,8 @@ import { memoryCache } from '../../src/cache/memory.js'
 import { policyCacheKey } from '../../src/cache/key.js'
 import type { PolicyMap } from '../../src/core/types.js'
 
-const key = (subjectId: string, portal = 'p', contextId = 'c') =>
-  policyCacheKey(subjectId, portal, contextId)
+const key = (subjectId: string, domain = 'p', tenantId = 'c') =>
+  policyCacheKey(subjectId, domain, tenantId)
 
 const policy = (name: string): PolicyMap => new Map([[name, null]])
 

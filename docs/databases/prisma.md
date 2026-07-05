@@ -80,18 +80,18 @@ import { client, rbac } from './rbac/instance.js'
 export const db = client.$extends(
   rbacPrismaExtension({
     rbac,
-    resources: [{ type: 'post', model: 'post' }],
+    resources: [{ type: 'sale', model: 'sale' }],
   }),
 )
 ```
 
-`model` is the client property name, exactly as Prisma generates it. `model BlogPost` becomes `'blogPost'`.
+`model` is the client property name, exactly as Prisma generates it. `model StoreSale` becomes `'storeSale'`.
 
 Creating a row now records the current user as its owner:
 
 ```ts
-const post = await db.post.create({ data: { title } })
-// the requesting user now owns post.id
+const sale = await db.sale.create({ data: { total } })
+// the requesting cashier now owns sale.id
 ```
 
 `createMany` and `upsert` are tracked too. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
@@ -100,8 +100,8 @@ const post = await db.post.create({ data: { title } })
 It only sees `create`, `createMany` and `upsert` on registered models. It never sees raw SQL, nested writes through a relation, `createMany` rows without an `id` in the data, or a `create` with a custom `select` that omits `id`. Deletes leave ownership records behind. Cover those paths yourself:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'post', id: post.id })
-await rbac.ownership.remove({ type: 'post', id: post.id })
+await rbac.ownership.record(user.id, { type: 'sale', id: sale.id })
+await rbac.ownership.remove({ type: 'sale', id: sale.id })
 ```
 :::
 
@@ -110,7 +110,7 @@ await rbac.ownership.remove({ type: 'post', id: post.id })
 Query scoping is not available with Prisma, so `findMany` returns all rows. Scopes still work at guard time: an `owned` grant is checked before your handler runs. For list routes, add the filter to your own query:
 
 ```ts
-const posts = await db.post.findMany({ where: { authorId: user.id } })
+const sales = await db.sale.findMany({ where: { cashierId: user.id } })
 ```
 
 ## Next steps

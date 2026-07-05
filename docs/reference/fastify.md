@@ -25,14 +25,14 @@ import { rbac } from './rbac.js'
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-const admin = app.rbac.portal('admin', {
+const staff = app.rbac.domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
-    return user ? { id: user.id, context_id: user.branchId } : null
+    return user ? { id: user.id, tenant_id: user.branchId } : null
   },
 })
 
-app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => {
+app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => {
   return { ok: true }
 })
 ```
@@ -41,25 +41,29 @@ app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () =>
 
 | Member | Description |
 | --- | --- |
-| `portal(name, options)` | Create a [portal instance](#portal-instance). `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per portal. |
-| `setSubject(subject)` | Set the active user directly (custom auth outside a portal). |
+| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `branch`. |
+| `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
+| `setSubject(subject)` | Set the active user directly (custom auth outside a domain). |
 | `addExtra(extra)` | Override the next tracked insert's ownership row. Applies once. See [ownership](/reference/core-api#rbac). |
 | `cache` | Cache control: `invalidateSubject(subjectId)`, `clear()`. |
 
-## Portal instance
+## Domain instance
 
 ```ts
-const admin = app.rbac.portal('admin', { getSubject })
+const staff = app.rbac.domain({ getSubject })          // single-area app
+const admin = app.rbac.domain('admin', { getSubject }) // multi-area app
 ```
+
+`options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
 | Method | Description |
 | --- | --- |
-| `name` | The portal name. |
-| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`posts.read`, not `admin.posts.read`). `options.resource(req)` resolves the target row; required for scoped grants. |
-| `contextHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Register per scope, never app-wide. |
-| `assignGroup(subjectId, group, options?)` | Assign a group in this portal. `options.contextId` targets a tenant. |
+| `name` | The domain name. `''` for the domain-less overload. |
+| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. |
+| `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Register per scope, never app-wide. |
+| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one store, like `branch-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
-| `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `contextId`, `scope`. |
+| `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |
 
 **Throws** `MisconfiguredError` (500) from any guard when `rbacFastify()` was not registered.

@@ -8,8 +8,8 @@ import type { Subject } from './types.js'
 export interface RequestStore {
   /** The active subject (set by a guard after resolution, or by setSubject). */
   subject: Subject | null
-  /** Per-portal memoized resolutions — two portals on one app never collide. */
-  portalSubjects: Map<string, Subject | null>
+  /** Per-domain memoized resolutions — two domains on one app never collide. */
+  domainSubjects: Map<string, Subject | null>
   /** One-shot extra columns for the next tracked insert (addExtra). */
   extraOnce: Record<string, unknown> | null
 }
@@ -64,5 +64,5 @@ export class SubjectStore {
 }
 
 function createStore(): RequestStore {
-  return { subject: null, portalSubjects: new Map(), extraOnce: null }
+  return { subject: null, domainSubjects: new Map(), extraOnce: null }
 }

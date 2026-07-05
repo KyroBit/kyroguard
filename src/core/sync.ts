@@ -3,16 +3,16 @@ import type { Policy } from './policy.js'
 import type { StorageAdapter } from '../storage/contract.js'
 
 /**
- * Sync policies-as-code into storage for one portal ('' sentinel = portal-less):
- * upsert, delete orphans (filtered on the stored portal column, S19), then
+ * Sync policies-as-code into storage for one domain ('' sentinel = no domain):
+ * upsert, delete orphans (filtered on the stored domain column, S19), then
  * back-fill missing transitive dependencies into every group.
  *
- * An empty policy list returns early on purpose — it never wipes a portal.
+ * An empty policy list returns early on purpose — it never wipes a domain.
  */
 export async function syncPolicies(
   adapter: StorageAdapter,
   resources: { policies: Policy[] }[],
-  portal?: string,
+  domain?: string,
   options?: { logger?: (msg: string) => void },
 ): Promise<void> {
   const all = resources.flatMap(resource => resource.policies)
@@ -29,13 +29,13 @@ export async function syncPolicies(
     }
   }
 
-  const portalSentinel = portal ?? ''
-  const qualify = (name: string) => qualifyPolicyName(portalSentinel, name)
+  const domainSentinel = domain ?? ''
+  const qualify = (name: string) => qualifyPolicyName(domainSentinel, name)
 
   await adapter.upsertPolicies(
     all.map(policy => ({
       name: qualify(policy.name),
-      portal: portalSentinel,
+      domain: domainSentinel,
       label: policy.label,
       scopeOptions: policy.scopeOptions.map(scope => scope.name),
       dependsOn: policy.dependsOn.map(qualify),
@@ -46,7 +46,7 @@ export async function syncPolicies(
   const qualifiedNames = new Set(all.map(policy => qualify(policy.name)))
 
   const orphans = records.filter(
-    record => record.portal === portalSentinel && !qualifiedNames.has(record.name),
+    record => record.domain === domainSentinel && !qualifiedNames.has(record.name),
   )
   if (orphans.length > 0) {
     await adapter.deletePolicies(orphans.map(record => record.id))
@@ -57,7 +57,7 @@ export async function syncPolicies(
     )
   }
 
-  await backfillGroupDependencies(adapter, resources, portal, options)
+  await backfillGroupDependencies(adapter, resources, domain, options)
 
   log(`[rbac] Synced ${all.length} policies.`)
 }
@@ -72,53 +72,88 @@ export async function syncPolicies(
 export async function backfillGroupDependencies(
   adapter: StorageAdapter,
   resources: { policies: Policy[] }[],
-  portal?: string,
+  domain?: string,
   options?: { logger?: (msg: string) => void },
 ): Promise<void> {
   const all = resources.flatMap(resource => resource.policies)
   if (all.length === 0) return
 
   const log = options?.logger ?? (() => {})
-  const portalSentinel = portal ?? ''
-  const qualify = (name: string) => qualifyPolicyName(portalSentinel, name)
+  const domainSentinel = domain ?? ''
+  const qualify = (name: string) => qualifyPolicyName(domainSentinel, name)
   const qualifiedNames = new Set(all.map(policy => qualify(policy.name)))
 
   const records = await adapter.listPolicies()
   const depsByName = new Map(
     records
-      .filter(record => record.portal === portalSentinel && qualifiedNames.has(record.name))
+      .filter(record => record.domain === domainSentinel && qualifiedNames.has(record.name))
       .map(record => [record.name, record.dependsOn]),
   )
 
   const groups = await adapter.listGroups()
   for (const group of groups) {
     const assigned = await adapter.getGroupPolicies(group.name)
-    const assignedNames = new Set(assigned.map(entry => entry.policyName))
-    const roots = [...assignedNames].filter(name => depsByName.has(name))
+    const explicitScopes = new Map(assigned.map(entry => [entry.policyName, entry.scope]))
 
-    const required = resolveWithDeps(roots, depsByName)
-    const missing = [...required].filter(
-      name => depsByName.has(name) && !assignedNames.has(name),
-    )
+    // Least privilege: a filled-in dependency inherits the scope of the grant
+    // that pulled it in, propagated down chains. When several grants pull the
+    // same dependency, unrestricted (null) wins — a scoped dependency would
+    // break the unrestricted root. Two DIFFERENT named scopes cannot be
+    // expressed in one entry, so that falls back to unrestricted with a loud
+    // warning telling the user to define the entry explicitly. Explicit
+    // entries are never overwritten and govern their own dependencies.
+    const effective = new Map<string, string | null>()
+    const conflicts = new Set<string>()
+    for (const [name, scope] of explicitScopes) {
+      if (depsByName.has(name)) effective.set(name, scope)
+    }
+
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const [name, scope] of effective) {
+        for (const dep of depsByName.get(name) ?? []) {
+          const next = explicitScopes.has(dep)
+            ? explicitScopes.get(dep)!
+            : mergeDependencyScope(effective.get(dep), scope, effective.has(dep), dep, conflicts)
+          if (!effective.has(dep) || effective.get(dep) !== next) {
+            effective.set(dep, next)
+            changed = true
+          }
+        }
+      }
+    }
+
+    const missing = [...effective.keys()].filter(name => !explicitScopes.has(name))
     if (missing.length > 0) {
       await adapter.addGroupPolicies(
         group.name,
-        missing.map(name => ({ policyName: name, scope: null })),
+        missing.map(name => ({ policyName: name, scope: effective.get(name) ?? null })),
       )
       log(
-        `[rbac] Filled ${missing.length} missing deps for group ${group.name}: ${missing.join(', ')}`,
+        `[rbac] Filled ${missing.length} missing deps for group ${group.name}: ${missing
+          .map(name => `${name}${effective.get(name) ? ` (scope: ${effective.get(name)})` : ''}`)
+          .join(', ')}`,
       )
+      for (const name of conflicts) {
+        log(
+          `[rbac] WARNING: "${name}" is required by grants with different scopes in group ${group.name} — filled unrestricted. Define it explicitly in the group to control its scope.`,
+        )
+      }
     }
   }
 }
 
-function resolveWithDeps(names: string[], depsByName: Map<string, string[]>): Set<string> {
-  const visited = new Set<string>()
-  const walk = (name: string): void => {
-    if (visited.has(name)) return
-    visited.add(name)
-    for (const dep of depsByName.get(name) ?? []) walk(dep)
-  }
-  for (const name of names) walk(name)
-  return visited
+function mergeDependencyScope(
+  current: string | null | undefined,
+  incoming: string | null,
+  hasCurrent: boolean,
+  dep: string,
+  conflicts: Set<string>,
+): string | null {
+  if (!hasCurrent) return incoming
+  if (current === null || incoming === null) return null
+  if (current === incoming) return current
+  conflicts.add(dep)
+  return null
 }

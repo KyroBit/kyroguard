@@ -16,7 +16,7 @@ export const dialect = 'pg' as const
 export const rbacPolicies = pgTable('rbac_policies', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   name: text('name').notNull().unique(),
-  portal: text('portal').notNull().default(''),
+  domain: text('domain').notNull().default(''),
   label: text('label').notNull(),
   scopeOptions: jsonb('scope_options').$type<string[]>().notNull().default([]),
   dependsOn: jsonb('depends_on').$type<string[]>().notNull().default([]),
@@ -59,12 +59,12 @@ export const rbacUserPolicyGroups = pgTable(
     policyGroupId: text('policy_group_id')
       .notNull()
       .references(() => rbacPolicyGroups.id),
-    portal: text('portal').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [
-    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.portal, table.contextId),
+    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.domain, table.tenantId),
     index('rbac_upg_subject_idx').on(table.subjectId),
   ],
 )
@@ -77,13 +77,13 @@ export const rbacUserPolicies = pgTable(
     policyId: text('policy_id')
       .notNull()
       .references(() => rbacPolicies.id),
-    portal: text('portal').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     scope: text('scope'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [
-    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.portal, table.contextId),
+    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.domain, table.tenantId),
     index('rbac_up_subject_idx').on(table.subjectId),
   ],
 )
@@ -95,8 +95,8 @@ export const rbacResourceOwners = pgTable(
     resourceType: text('resource_type').notNull(),
     resourceId: text('resource_id').notNull(),
     ownerId: text('owner_id').notNull(),
-    contextType: text('context_type').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [

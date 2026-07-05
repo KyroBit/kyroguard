@@ -3,7 +3,7 @@
  * trackedDb (Drizzle) behavior against real PostgreSQL semantics (pglite):
  * ownership auto-tracking on insert (values-ids and .returning() paths),
  * transactional atomicity, the v0 "ownership failure hangs the caller"
- * regression, strictTracking modes, db.untracked bypass, and portal-keyed
+ * regression, strictTracking modes, db.untracked bypass, and domain-keyed
  * query scoping with OR-combined scope conditions (the v0 conditions[0]
  * regression).
  */
@@ -72,9 +72,9 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
       type: 'doc',
       policies: [],
       table: docs,
-      // Keyed by the SUBJECT'S PORTAL; both policies' scope name lists are
+      // Keyed by the SUBJECT'S DOMAIN; both policies' scope name lists are
       // flattened, deduped, and OR-combined.
-      context: { admin: { 'docs.read': ['own', 'branch'] } },
+      domains: { admin: { 'docs.read': ['own', 'branch'] } },
     },
   ]
   const rbac = createRbac({ adapter, resources, cache: false })
@@ -85,7 +85,7 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
     resources,
     queryScopes: {
       own: subject => eq(docs.ownerId, subject.id),
-      branch: subject => eq(docs.branch, (subject['context_id'] as string | undefined) ?? ''),
+      branch: subject => eq(docs.branch, (subject['tenant_id'] as string | undefined) ?? ''),
     },
     ...(options?.strictTracking ? { strictTracking: options.strictTracking } : {}),
   })
@@ -99,7 +99,7 @@ const runAs = <T>(engine: RbacEngine, subject: Subject, fn: () => Promise<T>): P
     return fn()
   })
 
-const u1: Subject = { id: 'u1', portal: 'admin', context_id: 'c1' }
+const u1: Subject = { id: 'u1', domain: 'admin', tenant_id: 'c1' }
 
 const ownershipRows = (pg: Awaited<ReturnType<typeof makePgDb>>) =>
   pg.db.select().from(pgSchema.rbacResourceOwners)
@@ -122,8 +122,8 @@ describe('trackedDb — ownership tracking on insert', () => {
       resourceType: 'post',
       resourceId: id,
       ownerId: 'u1',
-      contextType: 'admin',
-      contextId: 'c1',
+      domain: 'admin',
+      tenantId: 'c1',
     })
   })
 
@@ -340,7 +340,7 @@ describe('trackedDb — ownership tracking on insert', () => {
 
 // ── (h) select scoping ────────────────────────────────────────────────────────
 
-describe('trackedDb — portal-keyed query scoping on select', () => {
+describe('trackedDb — domain-keyed query scoping on select', () => {
   /** d1 matches only the 'own' scope, d2 only 'branch', d3 neither. */
   const seedDocs = (pg: Awaited<ReturnType<typeof makePgDb>>) =>
     pg.db.insert(docs).values([
@@ -349,7 +349,7 @@ describe('trackedDb — portal-keyed query scoping on select', () => {
       { id: 'd3', title: 'D3', ownerId: 'u2', branch: 'b2' },
     ])
 
-  const scopedSubject: Subject = { id: 'u1', portal: 'admin', context_id: 'b1' }
+  const scopedSubject: Subject = { id: 'u1', domain: 'admin', tenant_id: 'b1' }
 
   test('h: TWO scope names are OR-combined — rows matching EITHER condition return, others are excluded (v0 conditions[0] regression)', async () => {
     const { pg, engine, db } = await makeSetup()
@@ -387,11 +387,11 @@ describe('trackedDb — portal-keyed query scoping on select', () => {
     expect(rows.map(row => row.id)).toEqual(['d1', 'd2'])
   })
 
-  test("h: a subject on a portal WITHOUT context config for the resource is not scoped", async () => {
+  test("h: a subject on a domain WITHOUT domains config for the resource is not scoped", async () => {
     const { pg, engine, db } = await makeSetup()
     await seedDocs(pg)
 
-    const rows = await runAs(engine, { id: 'u1', portal: 'branch', context_id: 'b1' }, () =>
+    const rows = await runAs(engine, { id: 'u1', domain: 'branch', tenant_id: 'b1' }, () =>
       db.select().from(docs),
     )
     expect(rows).toHaveLength(3)

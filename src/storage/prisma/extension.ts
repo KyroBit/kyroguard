@@ -80,12 +80,12 @@ export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPr
   const recordOwnershipFor = async (type: string, ids: Array<string | null>): Promise<void> => {
     const subject = engine.store.getSubject()
     if (!subject) return
-    const contextType = normalizeSentinel(subject.portal)
-    const contextId = normalizeSentinel(subject.context_id)
+    const domain = normalizeSentinel(subject.domain)
+    const tenantId = normalizeSentinel(subject.tenant_id)
     const entries: OwnershipEntry[] = []
     for (const resourceId of ids) {
       if (resourceId === null) continue
-      entries.push({ resourceType: type, resourceId, ownerId: subject.id, contextType, contextId })
+      entries.push({ resourceType: type, resourceId, ownerId: subject.id, domain, tenantId })
     }
     if (entries.length > 0) await adapter.recordOwnership(entries)
   }

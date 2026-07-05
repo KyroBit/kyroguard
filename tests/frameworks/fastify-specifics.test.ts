@@ -1,7 +1,7 @@
 /**
  * Fastify-specific behavior beyond the shared framework contract:
  * error-body shape, user error handlers, formatError, encapsulated
- * contextHook scopes, per-portal subject memoization and ALS propagation
+ * subjectHook scopes, per-domain subject memoization and ALS propagation
  * under Bun.
  */
 
@@ -30,7 +30,7 @@ interface Harness {
 
 async function withHarness(
   config: {
-    portals?: string[]
+    domains?: string[]
     onDecision?: (event: DecisionEvent) => void
     pluginOptions?: RbacFastifyOptions
     setup: (app: FastifyInstance, rbac: Rbac) => Promise<void> | void
@@ -43,8 +43,8 @@ async function withHarness(
     onDecision: config.onDecision,
   })
   try {
-    for (const portal of config.portals ?? ['admin']) {
-      await rbac.sync(makeResources(), portal)
+    for (const domain of config.domains ?? ['admin']) {
+      await rbac.sync(makeResources(), domain)
     }
     const app = Fastify()
     await app.register(rbacFastify(rbac, config.pluginOptions))
@@ -74,8 +74,8 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: app => {
-          const portal = app.rbac.portal('admin', { getSubject: headerSubject })
-          app.get('/thing', { preHandler: portal.requirePolicy('thing.read') }, async () => ({
+          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
         },
@@ -98,7 +98,7 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: app => {
-          const portal = app.rbac.portal('admin', { getSubject: headerSubject })
+          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
           let seen: unknown = null
           app.setErrorHandler((error, _req, reply) => {
             seen = error
@@ -108,7 +108,7 @@ describe('fastify integration specifics', () => {
               policy: error instanceof PolicyDeniedError ? error.policy : null,
             })
           })
-          app.get('/thing', { preHandler: portal.requirePolicy('thing.read') }, async () => ({
+          app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
           app.get('/seen', async () => ({ seenIsError: seen instanceof PolicyDeniedError }))
@@ -144,8 +144,8 @@ describe('fastify integration specifics', () => {
           app.addHook('onSend', async (_req, reply) => {
             reply.header('x-app-hook', 'ran')
           })
-          const portal = app.rbac.portal('admin', { getSubject: headerSubject })
-          app.get('/thing', { preHandler: portal.requirePolicy('thing.read') }, async () => ({
+          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
         },
@@ -166,15 +166,15 @@ describe('fastify integration specifics', () => {
       },
     ))
 
-  test('(d) contextHook in an encapsulated scope sets the subject for that scope only', () =>
+  test('(d) subjectHook in an encapsulated scope sets the subject for that scope only', () =>
     withHarness(
       {
         setup: async (app, rbac) => {
-          const portal = app.rbac.portal('admin', { getSubject: headerSubject })
+          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
           const subjectIdInStore = () => rbac.engine.store.getSubject()?.id ?? null
 
           await app.register(async scope => {
-            scope.addHook('preHandler', portal.contextHook())
+            scope.addHook('preHandler', domain.subjectHook())
             scope.get('/scoped', async () => ({ subjectId: subjectIdInStore() }))
           })
           await app.register(async scope => {
@@ -202,21 +202,21 @@ describe('fastify integration specifics', () => {
       },
     ))
 
-  test('(e) two portals registered, two stacked guards from ONE portal → its getSubject runs exactly once', async () => {
+  test('(e) two domains registered, two stacked guards from ONE domain → its getSubject runs exactly once', async () => {
     let callsA = 0
     let callsB = 0
     await withHarness(
       {
-        portals: ['a', 'b'],
+        domains: ['a', 'b'],
         setup: async (app, rbac) => {
-          const portalA = app.rbac.portal('a', {
+          const domainA = app.rbac.domain('a', {
             getSubject: req => {
               callsA += 1
               return headerSubject(req)
             },
           })
-          // Portal B exists on the same app but guards nothing on this route.
-          app.rbac.portal('b', {
+          // Domain B exists on the same app but guards nothing on this route.
+          app.rbac.domain('b', {
             getSubject: req => {
               callsB += 1
               return headerSubject(req)
@@ -225,16 +225,16 @@ describe('fastify integration specifics', () => {
           app.get(
             '/multi',
             {
-              preHandler: [portalA.requirePolicy('thing.read'), portalA.requirePolicy('other.read')],
+              preHandler: [domainA.requirePolicy('thing.read'), domainA.requirePolicy('other.read')],
             },
             async () => ({ ok: true }),
           )
           await rbac.admin.assignPolicy(
-            { subjectId: 'u1', portal: 'a' },
+            { subjectId: 'u1', domain: 'a' },
             qualifyPolicyName('a', 'thing.read'),
           )
           await rbac.admin.assignPolicy(
-            { subjectId: 'u1', portal: 'a' },
+            { subjectId: 'u1', domain: 'a' },
             qualifyPolicyName('a', 'other.read'),
           )
         },
@@ -252,28 +252,28 @@ describe('fastify integration specifics', () => {
     )
   })
 
-  test('(f) per-portal memoization is independent: guards from two portals on one route each authorize their own subject', async () => {
+  test('(f) per-domain memoization is independent: guards from two domains on one route each authorize their own subject', async () => {
     const events: DecisionEvent[] = []
     await withHarness(
       {
-        portals: ['a', 'b'],
+        domains: ['a', 'b'],
         onDecision: event => events.push(event),
         setup: async (app, rbac) => {
-          // Distinct subjects per portal — if portal B's guard ever read portal
+          // Distinct subjects per domain — if domain B's guard ever read domain
           // A's memoized subject, its decision would carry subjectId 'ua'.
-          const portalA = app.rbac.portal('a', { getSubject: () => ({ id: 'ua' }) })
-          const portalB = app.rbac.portal('b', { getSubject: () => ({ id: 'ub' }) })
+          const domainA = app.rbac.domain('a', { getSubject: () => ({ id: 'ua' }) })
+          const domainB = app.rbac.domain('b', { getSubject: () => ({ id: 'ub' }) })
           app.get(
             '/both',
-            { preHandler: [portalA.requirePolicy('thing.read'), portalB.requirePolicy('thing.read')] },
+            { preHandler: [domainA.requirePolicy('thing.read'), domainB.requirePolicy('thing.read')] },
             async () => ({ ok: true }),
           )
           await rbac.admin.assignPolicy(
-            { subjectId: 'ua', portal: 'a' },
+            { subjectId: 'ua', domain: 'a' },
             qualifyPolicyName('a', 'thing.read'),
           )
           await rbac.admin.assignPolicy(
-            { subjectId: 'ub', portal: 'b' },
+            { subjectId: 'ub', domain: 'b' },
             qualifyPolicyName('b', 'thing.read'),
           )
         },
@@ -286,12 +286,12 @@ describe('fastify integration specifics', () => {
         const [first, second] = events
         expect(first!.decision).toBe('allow')
         expect(first!.subjectId).toBe('ua')
-        expect(first!.portal).toBe('a')
+        expect(first!.domain).toBe('a')
         expect(first!.policy).toBe(qualifyPolicyName('a', 'thing.read'))
 
         expect(second!.decision).toBe('allow')
         expect(second!.subjectId).toBe('ub')
-        expect(second!.portal).toBe('b')
+        expect(second!.domain).toBe('b')
         expect(second!.policy).toBe(qualifyPolicyName('b', 'thing.read'))
       },
     )
@@ -305,7 +305,7 @@ describe('fastify integration specifics', () => {
             const store = rbac.engine.store.get()
             return {
               hasStore: store !== undefined,
-              portalSubjectsIsMap: store?.portalSubjects instanceof Map,
+              domainSubjectsIsMap: store?.domainSubjects instanceof Map,
               subject: store?.subject ?? null,
             }
           })
@@ -316,7 +316,7 @@ describe('fastify integration specifics', () => {
         expect(res.statusCode).toBe(200)
         const body = parse(res.body)
         expect(body.hasStore).toBe(true)
-        expect(body.portalSubjectsIsMap).toBe(true)
+        expect(body.domainSubjectsIsMap).toBe(true)
         expect(body.subject).toBe(null)
 
         // Fresh store per request — nothing carried over from the first one.

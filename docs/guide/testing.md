@@ -5,42 +5,45 @@
 A full test file for a guarded route:
 
 ```ts
-// posts.test.ts
+// sales.test.ts
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
 import { createRbac, Policy } from '@kyrobit/rbac'
 import { rbacFastify } from '@kyrobit/rbac/fastify'
 import { memoryAdapter } from '@kyrobit/rbac/testing'
 
-const resources = [{ type: 'post', policies: [new Policy('posts.read')] }]
+const policies = [new Policy('sales.view')]
+const groups = {
+  cashier: { label: 'Cashier', policies: ['sales.view'] },
+}
 
 async function buildApp() {
-  const rbac = createRbac({ adapter: memoryAdapter(), resources })
-  await rbac.sync(resources, 'admin') // 'admin' is the portal name
+  const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
+  await rbac.sync() // loads the policies, seeds the groups
 
   const app = Fastify()
   await app.register(rbacFastify(rbac))
 
-  const admin = app.rbac.portal('admin', {
+  const staff = app.rbac.domain({
     getSubject: req =>
       req.headers['x-user'] ? { id: String(req.headers['x-user']) } : null,
   })
 
-  app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => [])
-  return { app, admin }
+  app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => [])
+  return { app, staff }
 }
 
-describe('GET /posts', () => {
+describe('GET /sales', () => {
   it('denies a user without the policy', async () => {
     const { app } = await buildApp()
-    const res = await app.inject({ url: '/posts', headers: { 'x-user': 'u1' } })
+    const res = await app.inject({ url: '/sales', headers: { 'x-user': 'u1' } })
     expect(res.statusCode).toBe(403)
   })
 
-  it('allows a user with the policy', async () => {
-    const { app, admin } = await buildApp()
-    await admin.assignPolicy('u1', 'posts.read')
-    const res = await app.inject({ url: '/posts', headers: { 'x-user': 'u1' } })
+  it('allows a newly hired cashier', async () => {
+    const { app, staff } = await buildApp()
+    await staff.assignGroup('u1', 'cashier')
+    const res = await app.inject({ url: '/sales', headers: { 'x-user': 'u1' } })
     expect(res.statusCode).toBe(200)
   })
 })
@@ -52,14 +55,14 @@ In tests, `getSubject` reads the user from a header. Your real resolver stays in
 
 ## Seeding grants in tests
 
-Assign through the portal, exactly like production code:
+Assign through the domain, exactly like production code:
 
 ```ts
-await admin.assignGroup('u1', 'editor')
-await admin.assignPolicy('u1', 'posts.update', { scope: 'owned' })
+await staff.assignGroup('u1', 'cashier')
+await staff.assignPolicy('u1', 'sales.void', { scope: 'owned' })
 ```
 
-Groups must be seeded first with `rbac.seedGroups()`, and policies synced with `rbac.sync()`. See [Assigning access](/guide/assigning-access).
+`rbac.sync()` must run first. It loads the policies and seeds the groups you gave `createRbac`. See [Assigning access](/guide/assigning-access).
 
 ## Testing your own adapter
 

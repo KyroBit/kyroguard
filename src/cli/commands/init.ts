@@ -19,7 +19,7 @@ interface Answers {
   framework: 'fastify' | 'express'
   orm: 'drizzle' | 'prisma' | 'mongoose'
   dialect: 'pg' | 'mysql' | 'sqlite'
-  portal: string
+  domain: string
 }
 
 /** A planned file comes from a template on disk or from literal content. */
@@ -56,7 +56,7 @@ export async function run(options: InitOptions): Promise<void> {
   const answers = options.yes ? defaults(detected) : await prompt(detected)
 
   const substitutions: Record<string, string> = {
-    '{{PORTAL}}': answers.portal,
+    '{{DOMAIN}}': answers.domain,
     '{{DIALECT}}': answers.dialect,
   }
 
@@ -149,7 +149,7 @@ function defaults(detected: DetectedStack): Answers {
     framework: detected.framework ?? 'fastify',
     orm: detected.orm ?? 'drizzle',
     dialect: detected.dialect ?? 'pg',
-    portal: 'admin',
+    domain: 'admin',
   }
 }
 
@@ -164,8 +164,8 @@ async function prompt(detected: DetectedStack): Promise<Answers> {
       orm === 'drizzle'
         ? await choose(rl, 'Dialect', ['pg', 'mysql', 'sqlite'], detected.dialect ?? 'pg')
         : (detected.dialect ?? 'pg')
-    const portal = await ask(rl, 'Portal name', 'admin')
-    return { framework, orm, dialect, portal }
+    const domain = await ask(rl, 'Domain name', 'admin')
+    return { framework, orm, dialect, domain }
   } finally {
     rl.close()
   }

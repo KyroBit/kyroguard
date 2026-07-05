@@ -6,38 +6,45 @@
 
 ```ts [Fastify]
 app.get(
-  '/posts',
-  { preHandler: admin.requirePolicy('posts.read') },
-  listPosts,
+  '/sales',
+  { preHandler: staff.requirePolicy('sales.view') },
+  listSales,
+)
+
+app.post(
+  '/sales',
+  { preHandler: staff.requirePolicy('sales.create') },
+  createSale,
 )
 ```
 
 ```ts [Express]
-app.get('/posts', admin.requirePolicy('posts.read'), listPosts)
+app.get('/sales', staff.requirePolicy('sales.view'), listSales)
+app.post('/sales', staff.requirePolicy('sales.create'), createSale)
 ```
 
 :::
 
-The user must hold `posts.read` on the `admin` portal. Otherwise the request is denied.
+The user must hold the named policy. Otherwise the request is denied. Viewing sales and ringing them up are separate policies.
 
-Policy names stay short. The portal adds its own prefix, so `admin.requirePolicy('posts.read')` checks `admin.posts.read`.
+`staff` here is a domain with no name — the single-app form. Policies stay unprefixed. Named domains add their prefix. See [Multi-tenancy](/guide/multi-tenancy).
 
 ## getSubject
 
-Return the logged-in user, or `null`:
+Return the logged-in staff member, or `null`:
 
 ```ts
-const admin = app.rbac.portal('admin', {
+const staff = app.rbac.domain({
   getSubject: async req => {
     const token = req.headers.authorization?.slice('Bearer '.length)
     if (!token) return null
     const payload = await verifyJwt(token)
-    return payload ? { id: payload.sub, context_id: payload.orgId } : null
+    return payload ? { id: payload.sub, tenant_id: payload.storeId } : null
   },
 })
 ```
 
-`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `context_id` is optional and marks the tenant. See [Portals and tenants](/guide/portals).
+`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the store. See [Multi-tenancy](/guide/multi-tenancy).
 
 ## The four outcomes
 
@@ -54,30 +61,30 @@ The exact response bodies are shown in [Fastify](/guide/fastify) and [Express](/
 
 ## Scoped grants need a resource resolver
 
-A grant is one policy given to one user. A grant can carry a scope. Example: `posts.edit` scoped to `owned` lets a user edit only their own posts. The guard then needs to know which post the request targets:
+A grant is one policy given to one user. A grant can carry a scope. A cashier holds `sales.void` scoped to `owned`. A manager holds it unscoped. A cashier can void their own sale. A manager can void any sale. The guard then needs to know which sale the request targets:
 
 ::: code-group
 
 ```ts [Fastify]
-app.patch('/posts/:id', {
-  preHandler: admin.requirePolicy('posts.edit', {
-    resource: req => ({ type: 'post', id: (req.params as { id: string }).id }),
+app.post('/sales/:id/void', {
+  preHandler: staff.requirePolicy('sales.void', {
+    resource: req => ({ type: 'sale', id: (req.params as { id: string }).id }),
   }),
-}, updatePost)
+}, voidSale)
 ```
 
 ```ts [Express]
-app.patch(
-  '/posts/:id',
-  admin.requirePolicy('posts.edit', {
-    resource: req => ({ type: 'post', id: req.params.id }),
+app.post(
+  '/sales/:id/void',
+  staff.requirePolicy('sales.void', {
+    resource: req => ({ type: 'sale', id: req.params.id }),
   }),
-  updatePost,
+  voidSale,
 )
 ```
 
 :::
 
-The resolver returns the target's `type` and `id`. Return `null` when the row does not exist. The guard then responds 404.
+The resolver returns the target's `type` and `id`. Return `null` when the sale does not exist. The guard then responds 404.
 
-Users with an unscoped grant skip the check. Users with a scoped grant are denied if the route has no resolver. So add a resolver to every route where a scoped grant can land. See [Scopes](/guide/scopes) and [Assigning access](/guide/assigning-access).
+The manager's unscoped grant skips the check. The cashier's scoped grant is denied if the route has no resolver. So add a resolver to every route where a scoped grant can land. See [Scopes](/guide/scopes) and [Assigning access](/guide/assigning-access).

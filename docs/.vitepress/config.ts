@@ -6,6 +6,8 @@ export default defineConfig({
     'Permissions for your Node app. Define them in code, assign them to users, enforce them on routes.',
 
   themeConfig: {
+    search: { provider: 'local' },
+
     nav: [
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Reference', link: '/reference/core-api' },
@@ -30,8 +32,9 @@ export default defineConfig({
           { text: 'Fastify', link: '/guide/fastify' },
           { text: 'Express', link: '/guide/express' },
           { text: 'Protecting routes', link: '/guide/protecting-routes' },
-          { text: 'Portals', link: '/guide/portals' },
+          { text: 'Multi-tenancy', link: '/guide/multi-tenancy' },
           { text: 'Assigning access', link: '/guide/assigning-access' },
+          { text: 'Owners and superusers', link: '/guide/owners' },
           { text: 'Scopes', link: '/guide/scopes' },
           { text: 'Ownership', link: '/guide/ownership' },
           { text: 'Production', link: '/guide/production' },

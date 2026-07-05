@@ -94,7 +94,7 @@ export const adapter = {
   await writeFile(
     join(dir, 'groups.ts'),
     `export const groups = {
-  admin: { label: 'Administrator', isSystem: true, policies: 'all' },
+  admin: { label: 'Administrator', policies: 'all' },
   editor: { label: 'Editor', policies: { 'docs.write': null } },
 }
 `,
@@ -108,7 +108,7 @@ export const adapter = {
 export default {
   // Lazy factory, as the real config template ships it.
   adapter: async () => adapter,
-  portals: [{ name: 'admin', policies: './policies.ts', groups: './groups.ts' }],
+  domains: [{ name: 'admin', policies: './policies.ts', groups: './groups.ts' }],
   typegen: { output: './rbac.d.ts' },
 }
 `,
@@ -159,14 +159,14 @@ describe('rbac sync (full fixture project)', () => {
     expect(firstWrite).toBeGreaterThan(0)
   })
 
-  test('policies were upserted portal-qualified with qualified dependencies', async () => {
+  test('policies were upserted domain-qualified with qualified dependencies', async () => {
     const records = await rig.adapter.listPolicies()
     const byName = new Map(records.map(record => [record.name, record]))
 
     expect([...byName.keys()].toSorted()).toEqual(['admin.docs.read', 'admin.docs.write'])
-    // PolicyRecord exposes id/name/portal/dependsOn — label is write-only here.
-    expect(byName.get('admin.docs.read')?.portal).toBe('admin')
-    expect(byName.get('admin.docs.write')?.portal).toBe('admin')
+    // PolicyRecord exposes id/name/domain/dependsOn — label is write-only here.
+    expect(byName.get('admin.docs.read')?.domain).toBe('admin')
+    expect(byName.get('admin.docs.write')?.domain).toBe('admin')
     // dependsOn is qualified alongside the names themselves.
     expect(byName.get('admin.docs.write')?.dependsOn).toEqual(['admin.docs.read'])
     expect(byName.get('admin.docs.read')?.dependsOn).toEqual([])
@@ -179,7 +179,7 @@ describe('rbac sync (full fixture project)', () => {
 
     const admin = groups.find(group => group.name === 'admin')
     expect(admin?.label).toBe('Administrator')
-    expect(admin?.isSystem).toBe(true)
+    expect(admin?.isSystem).toBe(false)
 
     const adminPolicies = await rig.adapter.getGroupPolicies('admin')
     expect(adminPolicies.map(entry => entry.policyName).toSorted()).toEqual([
@@ -211,10 +211,10 @@ describe('rbac sync (full fixture project)', () => {
     expect(rig.calls.indexOf('upsertPolicies')).toBeGreaterThan(rig.calls.indexOf('ensureSchema'))
   })
 
-  test('rbac.d.ts was written with the portal union and unqualified policy names', async () => {
+  test('rbac.d.ts was written with the domain union and unqualified policy names', async () => {
     const declaration = await readFile(join(fixture, 'rbac.d.ts'), 'utf8')
     expect(declaration).toContain("declare module '@kyrobit/rbac'")
-    expect(declaration).toContain('Portal: "admin"')
+    expect(declaration).toContain('Domain: "admin"')
     expect(declaration).toContain('PolicyName: "docs.read" | "docs.write"')
     expect(declaration).toContain('"admin": "docs.read" | "docs.write"')
     expect(syncLogs.some(line => line.includes('Wrote') && line.includes('rbac.d.ts'))).toBe(true)

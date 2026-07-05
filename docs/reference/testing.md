@@ -18,9 +18,9 @@ import { memoryAdapter } from '@kyrobit/rbac/testing'
 
 const rbac = createRbac({
   adapter: memoryAdapter(),
-  resources: [{ type: 'post', policies: [new Policy('posts.read')] }],
+  policies: [new Policy('sales.view')],
 })
-await rbac.sync(rbac.resources, 'admin')
+await rbac.sync()
 ```
 
 - `id` is `'memory'`.
@@ -93,7 +93,7 @@ function runFrameworkContractSuite(options: FrameworkSuiteOptions): void
 | `makeApp` | `(rbac: Rbac, routes: RouteSpec[]) => Promise<TestApp>`. Builds a running app from route specs. |
 | `test` | Your test runner's functions. See [SuiteTestApi](#suitetestapi). |
 
-Black-box HTTP contract for framework integrations. The suite builds its own `Rbac` on `memoryAdapter()` and seeds grants per case. Your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases cover 401/403/404 responses, portal and tenant isolation, `is_super`, scoped grants, per-request memoization and cache invalidation.
+Black-box HTTP contract for framework integrations. The suite builds its own `Rbac` on `memoryAdapter()` and seeds grants per case. Your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases cover 401/403/404 responses, domain and tenant isolation, `is_super`, scoped grants, per-request memoization and cache invalidation.
 
 ```ts
 // my-framework.contract.test.ts
@@ -114,7 +114,7 @@ runFrameworkContractSuite({
 interface RouteSpec {
   method: 'GET' | 'POST'
   path: string
-  portal: string
+  domain: string
   policy?: string        // '+'-separated unqualified policy names
   resource?: (req: any) => { type: string; id: string } | null
   getSubjectFrom?: 'header'
@@ -134,8 +134,8 @@ interface TestApp {
 
 The suite asserts each of these. Your `makeApp` must:
 
-- Create one portal per distinct `route.portal` via your integration's portal factory.
-- When `getSubjectFrom` is `'header'`, read the user from request headers: `x-subject-id` is the user id (absent or empty means `null`, so 401), `x-context-id` sets `context_id`, and `x-super: '1'` sets `is_super: true`.
+- Create one domain per distinct `route.domain` via your integration's domain factory.
+- When `getSubjectFrom` is `'header'`, read the user from request headers: `x-subject-id` is the user id (absent or empty means `null`, so 401), `x-tenant-id` sets `tenant_id`, and `x-super: '1'` sets `is_super: true`.
 - Count `getSubject` calls per request. Send the total on every response as the `x-getsubject-calls` header. This proves `getSubject` runs once even with stacked guards.
 - Mount each route at `(method, path)`. When `policy` is set, attach one `requirePolicy` guard per `'+'`-separated name, forwarding `resource` when given. On success respond 200 with `{ ok: true }`.
 - Add the header `x-app-hook: ran` to every response via a framework-level hook — including error responses. This proves denials travel the framework's own error pipeline.

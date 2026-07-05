@@ -45,7 +45,7 @@ function makeEngine(overrides?: Partial<EngineOptions>): Harness {
 
 async function grant(adapter: StorageAdapter, ref: SubjectRef, policy: string): Promise<void> {
   await adapter.upsertPolicies([
-    { name: policy, portal: ref.portal, label: policy, scopeOptions: [], dependsOn: [] },
+    { name: policy, domain: ref.domain, label: policy, scopeOptions: [], dependsOn: [] },
   ])
   await adapter.assignPolicy(ref, policy, null)
 }
@@ -53,35 +53,35 @@ async function grant(adapter: StorageAdapter, ref: SubjectRef, policy: string): 
 describe('policy cache behavior', () => {
   test('second authorize is served from cache — adapter hit exactly once', async () => {
     const { adapter, calls, engine } = makeEngine()
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
 
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     expect(calls()).toBe(1)
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     expect(calls()).toBe(1)
   })
 
-  test("cache keys isolate portal/context: ('u1','', 'admin') never shares an entry with ('u1','admin','') — v0 collision regression", async () => {
+  test("cache keys isolate domain/tenant: ('u1','', 'admin') never shares an entry with ('u1','admin','') — v0 collision regression", async () => {
     const { adapter, engine } = makeEngine()
-    // Grant only to the (portal '', context 'admin') tuple.
-    await grant(adapter, { subjectId: 'u1', portal: '', contextId: 'admin' }, 'posts.read')
+    // Grant only to the (domain '', tenant 'admin') tuple.
+    await grant(adapter, { subjectId: 'u1', domain: '', tenantId: 'admin' }, 'posts.read')
 
     // Populate the cache for the granted tuple.
-    await engine.authorize({ id: 'u1', context_id: 'admin' }, 'posts.read')
+    await engine.authorize({ id: 'u1', tenant_id: 'admin' }, 'posts.read')
 
     // The transposed tuple must NOT read that cached policy map.
-    expect(engine.authorize({ id: 'u1', portal: 'admin' }, 'posts.read')).rejects.toBeInstanceOf(
+    expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'posts.read')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
   })
 
   test("subject id containing ':' cannot collide with another tuple", async () => {
     const { adapter, engine } = makeEngine()
-    // Grant to subject 'u1' on portal 'admin'.
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    // Grant to subject 'u1' on domain 'admin'.
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
 
-    // Subject literally named 'u1:admin' with no portal must not hit that entry.
+    // Subject literally named 'u1:admin' with no domain must not hit that entry.
     expect(engine.authorize({ id: 'u1:admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
@@ -92,15 +92,15 @@ describe('policy cache behavior', () => {
     const published: InvalidationEvent[] = []
     bus.subscribe(event => published.push(event))
 
-    const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
+    const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
     await adapter.upsertPolicies([
-      { name: 'admin.posts.read', portal: 'admin', label: 'read', scopeOptions: [], dependsOn: [] },
+      { name: 'admin.posts.read', domain: 'admin', label: 'read', scopeOptions: [], dependsOn: [] },
     ])
     await adapter.upsertGroup({ name: 'editors', label: 'Editors' })
     await adapter.setGroupPolicies('editors', [{ policyName: 'admin.posts.read', scope: null }])
 
     // Cache a deny (empty map) for u1.
-    expect(engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
+    expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
 
@@ -108,7 +108,7 @@ describe('policy cache behavior', () => {
     expect(published).toContainEqual({ type: 'subject', subjectId: 'u1' })
 
     // Without invalidation this would still be the stale cached deny.
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
   })
 
   test('engine.removePolicy invalidates the cached allow AND publishes on the bus', async () => {
@@ -116,25 +116,25 @@ describe('policy cache behavior', () => {
     const published: InvalidationEvent[] = []
     bus.subscribe(event => published.push(event))
 
-    const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
+    const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
     await grant(adapter, ref, 'admin.posts.read')
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read') // cached allow
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read') // cached allow
 
     await engine.removePolicy(ref, 'admin.posts.read')
     expect(published).toContainEqual({ type: 'subject', subjectId: 'u1' })
 
     // A stale cache would still allow here.
-    expect(engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
+    expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
   })
 
   test("a bus event published by 'another instance' invalidates the local cache", async () => {
     const { adapter, calls, engine, bus } = makeEngine()
-    const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
+    const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
     await grant(adapter, ref, 'admin.posts.read')
 
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     expect(calls()).toBe(1)
 
     // Simulate a mutation done by another process: adapter-level change + bus event.
@@ -142,7 +142,7 @@ describe('policy cache behavior', () => {
     await bus.publish({ type: 'subject', subjectId: 'u1' })
 
     // The cached allow must be gone: the adapter is consulted again and denies.
-    expect(engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
+    expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
     expect(calls()).toBe(2)
@@ -150,11 +150,11 @@ describe('policy cache behavior', () => {
 
   test("a bus 'all' event clears the cache", async () => {
     const { adapter, calls, engine, bus } = makeEngine()
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
 
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     await bus.publish({ type: 'all' })
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     expect(calls()).toBe(2)
   })
 })
@@ -163,13 +163,13 @@ describe('onDecision hook', () => {
   test('fires with correct reason and cacheHit fields across the decision matrix', async () => {
     const events: Parameters<NonNullable<EngineOptions['onDecision']>>[0][] = []
     const { adapter, engine } = makeEngine({ onDecision: event => events.push(event) })
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
 
     await engine.authorize(null, 'admin.posts.read').catch(() => {})
     await engine.authorize({ id: 'root', is_super: true }, 'admin.posts.read')
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read') // miss → allow
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read') // hit → allow
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.other.policy').catch(() => {}) // hit → deny
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read') // miss → allow
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read') // hit → allow
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.other.policy').catch(() => {}) // hit → deny
 
     expect(events).toHaveLength(5)
 
@@ -184,7 +184,7 @@ describe('onDecision hook', () => {
       decision: 'allow',
       reason: 'granted',
       subjectId: 'u1',
-      portal: 'admin',
+      domain: 'admin',
       policy: 'admin.posts.read',
       scope: null,
       cacheHit: false,
@@ -205,12 +205,12 @@ describe('onDecision hook', () => {
         throw new Error('observability exploded')
       },
     })
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
 
     // Allow still resolves.
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     // Deny still throws the RBAC error, not the hook's error.
-    expect(engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.nope')).rejects.toBeInstanceOf(
+    expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.nope')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )
   })
@@ -220,11 +220,11 @@ describe('onCacheEvent hook', () => {
   test('miss → set → hit → invalidate-subject sequence', async () => {
     const events: { type: string; subjectId?: string }[] = []
     const { adapter, engine } = makeEngine({ onCacheEvent: event => events.push(event) })
-    const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
+    const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
     await grant(adapter, ref, 'admin.posts.read')
 
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
     await engine.invalidateSubject('u1')
 
     expect(events).toEqual([

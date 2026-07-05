@@ -3,8 +3,8 @@
  *
  * The TestApp here follows the harness protocol documented at the top of
  * src/testing/framework-suite.ts:
- *  - one portal per distinct route.portal, getSubject reads x-subject-id /
- *    x-context-id / x-super and counts its own invocations per request,
+ *  - one domain per distinct route.domain, getSubject reads x-subject-id /
+ *    x-tenant-id / x-super and counts its own invocations per request,
  *  - every response carries x-getsubject-calls with that request's total,
  *  - an app.use middleware registered BEFORE context() stamps
  *    `x-app-hook: ran` on EVERY response (including 401/403/404) — the
@@ -32,8 +32,8 @@ function subjectFromHeaders(req: Request): SubjectInput | null {
   const id = req.header('x-subject-id')
   if (!id) return null
   const subject: SubjectInput = { id }
-  const contextId = req.header('x-context-id')
-  if (contextId) subject.context_id = contextId
+  const tenantId = req.header('x-tenant-id')
+  if (tenantId) subject.tenant_id = tenantId
   if (req.header('x-super') === '1') subject.is_super = true
   return subject
 }
@@ -59,12 +59,13 @@ async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
   const integration = rbacExpress(rbac)
   app.use(integration.context())
 
-  const portals = new Map<string, ReturnType<typeof integration.portal>>()
+  // The named-domain overload's return type (ReturnType picks the last overload).
+  const domains = new Map<string, ReturnType<typeof integration.domain<string>>>()
   for (const route of routes) {
-    if (portals.has(route.portal)) continue
-    portals.set(
-      route.portal,
-      integration.portal(route.portal, {
+    if (domains.has(route.domain)) continue
+    domains.set(
+      route.domain,
+      integration.domain(route.domain, {
         getSubject: req => {
           const counter = (req as CountedRequest).__getSubjectCalls
           if (counter) counter.count += 1
@@ -75,10 +76,10 @@ async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
   }
 
   for (const route of routes) {
-    const portal = portals.get(route.portal)
-    if (!portal) throw new Error(`missing portal ${route.portal}`)
+    const domain = domains.get(route.domain)
+    if (!domain) throw new Error(`missing domain ${route.domain}`)
     const guards: RequestHandler[] = (route.policy ? route.policy.split('+') : []).map(policy =>
-      portal.requirePolicy(
+      domain.requirePolicy(
         policy,
         route.resource ? { resource: req => route.resource!(req) } : undefined,
       ),
@@ -140,7 +141,7 @@ describe('express contract harness extras', () => {
         {
           method: 'GET',
           path: '/thing',
-          portal: 'admin',
+          domain: 'admin',
           policy: 'thing.read',
           getSubjectFrom: 'header',
         },

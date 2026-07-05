@@ -15,11 +15,11 @@ import express from 'express'
 async function seededRbac() {
   const adapter = memoryAdapter()
   await adapter.upsertPolicies([
-    { name: 'admin.posts.read', portal: 'admin', label: 'Read posts', scopeOptions: [], dependsOn: [] },
+    { name: 'admin.posts.read', domain: 'admin', label: 'Read posts', scopeOptions: [], dependsOn: [] },
   ])
   await adapter.upsertGroup({ name: 'editors', label: 'Editors' })
   await adapter.setGroupPolicies('editors', [{ policyName: 'admin.posts.read', scope: null }])
-  await adapter.assignGroup({ subjectId: 'u1', portal: 'admin', contextId: '' }, 'editors')
+  await adapter.assignGroup({ subjectId: 'u1', domain: 'admin', tenantId: '' }, 'editors')
   return createRbac({ adapter })
 }
 
@@ -28,7 +28,7 @@ async function seededRbac() {
   const rbac = await seededRbac()
   const app = Fastify()
   await app.register(rbacFastify(rbac))
-  const admin = app.rbac.portal('admin', {
+  const admin = app.rbac.domain('admin', {
     getSubject: req => (req.headers['x-user-id'] ? { id: String(req.headers['x-user-id']) } : null),
   })
   app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => ({ ok: true }))
@@ -51,10 +51,10 @@ async function seededRbac() {
 // ── Express ───────────────────────────────────────────────────────────────────
 {
   const rbac = await seededRbac()
-  const { context, portal, errorHandler } = rbacExpress(rbac)
+  const { context, domain, errorHandler } = rbacExpress(rbac)
   const app = express()
   app.use(context())
-  const admin = portal('admin', {
+  const admin = domain('admin', {
     getSubject: req => (req.headers['x-user-id'] ? { id: String(req.headers['x-user-id']) } : null),
   })
   app.get('/posts', admin.requirePolicy('posts.read'), (_req, res) => res.json({ ok: true }))

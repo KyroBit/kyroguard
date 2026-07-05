@@ -15,10 +15,10 @@ export default defineConfig({
     const { db } = await import('./src/db/index.js')
     return drizzleAdapter(db, { schema })
   },
-  // One entry per portal. Single-app setups use one entry with no name.
-  portals: [
+  // One entry per domain. Single-app setups use one entry with no name.
+  domains: [
     {
-      name: 'admin',
+      name: 'branch', // the in-store staff app
       policies: './src/rbac/policies.ts',
       groups: './src/rbac/groups.ts',
     },
@@ -35,14 +35,14 @@ export default defineConfig({
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `adapter` | `() => Promise<StorageAdapter> \| StorageAdapter` | yes | Factory returning a connected adapter. Called only by `sync` and `status`. |
-| `portals` | `PortalConfig[]` | yes | One entry per portal. |
+| `domains` | `DomainConfig[]` | yes | One entry per domain. |
 | `typegen.output` | `string` | no | Output path for the generated types. Default `'./rbac.d.ts'`. |
 
-Each portal entry:
+Each domain entry:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | `string` | no | Portal name. Omit for a single-app setup. |
+| `name` | `string` | no | Domain name. Omit for a single-app setup. |
 | `policies` | `string` | yes | Path to the module exporting your `ResourceDefinition[]`. |
 | `groups` | `string` | no | Path to the module exporting your `GroupsDefinition`. Omit to skip group seeding. |
 
@@ -59,16 +59,30 @@ import type { ResourceDefinition } from '@kyrobit/rbac'
 
 export const resources: ResourceDefinition[] = [
   {
-    type: 'post',
+    type: 'sale',
     policies: [
-      new Policy('posts.read'),
-      new Policy('posts.update', 'Update posts', ['posts.read'], [Scope.owned()]),
+      new Policy('sales.view'),
+      new Policy('sales.create', 'Create sales', ['sales.view']),
+      new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()]),
     ],
   },
 ]
 ```
 
-See [Policies](/guide/policies) and [Groups](/guide/groups) for what goes in these files.
+```ts
+// src/rbac/groups.ts
+import type { GroupsDefinition } from '@kyrobit/rbac'
+
+export const groups: GroupsDefinition = {
+  cashier: {
+    label: 'Cashier',
+    policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+  },
+  manager: { label: 'Manager', policies: 'all' },
+}
+```
+
+Groups are job titles. A cashier voids only their own sales. A manager voids any sale. See [Policies](/guide/policies) and [Groups](/guide/groups) for what goes in these files.
 
 ## Keep driver imports inside the factory
 

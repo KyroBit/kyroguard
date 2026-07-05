@@ -18,7 +18,7 @@ import type {
 interface StoredPolicy {
   id: string
   name: string
-  portal: string
+  domain: string
   label: string
   scopeOptions: string[]
   dependsOn: string[]
@@ -35,8 +35,8 @@ interface StoredGroup {
 
 interface AssignmentTuple {
   subjectId: string
-  portal: string
-  contextId: string
+  domain: string
+  tenantId: string
 }
 
 interface GroupAssignment extends AssignmentTuple {
@@ -62,8 +62,8 @@ export function memoryAdapter(): StorageAdapter {
   // S2: plain equality on every component — no fallback in either direction.
   const sameTuple = (assignment: AssignmentTuple, ref: SubjectRef): boolean =>
     assignment.subjectId === ref.subjectId &&
-    assignment.portal === ref.portal &&
-    assignment.contextId === ref.contextId
+    assignment.domain === ref.domain &&
+    assignment.tenantId === ref.tenantId
 
   const requireGroup = (name: string): StoredGroup => {
     const group = groups.get(name)
@@ -88,7 +88,7 @@ export function memoryAdapter(): StorageAdapter {
         const existing = policies.get(row.name)
         if (existing) {
           // S5/S15: metadata of an existing policy MUST change on re-sync.
-          existing.portal = row.portal
+          existing.domain = row.domain
           existing.label = row.label
           existing.scopeOptions = [...row.scopeOptions]
           existing.dependsOn = [...row.dependsOn]
@@ -96,7 +96,7 @@ export function memoryAdapter(): StorageAdapter {
           policies.set(row.name, {
             id: nextId(),
             name: row.name,
-            portal: row.portal,
+            domain: row.domain,
             label: row.label,
             scopeOptions: [...row.scopeOptions],
             dependsOn: [...row.dependsOn],
@@ -109,7 +109,7 @@ export function memoryAdapter(): StorageAdapter {
       return [...policies.values()].map(policy => ({
         id: policy.id,
         name: policy.name,
-        portal: policy.portal,
+        domain: policy.domain,
         dependsOn: [...policy.dependsOn],
       }))
     },
@@ -193,15 +193,15 @@ export function memoryAdapter(): StorageAdapter {
 
     async assignGroup(ref, groupName) {
       requireGroup(groupName)
-      // S10: idempotent against the (subject, group, portal, contextId) tuple.
+      // S10: idempotent against the (subject, group, domain, tenantId) tuple.
       const exists = groupAssignments.some(
         assignment => sameTuple(assignment, ref) && assignment.groupName === groupName,
       )
       if (!exists) {
         groupAssignments.push({
           subjectId: ref.subjectId,
-          portal: ref.portal,
-          contextId: ref.contextId,
+          domain: ref.domain,
+          tenantId: ref.tenantId,
           groupName,
         })
       }
@@ -225,8 +225,8 @@ export function memoryAdapter(): StorageAdapter {
       } else {
         directAssignments.push({
           subjectId: ref.subjectId,
-          portal: ref.portal,
-          contextId: ref.contextId,
+          domain: ref.domain,
+          tenantId: ref.tenantId,
           policyName,
           scope: scope ?? null,
         })
@@ -275,8 +275,8 @@ export function memoryAdapter(): StorageAdapter {
             row.ownerId === entry.ownerId,
         )
         if (existing) {
-          existing.contextType = entry.contextType
-          existing.contextId = entry.contextId
+          existing.domain = entry.domain
+          existing.tenantId = entry.tenantId
         } else {
           ownership.push({ ...entry })
         }

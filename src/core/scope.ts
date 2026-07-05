@@ -8,9 +8,14 @@ export interface ScopeCheckContext {
   adapter: StorageAdapter
 }
 
+/**
+ * The scope decision. `resource` is null when the guard has no resource
+ * resolver — condition scopes (time, subject attributes) decide anyway;
+ * row scopes must fail closed on null.
+ */
 export type ScopeCheckFn = (
   subject: Subject,
-  resource: ResourceRef,
+  resource: ResourceRef | null,
   ctx: ScopeCheckContext,
 ) => Awaitable<boolean>
 
@@ -27,11 +32,12 @@ export class Scope {
 
   /**
    * Built-in ownership scope, backed by the adapter's ownership store —
-   * identical behavior on every storage backend.
+   * identical behavior on every storage backend. A row scope: without a
+   * resource it fails closed.
    */
   static owned(name = 'owned', label = 'Owned by the user'): Scope {
     return new Scope(name, label, (subject, resource, ctx) =>
-      ctx.adapter.isOwner(subject.id, resource),
+      resource ? ctx.adapter.isOwner(subject.id, resource) : false,
     )
   }
 }

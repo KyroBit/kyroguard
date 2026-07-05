@@ -7,7 +7,8 @@ Grants are cached in memory for 30 seconds by default. That cuts the database ou
 ```ts
 const rbac = createRbac({
   adapter,
-  resources,
+  policies,
+  groups,
   cacheTtlMs: 10_000,      // default 30_000
   cacheMaxEntries: 50_000, // default 10_000
 })
@@ -29,7 +30,8 @@ const subscriber = new Redis(process.env.REDIS_URL!)
 
 const rbac = createRbac({
   adapter,
-  resources,
+  policies,
+  groups,
   invalidationBus: redisBus(publisher, subscriber),
 })
 ```
@@ -43,7 +45,8 @@ Redis needs one connection for publishing and one for subscribing, so pass two c
 ```ts
 const rbac = createRbac({
   adapter,
-  resources,
+  policies,
+  groups,
   onDecision: event => {
     logger.info({
       user: event.subjectId,
@@ -66,8 +69,8 @@ const rbac = createRbac({
 $ npx rbac status
 adapter:      drizzle-pg
 capabilities: autoOwnershipTracking=true queryScoping=true
-policies:     24
-groups:       3
+policies:     7
+groups:       2
 ```
 
 Zero policies after a deploy means `rbac sync` has not run. See [Syncing policies](/guide/sync).

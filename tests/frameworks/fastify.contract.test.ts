@@ -12,7 +12,7 @@ import { describe, expect, it } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyRequest } from 'fastify'
 import { rbacFastify } from '../../src/frameworks/fastify/index.js'
-import type { FastifyPortal } from '../../src/frameworks/fastify/index.js'
+import type { FastifyDomain } from '../../src/frameworks/fastify/index.js'
 import { runFrameworkContractSuite } from '../../src/testing/index.js'
 import type { RouteSpec, TestApp, TestAppResponse } from '../../src/testing/index.js'
 import type { Rbac, SubjectInput } from '../../src/index.js'
@@ -32,33 +32,33 @@ async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
 
   await app.register(rbacFastify(rbac))
 
-  const portals = new Map<string, FastifyPortal>()
-  const portalFor = (name: string): FastifyPortal => {
-    let portal = portals.get(name)
-    if (!portal) {
-      portal = app.rbac.portal(name, {
+  const domains = new Map<string, FastifyDomain>()
+  const domainFor = (name: string): FastifyDomain => {
+    let domain = domains.get(name)
+    if (!domain) {
+      domain = app.rbac.domain(name, {
         getSubject: req => {
           getSubjectCalls.set(req, (getSubjectCalls.get(req) ?? 0) + 1)
           const id = req.headers['x-subject-id']
           if (typeof id !== 'string' || id === '') return null
           const subject: SubjectInput = { id }
-          const contextId = req.headers['x-context-id']
-          if (typeof contextId === 'string' && contextId !== '') subject.context_id = contextId
+          const tenantId = req.headers['x-tenant-id']
+          if (typeof tenantId === 'string' && tenantId !== '') subject.tenant_id = tenantId
           if (req.headers['x-super'] === '1') subject.is_super = true
           return subject
         },
       })
-      portals.set(name, portal)
+      domains.set(name, domain)
     }
-    return portal
+    return domain
   }
 
   for (const route of routes) {
-    const portal = portalFor(route.portal)
+    const domain = domainFor(route.domain)
     const resource = route.resource
     const policies = route.policy ? route.policy.split('+') : []
     const guards = policies.map(policy =>
-      portal.requirePolicy(policy, resource ? { resource: req => resource(req) } : undefined),
+      domain.requirePolicy(policy, resource ? { resource: req => resource(req) } : undefined),
     )
     app.route({
       method: route.method,

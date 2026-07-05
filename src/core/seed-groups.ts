@@ -4,14 +4,13 @@ import type { GroupPolicyEntry, StorageAdapter } from '../storage/contract.js'
 /**
  * 'all' = every synced policy (requires allPolicies); string[] = those
  * policies unrestricted; Record = policy → scope (null = unrestricted).
- * Names are UNQUALIFIED — seedGroups qualifies them with the portal sentinel.
+ * Names are UNQUALIFIED — seedGroups qualifies them with the domain sentinel.
  */
 export type GroupPoliciesInput = 'all' | string[] | Record<string, string | null>
 
 export interface GroupDefinition {
   label: string
   description?: string
-  isSystem?: boolean
   policies: GroupPoliciesInput
 }
 
@@ -21,9 +20,9 @@ export async function seedGroups(
   adapter: StorageAdapter,
   groups: GroupsDefinition,
   allPolicies?: { name: string }[],
-  portal?: string,
+  domain?: string,
 ): Promise<void> {
-  const portalSentinel = portal ?? ''
+  const domainSentinel = domain ?? ''
 
   for (const [name, def] of Object.entries(groups)) {
     if (def.policies === 'all' && !allPolicies) {
@@ -35,7 +34,7 @@ export async function seedGroups(
     const entries: GroupPolicyEntry[] = Object.entries(
       normalize(def.policies, allPolicies ?? []),
     ).map(([policyName, scope]) => ({
-      policyName: qualifyPolicyName(portalSentinel, policyName),
+      policyName: qualifyPolicyName(domainSentinel, policyName),
       scope,
     }))
 
@@ -43,7 +42,6 @@ export async function seedGroups(
       name,
       label: def.label,
       description: def.description,
-      isSystem: def.isSystem,
     })
     await adapter.setGroupPolicies(name, entries)
   }

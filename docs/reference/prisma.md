@@ -46,7 +46,7 @@ Client extension that records ownership when your app creates rows. Apply it wit
 | Option | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | Your `createRbac` instance. |
-| `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model BlogPost` is `'blogPost'`. |
+| `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model SaleItem` is `'saleItem'`. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
@@ -58,7 +58,7 @@ const client = new PrismaClient()
 export const db = client.$extends(
   rbacPrismaExtension({
     rbac,
-    resources: [{ type: 'post', model: 'post' }],
+    resources: [{ type: 'sale', model: 'sale' }],
   }),
 )
 ```
@@ -101,8 +101,8 @@ The adapter addresses rows through the compound-unique input names Prisma derive
 
 | Model | Client unique input |
 | --- | --- |
-| `RbacUserPolicyGroup` | `subjectId_policyGroupId_portal_contextId` |
-| `RbacUserPolicy` | `subjectId_policyId_portal_contextId` |
+| `RbacUserPolicyGroup` | `subjectId_policyGroupId_domain_tenantId` |
+| `RbacUserPolicy` | `subjectId_policyId_domain_tenantId` |
 | `RbacResourceOwner` | `resourceType_resourceId_ownerId` |
 
 **Do not add a `name:` argument to the `@@unique` blocks. Renaming these inputs breaks the adapter.**

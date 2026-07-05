@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
 import { generateTypes } from '../../src/cli/typegen.js'
-import type { PortalTypeInfo } from '../../src/cli/typegen.js'
+import type { DomainTypeInfo } from '../../src/cli/typegen.js'
 
 const roots: string[] = []
 
@@ -14,11 +14,11 @@ afterAll(async () => {
 
 let fileCounter = 0
 
-async function generate(portals: PortalTypeInfo[]): Promise<string> {
+async function generate(domains: DomainTypeInfo[]): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'rbac-typegen-'))
   roots.push(root)
   const output = join(root, 'nested', `rbac-${++fileCounter}.d.ts`)
-  await generateTypes(portals, output)
+  await generateTypes(domains, output)
   return await readFile(output, 'utf8')
 }
 
@@ -33,10 +33,10 @@ interface ParsedDeclaration {
   moduleName: string
   interfaceName: string
   memberNames: string[]
-  portalUnion: string[]
+  domainUnion: string[]
   policyUnion: string[]
-  /** portal name → union of policy literals ('string' fallback → ['string']). */
-  portalPolicies: Map<string, string[]>
+  /** domain name → union of policy literals ('string' fallback → ['string']). */
+  domainPolicies: Map<string, string[]>
 }
 
 /** Parse the generated file and pull the DECODED string-literal values back
@@ -63,12 +63,12 @@ function parseDeclaration(text: string): ParsedDeclaration {
     return member.type
   }
 
-  const portalPolicies = new Map<string, string[]>()
-  const portalPoliciesType = typeOf('PortalPolicies')
-  if (ts.isTypeLiteralNode(portalPoliciesType)) {
-    for (const member of portalPoliciesType.members) {
-      if (!ts.isPropertySignature(member) || !member.type) throw new Error('bad PortalPolicies member')
-      portalPolicies.set(propertyKeyText(member), unionLiterals(member.type))
+  const domainPolicies = new Map<string, string[]>()
+  const domainPoliciesType = typeOf('DomainPolicies')
+  if (ts.isTypeLiteralNode(domainPoliciesType)) {
+    for (const member of domainPoliciesType.members) {
+      if (!ts.isPropertySignature(member) || !member.type) throw new Error('bad DomainPolicies member')
+      domainPolicies.set(propertyKeyText(member), unionLiterals(member.type))
     }
   }
 
@@ -79,9 +79,9 @@ function parseDeclaration(text: string): ParsedDeclaration {
     memberNames: iface.members
       .filter(ts.isPropertySignature)
       .map(member => propertyKeyText(member)),
-    portalUnion: unionLiterals(typeOf('Portal')),
+    domainUnion: unionLiterals(typeOf('Domain')),
     policyUnion: unionLiterals(typeOf('PolicyName')),
-    portalPolicies,
+    domainPolicies,
   }
 }
 
@@ -116,12 +116,12 @@ describe('generateTypes', () => {
     const parsed = parseDeclaration(text)
     expect(parsed.moduleName).toBe('@kyrobit/rbac')
     expect(parsed.interfaceName).toBe('RbacTypes')
-    expect(parsed.memberNames).toEqual(['Portal', 'PolicyName', 'PortalPolicies'])
-    expect(parsed.portalUnion.toSorted()).toEqual(['admin', 'customer'])
-    // PolicyName is deduped across portals.
+    expect(parsed.memberNames).toEqual(['Domain', 'PolicyName', 'DomainPolicies'])
+    expect(parsed.domainUnion.toSorted()).toEqual(['admin', 'customer'])
+    // PolicyName is deduped across domains.
     expect(parsed.policyUnion.toSorted()).toEqual(['posts.create', 'posts.read'])
-    expect(parsed.portalPolicies.get('admin')?.toSorted()).toEqual(['posts.create', 'posts.read'])
-    expect(parsed.portalPolicies.get('customer')).toEqual(['posts.read'])
+    expect(parsed.domainPolicies.get('admin')?.toSorted()).toEqual(['posts.create', 'posts.read'])
+    expect(parsed.domainPolicies.get('customer')).toEqual(['posts.read'])
   })
 
   test('hostile names (quotes, backslashes, unicode breaks) cannot inject declarations', async () => {
@@ -129,7 +129,7 @@ describe('generateTypes', () => {
     // interpolation: closing quote + union pivot, double quotes, trailing
     // backslash (would swallow the closing quote), U+2028/U+2029 (legal in
     // JSON, line terminators in older JS), and plain unicode.
-    const portalName = `admin" } | { evil: 'x`
+    const domainName = `admin" } | { evil: 'x`
     const policyNames = [
       `read' | 'pwn`,
       `say "hi"`,
@@ -137,7 +137,7 @@ describe('generateTypes', () => {
       'line\u2028sep\u2029arator',
       'pörtal.日本語',
     ]
-    const text = await generate([{ name: portalName, policyNames }])
+    const text = await generate([{ name: domainName, policyNames }])
 
     // Still exactly one module block, one interface, three members — nothing
     // was injected out of the string context.
@@ -145,55 +145,55 @@ describe('generateTypes', () => {
     const parsed = parseDeclaration(text)
     expect(parsed.moduleCount).toBe(1)
     expect(parsed.moduleName).toBe('@kyrobit/rbac')
-    expect(parsed.memberNames).toEqual(['Portal', 'PolicyName', 'PortalPolicies'])
+    expect(parsed.memberNames).toEqual(['Domain', 'PolicyName', 'DomainPolicies'])
 
     // Every hostile name round-trips through the AST byte-for-byte.
-    expect(parsed.portalUnion).toEqual([portalName])
+    expect(parsed.domainUnion).toEqual([domainName])
     expect(parsed.policyUnion.toSorted()).toEqual(policyNames.toSorted())
     // Property keys are quoted too (the v0 regression hit keys AND literals).
-    expect([...parsed.portalPolicies.keys()]).toEqual([portalName])
-    expect(parsed.portalPolicies.get(portalName)?.toSorted()).toEqual(policyNames.toSorted())
+    expect([...parsed.domainPolicies.keys()]).toEqual([domainName])
+    expect(parsed.domainPolicies.get(domainName)?.toSorted()).toEqual(policyNames.toSorted())
 
     // Textual double-check of the mechanism: both the key and the literals
     // appear JSON.stringify-quoted, never raw.
-    expect(text).toContain(`${JSON.stringify(portalName)}:`)
+    expect(text).toContain(`${JSON.stringify(domainName)}:`)
     for (const name of policyNames) expect(text).toContain(JSON.stringify(name))
-    expect(text).not.toContain(`'${portalName}'`)
+    expect(text).not.toContain(`'${domainName}'`)
   })
 
   test('single-quoted name stays inside its double-quoted literal', async () => {
     const text = await generate([{ name: "o'brien", policyNames: ["it's.fine"] }])
     expect(syntaxErrors(text)).toHaveLength(0)
     const parsed = parseDeclaration(text)
-    expect(parsed.portalUnion).toEqual(["o'brien"])
+    expect(parsed.domainUnion).toEqual(["o'brien"])
     expect(parsed.policyUnion).toEqual(["it's.fine"])
     expect(text).toContain('"o\'brien"')
   })
 
-  test('empty portals → string fallbacks everywhere', async () => {
+  test('empty domains → string fallbacks everywhere', async () => {
     const text = await generate([])
     expect(syntaxErrors(text)).toHaveLength(0)
-    expect(text).toContain('Portal: string')
+    expect(text).toContain('Domain: string')
     expect(text).toContain('PolicyName: string')
-    expect(text).toContain('PortalPolicies: Record<string, string>')
+    expect(text).toContain('DomainPolicies: Record<string, string>')
   })
 
-  test('portal with no policies → string fallback for its policy union', async () => {
+  test('domain with no policies → string fallback for its policy union', async () => {
     const text = await generate([{ name: 'admin', policyNames: [] }])
     expect(syntaxErrors(text)).toHaveLength(0)
     const parsed = parseDeclaration(text)
-    expect(parsed.portalUnion).toEqual(['admin'])
+    expect(parsed.domainUnion).toEqual(['admin'])
     expect(parsed.policyUnion).toEqual(['string'])
-    expect(parsed.portalPolicies.get('admin')).toEqual(['string'])
+    expect(parsed.domainPolicies.get('admin')).toEqual(['string'])
   })
 
-  test("portal-less sentinel '' is emitted as an (escaped) empty-string key", async () => {
+  test("the no-domain sentinel '' is emitted as an (escaped) empty-string key", async () => {
     const text = await generate([{ name: '', policyNames: ['posts.read'] }])
     expect(syntaxErrors(text)).toHaveLength(0)
     const parsed = parseDeclaration(text)
-    expect(parsed.portalUnion).toEqual([''])
-    expect([...parsed.portalPolicies.keys()]).toEqual([''])
-    expect(parsed.portalPolicies.get('')).toEqual(['posts.read'])
+    expect(parsed.domainUnion).toEqual([''])
+    expect([...parsed.domainPolicies.keys()]).toEqual([''])
+    expect(parsed.domainPolicies.get('')).toEqual(['posts.read'])
   })
 
   test('duplicate names are deduped and unions sorted', async () => {
@@ -202,7 +202,7 @@ describe('generateTypes', () => {
     ])
     const parsed = parseDeclaration(text)
     expect(parsed.policyUnion).toEqual(['a.z', 'b.z'])
-    expect(parsed.portalPolicies.get('admin')).toEqual(['a.z', 'b.z'])
+    expect(parsed.domainPolicies.get('admin')).toEqual(['a.z', 'b.z'])
   })
 
   test('creates missing output directories', async () => {

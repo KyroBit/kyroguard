@@ -1,14 +1,14 @@
 # Sync
 
-Push your policies and groups to the database:
+Your definitions live in two files. `src/rbac/policies.ts` says what staff can do. `src/rbac/groups.ts` maps job titles to policies. One command loads both:
 
 ```sh
 npx rbac sync
 ```
 
 ```
-[rbac] Synced 4 policies.
-[rbac] Seeded 2 groups for portal "admin".
+[rbac] Synced 5 policies.
+[rbac] Seeded 2 groups.
 [rbac] Wrote /home/you/app/rbac.d.ts
 ```
 
@@ -20,7 +20,13 @@ One run does five things:
 4. Seeds your groups from `groups.ts`.
 5. Writes `rbac.d.ts` so policy names autocomplete.
 
-Your code is the source of truth. The database follows it. Every portal in [`rbac.config.ts`](/reference/configuration) is synced in one run.
+Your code is the source of truth. The database follows it. Every domain in [`rbac.config.ts`](/reference/configuration) is synced in one run.
+
+No files? `createRbac({ policies, groups })` plus `await rbac.sync()` runs the same pipeline.
+
+## Dependencies and scopes
+
+Step 3 fills missing dependencies, like `sales.view` for `sales.void`. A filled-in dependency inherits the scope of the grant that pulled it in. Grant `sales.void` restricted to `'owned'` and `sales.view` arrives restricted to `'owned'` too — never wider. An unrestricted grant that needs the same dependency widens it to unrestricted. Two different named scopes fall back to unrestricted with a sync warning — define the entry explicitly to control it. See [Groups](/guide/groups#dependencies-are-filled-in).
 
 ## When to run it
 
@@ -29,7 +35,7 @@ Run it after every edit to `policies.ts` or `groups.ts`. Run it on every deploy,
 ## Removing a policy
 
 ```
-[rbac] Removed 1 orphaned policies: admin.posts.archive
+[rbac] Removed 1 orphaned policies: sales.refund
 ```
 
 ::: danger Deleting a policy deletes its grants

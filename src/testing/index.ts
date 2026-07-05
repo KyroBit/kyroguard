@@ -8,7 +8,7 @@
  *   src/storage/contract.ts. Run it against any adapter (including your own)
  *   to prove conformance; an adapter is conforming exactly when it passes.
  * - runFrameworkContractSuite(): black-box HTTP contract for framework
- *   integrations — portals, guards, error strategy, subject memoization and
+ *   integrations — domains, guards, error strategy, subject memoization and
  *   cache invalidation.
  *
  * Both suites are runner-injected: pass { describe, it, expect } from

@@ -1,96 +1,122 @@
 # Scopes
 
-Scopes answer one question: this user may update posts, but which posts?
+A policy answers: can this user do this at all? A scope answers: **yes, but only when…**
+
+- yes, but only **their own** sales
+- yes, but only **during opening hours**
+- yes, but only **under 5,000**
+
+One policy, different conditions per role. That is the whole idea. Here are those three rules, for real.
+
+## Rule 1: "Cashiers void their own sales. Managers void any."
+
+`Scope.owned()` is built in. It passes when the user created the row:
 
 ```ts
-import { Policy, Scope } from '@kyrobit/rbac'
-
-export const resources = [
-  {
-    type: 'post',
-    policies: [
-      new Policy('posts.read'),
-      // Policy(name, label, dependsOn, allowed scopes)
-      new Policy('posts.update', 'Update posts', [], [Scope.owned()]),
-    ],
-  },
-]
+// policies.ts — Policy(name, label, dependsOn, allowed scopes)
+new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()])
 ```
 
-A policy lists the scopes it can be granted with. `Scope.owned()` is the built-in one. It passes when the user created the row. It works on every database. [Ownership](/guide/ownership) explains how rows get owners.
-
-## Granting a scoped policy
-
 ```ts
-export const groups = {
-  author: {
-    label: 'Author',
-    policies: {
-      'posts.read': null,
-      'posts.update': 'owned',
-    },
-  },
-}
+// groups.ts — the same policy, a different condition per role
+cashier: {
+  label: 'Cashier',
+  policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+},
+manager: {
+  label: 'Manager',
+  policies: { 'sales.view': null, 'sales.void': null },
+},
 ```
 
-Each value is a scope name, or `null` for no scope. `null` covers every post. So authors read every post but update only their own. Groups are covered in [Groups](/guide/groups).
+Each value is a scope name, or `null` for no condition. That one file is the org chart: cashiers void what they recorded, managers void anything. [Ownership](/guide/ownership) explains how sales get owners.
 
-Direct grants take a scope the same way. `admin` is a portal — see [Portals](/guide/portals):
+This rule looks at a row, so the guard needs to know which row. Give it a `resource` resolver:
 
-```ts
-await admin.assignPolicy(user.id, 'posts.update', { scope: 'owned' })
+::: code-group
+
+```ts [Fastify]
+app.post('/sales/:id/void', {
+  preHandler: staff.requirePolicy('sales.void', {
+    resource: req => ({ type: 'sale', id: (req.params as { id: string }).id }),
+  }),
+}, voidSale)
 ```
 
-## Guarding a route
-
-A scoped check needs to know which row is being touched. Give the guard a `resource` resolver. Fastify shown; in Express the guard is plain middleware:
-
-```ts
-app.patch(
-  '/posts/:id',
-  {
-    preHandler: admin.requirePolicy('posts.update', {
-      resource: req => ({ type: 'post', id: (req.params as { id: string }).id }),
-    }),
-  },
-  updatePost,
+```ts [Express]
+app.post('/sales/:id/void',
+  staff.requirePolicy('sales.void', {
+    resource: req => ({ type: 'sale', id: req.params.id }),
+  }),
+  voidSale,
 )
 ```
 
-The guard reads the user's grant first. An unscoped grant passes immediately. A scoped grant runs the resolver, then the scope check decides. Guards are covered in [Protecting routes](/guide/protecting-routes).
+:::
 
-## Writing your own scope
+## Rule 2: "Voids only during opening hours."
 
-A scope is a name, a label and a check. Return `true` to allow. Here is a scope that allows posts from the user's own branch:
+A fraud rule. It has nothing to do with any row — the scope checks the clock and ignores the resource:
 
 ```ts
-import { Scope } from '@kyrobit/rbac'
-import { eq } from 'drizzle-orm'
+export const businessHours = new Scope('business-hours', 'Business hours', () => {
+  const hour = new Date().getHours()
+  return hour >= 9 && hour < 21
+})
+```
+
+```ts
+// groups.ts
+cashier: { policies: { 'sales.void': 'business-hours' } }
+```
+
+No resolver on the route. The route stays exactly as it was — the condition lives entirely in the grant. A cashier voiding at 23:00 gets a 403; the same request at noon passes.
+
+## Rule 3: "Cashiers void sales under 5,000. Bigger needs a manager."
+
+The scope loads the sale and checks the amount — query your tables however you normally do:
+
+```ts
 import { db } from './db'
-import { posts } from './schema'
+import { sales } from './schema'
 
-export const sameBranch = new Scope(
-  'same-branch',
-  'Same branch',
-  async (user, resource) => {
-    const [post] = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.id, resource.id))
-    // context_id is whatever your getSubject resolver put there
-    return post?.branchId === user.context_id
-  },
-)
+export const smallSale = new Scope('small-sale', 'Under 5,000', async (user, resource) => {
+  if (!resource) return false // row rule: no row, no pass
+  const [sale] = await db.select().from(sales).where(eq(sales.id, resource.id))
+  return (sale?.total ?? Infinity) < 5000
+})
 ```
 
-Register it on the policies that accept it:
+Every store has this rule. Written as a scope, it is one line in the groups file — not an `if` buried in a route handler.
+
+## Combining rules
+
+A grant carries one scope name — but a scope is a function, so combine conditions inside it:
 
 ```ts
-new Policy('posts.update', 'Update posts', [], [Scope.owned(), sameBranch])
+export const cashierVoid = new Scope('cashier-void', 'Own, small, in hours', async (user, resource, ctx) => {
+  if (!resource) return false
+  if (!businessHours.check(user, resource, ctx)) return false
+  if (!(await Scope.owned().check(user, resource, ctx))) return false
+  return smallSale.check(user, resource, ctx)
+})
 ```
 
-Now a grant can name `'owned'` or `'same-branch'`. The check runs against the resource the guard resolved.
+## When do you need a resource resolver?
+
+| The rule asks about… | Resolver | Example |
+|---|---|---|
+| the row being touched | yes | own sale, under 5,000 |
+| anything else — time, the user, your data | no | opening hours, not on probation |
+
+Row rules must fail closed: return `false` when `resource` is `null`, like the examples above. `Scope.owned()` already does.
 
 ## What a denied request gets
 
-A failed scope check returns 403. A resource the resolver cannot find returns 404.
+A failed check → 403 with `RBAC_SCOPE_DENIED`. A resolver that finds no row → 404. Registering a scope: list it in the policy's allowed scopes (shown in Rule 1) — the [reference](/reference/core-api) has the full `Scope` API.
+
+## Next steps
+
+- [Ownership](/guide/ownership) — how rows get owners for `Scope.owned()`.
+- [Groups](/guide/groups) — where scoped grants live.
+- [Owners and superusers](/guide/owners) — when no scope is enough: the owner.

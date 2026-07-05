@@ -1,7 +1,7 @@
 # @kyrobit/rbac
 
 Policy-based access control for Node.js and Bun services. Define permissions
-in code, group them into roles, assign them to users per portal and per
+in code, group them into roles, assign them to users per domain and per
 tenant, and enforce them on routes. One command keeps the database and your
 TypeScript types in sync.
 
@@ -9,8 +9,8 @@ TypeScript types in sync.
   Express 4/5.
 - **Storage adapters** for Drizzle (PostgreSQL, MySQL, SQLite), Prisma and
   Mongoose — all certified against the same behavioral contract test suite.
-- **Strict isolation**: portal and tenant-context assignments match by exact
-  equality. A grant in one portal or tenant never applies in another.
+- **Strict isolation**: domain and tenant assignments match by exact
+  equality. A grant in one domain or tenant never applies in another.
 - **Typed decisions**: guards throw typed errors (`RBAC_POLICY_DENIED`,
   `RBAC_SCOPE_DENIED`, …) through your framework's own error pipeline.
 - **Bounded cache** (LRU + TTL, instance-scoped) with a pluggable
@@ -40,7 +40,7 @@ export const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }) })
 ```ts
 // Fastify
 await app.register(rbacFastify(rbac))
-const admin = app.rbac.portal('admin', { getSubject: req => auth.user(req) })
+const admin = app.rbac.domain('admin', { getSubject: req => auth.user(req) })
 
 app.get('/transactions/:id', {
   preHandler: admin.requirePolicy('transactions.view', {
@@ -58,7 +58,7 @@ A subject without `admin.transactions.view` receives:
 ## Documentation
 
 Full documentation lives in [`docs/`](./docs) (VitePress — `bun run docs:dev`):
-installation per stack, guides for portals, tenant contexts, scopes,
+installation per stack, guides for domains, tenants, scopes,
 ownership, caching and observability, a complete API and CLI reference, the
 database schema, an error encyclopedia and the v0 → v1 migration guide.
 

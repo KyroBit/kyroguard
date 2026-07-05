@@ -37,7 +37,7 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 
 **When.** Your `getSubject` returned no user, or a user without an id. This is the normal path for requests with no session.
 
-**Fix.** Return `null` from `getSubject` when nobody is logged in, and a user with a non-empty `id` otherwise. Check that the guard runs after your authentication middleware. See [Portals](/guide/portals).
+**Fix.** Return `null` from `getSubject` when nobody is logged in, and a user with a non-empty `id` otherwise. Check that the guard runs after your authentication middleware. See [Multi-tenancy](/guide/multi-tenancy).
 
 ## RBAC_POLICY_DENIED
 
@@ -47,9 +47,9 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 { "message": "Forbidden", "code": "RBAC_POLICY_DENIED" }
 ```
 
-**When.** The user does not hold this policy in this portal and context. Grants are exact: a grant in `branch-1` never applies in `branch-2`, and a grant in one portal never applies in another.
+**When.** The user does not hold this policy in this domain and tenant. Grants are exact: a grant in `branch-1` never applies in `branch-2`, and a grant in one domain never applies in another.
 
-**Fix.** Grant the policy, or a group that holds it, at the same portal and context the request uses. The error's `policy` property carries the full policy name the engine checked. See [Assigning access](/guide/assigning-access).
+**Fix.** Grant the policy, or a group that holds it, at the same domain and tenant the request uses. The error's `policy` property carries the full policy name the engine checked. See [Assigning access](/guide/assigning-access).
 
 ## RBAC_SCOPE_DENIED
 
@@ -80,7 +80,7 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 **Status 500.**
 
 ```json
-{ "message": "[rbac] No request context for portal \"admin\" — register rbacExpress(rbac).context() before its guards.", "code": "RBAC_MISCONFIGURED" }
+{ "message": "[rbac] No request context for domain \"admin\" — register rbacExpress(rbac).context() before its guards.", "code": "RBAC_MISCONFIGURED" }
 ```
 
 **When.** The library is wired incorrectly. A guard ran without the plugin (Fastify) or before the context middleware (Express), or a tracked insert could not be attributed with `strictTracking: 'error'`.
@@ -92,12 +92,12 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 Not an HTTP error. It is thrown from assignment calls, not guards, and has no `statusCode`.
 
 ```
-[rbac] Policy "admin.posts.read" not found — run `rbac sync` first.
+[rbac] Policy "admin.reports.view" not found — run `rbac sync` first.
 ```
 
 **When.** `assignPolicy` named a policy that is not in the database. Assignments reference synced policies.
 
-**Fix.** Run `rbac sync`. Prefer the portal assignment methods, which add the portal prefix for you. Catch it with `instanceof UnknownPolicyError` where you expose assignment endpoints.
+**Fix.** Run `rbac sync`. Prefer the domain assignment methods, which add the domain prefix for you. Catch it with `instanceof UnknownPolicyError` where you expose assignment endpoints.
 
 ```ts
 import { UnknownPolicyError } from '@kyrobit/rbac'

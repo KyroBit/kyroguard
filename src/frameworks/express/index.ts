@@ -12,18 +12,20 @@ import { qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { Rbac } from '../../index.js'
-import type { ErrorFormatter, GuardOptions, PortalInstance, PortalOptions } from '../contract.js'
+import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
 
 export interface ExpressRbacOptions extends ErrorFormatter<Request> {}
 
 export interface ExpressRbac {
-  /** Opens the per-request ALS context. Register once, before any portal guard. */
+  /** Opens the per-request ALS context. Register once, before any domain guard. */
   context(): RequestHandler
-  /** Hook-free portal factory — registering it never touches app-wide state. */
-  portal<P extends string>(
+  /** Hook-free domain factory — registering it never touches app-wide state. */
+  domain<P extends string>(
     name: P,
-    options: PortalOptions<Request>,
-  ): PortalInstance<Request, RequestHandler, P>
+    options: DomainOptions<Request>,
+  ): DomainInstance<Request, RequestHandler, P>
+  /** Single-area apps don't need a domain name — policies stay unprefixed. */
+  domain(options: DomainOptions<Request>): DomainInstance<Request, RequestHandler, ''>
   /** Terminal error middleware: renders RbacError, delegates everything else. */
   errorHandler(): ErrorRequestHandler
 }
@@ -38,9 +40,13 @@ export function rbacExpress(rbac: Rbac, options: ExpressRbacOptions = {}): Expre
       }
     },
 
-    portal(name, portalOptions) {
-      return createPortal(rbac, name, portalOptions)
-    },
+    domain: (<P extends string>(
+      nameOrOptions: P | DomainOptions<Request>,
+      domainOptions?: DomainOptions<Request>,
+    ) =>
+      typeof nameOrOptions === 'string'
+        ? createDomain(rbac, nameOrOptions, domainOptions!)
+        : createDomain(rbac, '', nameOrOptions)) as ExpressRbac['domain'],
 
     errorHandler() {
       return (error: unknown, req, res, next) => {
@@ -59,37 +65,37 @@ export function rbacExpress(rbac: Rbac, options: ExpressRbacOptions = {}): Expre
   }
 }
 
-function createPortal<P extends string>(
+function createDomain<P extends string>(
   rbac: Rbac,
   name: P,
-  options: PortalOptions<Request>,
-): PortalInstance<Request, RequestHandler, P> {
+  options: DomainOptions<Request>,
+): DomainInstance<Request, RequestHandler, P> {
   const resolveSubject = async (req: Request): Promise<Subject | null> => {
     const store = rbac.engine.store.get()
     if (!store) {
       throw new MisconfiguredError(
-        `[rbac] No request context for portal "${name}" — register rbacExpress(rbac).context() before its guards.`,
+        `[rbac] No request context for domain "${name}" — register rbacExpress(rbac).context() before its guards.`,
       )
     }
-    if (store.portalSubjects.has(name)) {
-      const memoized = store.portalSubjects.get(name) ?? null
+    if (store.domainSubjects.has(name)) {
+      const memoized = store.domainSubjects.get(name) ?? null
       if (memoized) store.subject = memoized
       return memoized
     }
     const input = await options.getSubject(req)
-    // Cast: Omit<Subject, 'portal'> collapses to its index signature (Subject
+    // Cast: Omit<Subject, 'domain'> collapses to its index signature (Subject
     // has [key: string]: unknown), erasing `id: string` from the spread type.
     // The engine still rejects a missing id at runtime (401).
-    const subject: Subject | null = input ? { ...(input as Subject), portal: name } : null
-    store.portalSubjects.set(name, subject)
+    const subject: Subject | null = input ? { ...(input as Subject), domain: name } : null
+    store.domainSubjects.set(name, subject)
     if (subject) store.subject = subject
     return subject
   }
 
-  const adminRef = (subjectId: string, contextId?: string) => ({
+  const adminRef = (subjectId: string, tenantId?: string) => ({
     subjectId,
-    portal: name,
-    contextId,
+    domain: name,
+    tenantId,
   })
 
   return {
@@ -108,28 +114,28 @@ function createPortal<P extends string>(
       })
     },
 
-    contextHook(): RequestHandler {
+    subjectHook(): RequestHandler {
       return guard(async req => {
         await resolveSubject(req)
       })
     },
 
-    assignGroup: (subjectId: string, group: string, opts?: { contextId?: string }) =>
-      rbac.admin.assignGroup(adminRef(subjectId, opts?.contextId), group),
-    removeGroup: (subjectId: string, group: string, opts?: { contextId?: string }) =>
-      rbac.admin.removeGroup(adminRef(subjectId, opts?.contextId), group),
+    assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
+      rbac.admin.assignGroup(adminRef(subjectId, opts?.tenantId), group),
+    removeGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
+      rbac.admin.removeGroup(adminRef(subjectId, opts?.tenantId), group),
     assignPolicy: (
       subjectId: string,
       policy: string,
-      opts?: { contextId?: string; scope?: string | null },
+      opts?: { tenantId?: string; scope?: string | null },
     ) =>
       rbac.admin.assignPolicy(
-        adminRef(subjectId, opts?.contextId),
+        adminRef(subjectId, opts?.tenantId),
         qualifyPolicyName(name, policy),
         opts?.scope,
       ),
-    removePolicy: (subjectId: string, policy: string, opts?: { contextId?: string }) =>
-      rbac.admin.removePolicy(adminRef(subjectId, opts?.contextId), qualifyPolicyName(name, policy)),
+    removePolicy: (subjectId: string, policy: string, opts?: { tenantId?: string }) =>
+      rbac.admin.removePolicy(adminRef(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
   }
 }
 

@@ -3,8 +3,8 @@ import { backfillGroupDependencies, syncPolicies } from '../../core/sync.js'
 import { seedGroups } from '../../core/seed-groups.js'
 import { loadModuleExport } from '../load-config.js'
 import { generateTypes } from '../typegen.js'
-import { loadPortalResources } from './generate.js'
-import type { PortalTypeInfo } from '../typegen.js'
+import { loadDomainResources } from './generate.js'
+import type { DomainTypeInfo } from '../typegen.js'
 import type { RbacConfig } from '../../core/config.js'
 import type { GroupsDefinition } from '../../core/seed-groups.js'
 import type { StorageAdapter } from '../../storage/contract.js'
@@ -15,30 +15,30 @@ export async function run(config: RbacConfig, baseDir: string): Promise<void> {
     adapter = await config.adapter()
     await adapter.ensureSchema?.()
 
-    const portals: PortalTypeInfo[] = []
-    for (const portal of config.portals) {
-      const portalName = portal.name ?? ''
-      const resources = await loadPortalResources(baseDir, portal)
+    const domains: DomainTypeInfo[] = []
+    for (const domain of config.domains) {
+      const domainName = domain.name ?? ''
+      const resources = await loadDomainResources(baseDir, domain)
       const allPolicies = resources.flatMap(resource => resource.policies)
 
-      await syncPolicies(adapter, resources, portalName, { logger: console.log })
+      await syncPolicies(adapter, resources, domainName, { logger: console.log })
 
-      if (portal.groups) {
-        const groups = await loadGroups(resolve(baseDir, portal.groups))
-        await seedGroups(adapter, groups, allPolicies, portalName)
+      if (domain.groups) {
+        const groups = await loadGroups(resolve(baseDir, domain.groups))
+        await seedGroups(adapter, groups, allPolicies, domainName)
         console.log(
-          `[rbac] Seeded ${Object.keys(groups).length} groups${portalName ? ` for portal "${portalName}"` : ''}.`,
+          `[rbac] Seeded ${Object.keys(groups).length} groups${domainName ? ` for domain "${domainName}"` : ''}.`,
         )
         // Seeding is replace-all per group (S8), which wipes the dependencies
         // syncPolicies just filled — run the back-fill again so they stick.
-        await backfillGroupDependencies(adapter, resources, portalName, { logger: console.log })
+        await backfillGroupDependencies(adapter, resources, domainName, { logger: console.log })
       }
 
-      portals.push({ name: portalName, policyNames: allPolicies.map(policy => policy.name) })
+      domains.push({ name: domainName, policyNames: allPolicies.map(policy => policy.name) })
     }
 
     const output = resolve(baseDir, config.typegen?.output ?? './rbac.d.ts')
-    await generateTypes(portals, output)
+    await generateTypes(domains, output)
     console.log(`[rbac] Wrote ${output}`)
   } catch (error) {
     console.error(`[rbac] sync failed: ${messageOf(error)}`)

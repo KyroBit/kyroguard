@@ -7,15 +7,15 @@ import type { StorageAdapter } from '../storage/contract.js'
  */
 export interface RbacConfig {
   adapter: () => Promise<StorageAdapter> | StorageAdapter
-  portals: PortalConfig[]
+  domains: DomainConfig[]
   typegen?: {
     /** Output path for the generated declaration file. Default './rbac.d.ts'. */
     output?: string
   }
 }
 
-export interface PortalConfig {
-  /** Portal name; omit or '' for a portal-less (single-app) setup. */
+export interface DomainConfig {
+  /** Domain name; omit or '' for a single-app setup with no domain. */
   name?: string
   /** Path to the module exporting `resources` (ResourceDefinition[]). */
   policies: string

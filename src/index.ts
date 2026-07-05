@@ -10,11 +10,11 @@
 
 import { RbacEngine } from './core/engine.js'
 import { collectScopes } from './core/scope.js'
-import { syncPolicies } from './core/sync.js'
+import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 import { seedGroups } from './core/seed-groups.js'
 import { memoryCache } from './cache/memory.js'
 import { inProcessBus } from './cache/bus.js'
-import type { ResourceDefinition } from './core/policy.js'
+import type { Policy, ResourceDefinition } from './core/policy.js'
 import type { GroupsDefinition } from './core/seed-groups.js'
 import type {
   DecisionHook,
@@ -31,6 +31,17 @@ export interface CreateRbacOptions {
   adapter: StorageAdapter
   /** Resource definitions — source of the scope registry and tracking config. */
   resources?: ResourceDefinition[]
+  /**
+   * Plain policy list for guard-only apps — shorthand for a single resource
+   * definition. Use `resources` when you want ownership tracking or
+   * query scoping for specific tables/models.
+   */
+  policies?: Policy[]
+  /**
+   * Group (role) definitions. rbac.sync() seeds them after syncing policies —
+   * the same behavior as `npx rbac sync` with a groups file.
+   */
+  groups?: GroupsDefinition
   /**
    * Policy cache. Default: bounded in-memory LRU with a 30s TTL.
    * Pass `false` to disable caching entirely.
@@ -58,14 +69,25 @@ export interface Rbac {
   readonly adapter: StorageAdapter
   readonly resources: ResourceDefinition[]
 
-  /** Sync policies-as-code into storage (also available via `rbac sync`). */
-  sync(resources: ResourceDefinition[], portal?: string): Promise<void>
-  /** Seed policy groups (replace-all per group). */
-  seedGroups(groups: GroupsDefinition, allPolicies?: { name: string }[], portal?: string): Promise<void>
+  /**
+   * Load your definitions into storage — the programmatic `npx rbac sync`.
+   * With no arguments it syncs the policies given to createRbac and seeds
+   * the groups given to createRbac. Pass a domain name to load them under
+   * that domain. The explicit resources form is for multi-domain setups and
+   * does not touch groups.
+   */
+  sync(): Promise<void>
+  sync(domain: string): Promise<void>
+  sync(resources: ResourceDefinition[], domain?: string): Promise<void>
+  /**
+   * Seed policy groups (replace-all per group). `'all'` group definitions
+   * resolve against the policies given to createRbac unless overridden.
+   */
+  seedGroups(groups: GroupsDefinition, options?: { domain?: string; allPolicies?: { name: string }[] }): Promise<void>
 
   /**
    * Low-level assignment API. Takes FULLY-QUALIFIED policy names and explicit
-   * portal/context. Portal instances (framework layer) offer the auto-prefixed
+   * domain/tenant coordinates. Domain instances (framework layer) offer the auto-prefixed
    * ergonomic form — prefer those in app code.
    */
   admin: {
@@ -77,7 +99,7 @@ export interface Rbac {
 
   /** Portable ownership API — works on every storage backend. */
   ownership: {
-    record(owner: Subject | string, resource: ResourceRef, context?: { portal?: string; contextId?: string }): Promise<void>
+    record(owner: Subject | string, resource: ResourceRef, at?: { domain?: string; tenantId?: string }): Promise<void>
     isOwner(ownerId: string, resource: ResourceRef): Promise<boolean>
     remove(resource: ResourceRef): Promise<void>
     /** One-shot extra columns for the next tracked insert in this request. */
@@ -95,12 +117,15 @@ export interface Rbac {
 
 export interface AdminSubjectRef {
   subjectId: string
-  portal?: string
-  contextId?: string
+  domain?: string
+  tenantId?: string
 }
 
 export function createRbac(options: CreateRbacOptions): Rbac {
-  const resources = options.resources ?? []
+  const resources = [...(options.resources ?? [])]
+  if (options.policies?.length) {
+    resources.push({ type: 'policy', policies: options.policies })
+  }
   const scopes = collectScopes(resources)
 
   const cache =
@@ -127,8 +152,8 @@ export function createRbac(options: CreateRbacOptions): Rbac {
 
   const normalize = (subject: AdminSubjectRef) => ({
     subjectId: subject.subjectId,
-    portal: subject.portal ?? '',
-    contextId: subject.contextId ?? '',
+    domain: subject.domain ?? '',
+    tenantId: subject.tenantId ?? '',
   })
 
   return {
@@ -136,12 +161,31 @@ export function createRbac(options: CreateRbacOptions): Rbac {
     adapter: options.adapter,
     resources,
 
-    sync: async (res, portal) => {
+    sync: async (resourcesOrDomain?: ResourceDefinition[] | string, domain?: string) => {
+      const explicit = Array.isArray(resourcesOrDomain)
+      const res = explicit ? resourcesOrDomain : resources
+      const domainName = explicit ? domain : resourcesOrDomain
       await options.adapter.ensureSchema?.()
-      return syncPolicies(options.adapter, res, portal)
+      await syncPolicies(options.adapter, res, domainName)
+      // Instance forms mirror the CLI: groups seed after policies, then the
+      // dependency back-fill runs against the seeded state.
+      if (!explicit && options.groups) {
+        await seedGroups(
+          options.adapter,
+          options.groups,
+          resources.flatMap(resource => resource.policies),
+          domainName,
+        )
+        await backfillGroupDependencies(options.adapter, res, domainName)
+      }
     },
-    seedGroups: (groups, allPolicies, portal) =>
-      seedGroups(options.adapter, groups, allPolicies, portal),
+    seedGroups: (groups, seedOptions) =>
+      seedGroups(
+        options.adapter,
+        groups,
+        seedOptions?.allPolicies ?? resources.flatMap(resource => resource.policies),
+        seedOptions?.domain,
+      ),
 
     admin: {
       assignGroup: (subject, group) => engine.assignGroup(normalize(subject), group),
@@ -151,7 +195,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
     },
 
     ownership: {
-      record: (owner, resource, context) => {
+      record: (owner, resource, at) => {
         const ownerId = typeof owner === 'string' ? owner : owner.id
         const subject = typeof owner === 'string' ? undefined : owner
         return options.adapter.recordOwnership([
@@ -159,8 +203,8 @@ export function createRbac(options: CreateRbacOptions): Rbac {
             resourceType: resource.type,
             resourceId: resource.id,
             ownerId,
-            contextType: context?.portal ?? (subject?.portal as string | undefined) ?? '',
-            contextId: context?.contextId ?? (subject?.context_id as string | undefined) ?? '',
+            domain: at?.domain ?? (subject?.domain as string | undefined) ?? '',
+            tenantId: at?.tenantId ?? (subject?.tenant_id as string | undefined) ?? '',
           },
         ])
       },
@@ -181,7 +225,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
 // ── Re-exports (the whole public core surface) ────────────────────────────────
 
 export { Policy } from './core/policy.js'
-export type { ResourceDefinition, ContextPolicies } from './core/policy.js'
+export type { ResourceDefinition, PolicyScopeMap } from './core/policy.js'
 export { Scope, collectScopes } from './core/scope.js'
 export type { ScopeCheckFn, ScopeCheckContext } from './core/scope.js'
 export {
@@ -201,7 +245,7 @@ export { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 export { seedGroups } from './core/seed-groups.js'
 export type { GroupsDefinition, GroupDefinition, GroupPoliciesInput } from './core/seed-groups.js'
 export { defineConfig } from './core/config.js'
-export type { RbacConfig, PortalConfig } from './core/config.js'
+export type { RbacConfig, DomainConfig } from './core/config.js'
 export { qualifyPolicyName, toSubjectRef, normalizeSentinel } from './core/types.js'
 export type {
   AnyPolicyName,
@@ -209,8 +253,8 @@ export type {
   DecisionEvent,
   DecisionHook,
   PolicyMap,
-  PortalName,
-  PortalPolicyName,
+  DomainName,
+  DomainPolicyName,
   QualifiedPolicyName,
   RbacTypes,
   ResourceRef,

@@ -14,30 +14,30 @@ export function registerRbac(app: Express, adapter: StorageAdapter) {
   // Reuse your app's adapter/db handle — same construction as rbac.config.ts.
   const rbac = createRbac({ adapter, resources })
 
-  const { context, portal: createPortal, errorHandler } = rbacExpress(rbac)
+  const { context, domain: createDomain, errorHandler } = rbacExpress(rbac)
 
-  // Opens the per-request rbac context. Register BEFORE any portal guard.
+  // Opens the per-request rbac context. Register BEFORE any domain guard.
   app.use(context())
 
-  const portal = createPortal('{{PORTAL}}', {
-    // Resolved lazily at guard time, memoized per request per portal.
+  const domain = createDomain('{{DOMAIN}}', {
+    // Resolved lazily at guard time, memoized per request per domain.
     // Return null when the request is unauthenticated → 401.
     getSubject: async req => {
       // TODO: resolve your authenticated user (session, JWT, ...):
-      // return { id: req.user.id, context_id: req.user.tenantId }
+      // return { id: req.user.id, tenant_id: req.user.tenantId }
       return null
     },
   })
 
   // Route usage:
   //
-  // app.get('/posts/:id', portal.requirePolicy('posts.read'), handler)
+  // app.get('/posts/:id', domain.requirePolicy('posts.read'), handler)
   //
   // Scoped policies need a resource resolver so row-level scopes can run:
   //
   // app.patch(
   //   '/posts/:id',
-  //   portal.requirePolicy('posts.update', {
+  //   domain.requirePolicy('posts.update', {
   //     resource: req => ({ type: 'post', id: req.params.id }),
   //   }),
   //   handler,
@@ -46,5 +46,5 @@ export function registerRbac(app: Express, adapter: StorageAdapter) {
   // Register AFTER your routes so rbac errors become JSON responses:
   app.use(errorHandler())
 
-  return { rbac, portal }
+  return { rbac, domain }
 }

@@ -56,7 +56,50 @@ The CLI detects your framework and ORM, asks a few questions, and writes the sta
 
 Output shown for Drizzle. Prisma projects get `prisma/rbac.prisma` instead of `src/db/rbac-schema.ts`. MongoDB projects get no schema file at all.
 
-`rbac.config.ts` tells the CLI where your policies live and how to reach your database. `policies.ts` and `groups.ts` are starters. Replace them with your own.
+`rbac.config.ts` tells the CLI where your policies live and how to reach your database. `policies.ts` and `groups.ts` are starters. Replace them with your own:
+
+::: code-group
+
+```ts [src/rbac/policies.ts]
+// What staff can do
+import { Policy, Scope } from '@kyrobit/rbac'
+import type { ResourceDefinition } from '@kyrobit/rbac'
+
+export const resources: ResourceDefinition[] = [
+  {
+    type: 'sale',
+    // table: sales, // link your table to track who created each sale
+    policies: [
+      new Policy('sales.view'),
+      new Policy('sales.create', 'Create sales', ['sales.view']),
+      new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()]),
+    ],
+  },
+  {
+    type: 'product',
+    policies: [new Policy('products.view'), new Policy('products.update')],
+  },
+]
+```
+
+```ts [src/rbac/groups.ts]
+// Job titles
+import type { GroupsDefinition } from '@kyrobit/rbac'
+
+export const groups: GroupsDefinition = {
+  cashier: {
+    label: 'Cashier',
+    // 'owned': a cashier can void only their own sales
+    policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+  },
+  manager: {
+    label: 'Manager', // a manager can void any sale
+    policies: ['sales.view', 'sales.create', 'sales.void', 'products.view', 'products.update'],
+  },
+}
+```
+
+:::
 
 ## 3. Create the tables
 
@@ -130,12 +173,12 @@ const rbac = createRbac({ adapter, resources })
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-const admin = app.rbac.portal('admin', {
-  // Return the logged-in user, or null for a 401
+const staff = app.rbac.domain({
+  // Return the logged-in staff member, or null for a 401
   getSubject: async req => lookupSession(req), // your auth
 })
 
-app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => [])
+app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => [])
 
 await app.listen({ port: 3000 })
 ```
@@ -151,17 +194,17 @@ import { rbacExpress } from '@kyrobit/rbac/express'
 import { resources } from './rbac/policies.js'
 
 const rbac = createRbac({ adapter, resources })
-const { context, portal, errorHandler } = rbacExpress(rbac)
+const { context, domain, errorHandler } = rbacExpress(rbac)
 
 const app = express()
 app.use(context()) // before any guard
 
-const admin = portal('admin', {
-  // Return the logged-in user, or null for a 401
+const staff = domain({
+  // Return the logged-in staff member, or null for a 401
   getSubject: async req => lookupSession(req), // your auth
 })
 
-app.get('/posts', admin.requirePolicy('posts.read'), (req, res) => {
+app.get('/sales', staff.requirePolicy('sales.view'), (req, res) => {
   res.json([])
 })
 
@@ -173,15 +216,15 @@ Details: [Express](/guide/express).
 
 ## 5. Sync
 
-Push your policies and groups to the database:
+Sync loads both files: policies and groups. Push them to the database:
 
 ```sh
 npx rbac sync
 ```
 
 ```
-[rbac] Synced 4 policies.
-[rbac] Seeded 2 groups for portal "admin".
+[rbac] Synced 5 policies.
+[rbac] Seeded 2 groups.
 [rbac] Wrote /your/project/rbac.d.ts
 ```
 
@@ -192,7 +235,7 @@ npx rbac sync
 Start your server and hit a guarded route without logging in:
 
 ```sh
-curl -i localhost:3000/posts
+curl -i localhost:3000/sales
 ```
 
 ```

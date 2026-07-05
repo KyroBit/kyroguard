@@ -5,17 +5,17 @@
  * RouteSpec[] into a running app.
  *
  * ── Harness protocol — every makeApp implementation MUST ────────────────────
- * 1. Create ONE portal per distinct `route.portal` via the integration's
- *    portal factory. When `getSubjectFrom === 'header'`, getSubject reads:
+ * 1. Create ONE domain per distinct `route.domain` via the integration's
+ *    domain factory. When `getSubjectFrom === 'header'`, getSubject reads:
  *      x-subject-id   → subject id; absent or empty → return null (→ 401)
- *      x-context-id   → context_id, when present
+ *      x-tenant-id    → tenant_id, when present
  *      x-super: '1'   → is_super: true
  *    getSubject must count its own invocations per request, and every
  *    response must carry the header `x-getsubject-calls` with that request's
  *    total (proves guard-time memoization).
  * 2. Mount each route at (method, path). When `policy` is set, attach one
  *    requirePolicy guard per '+'-separated UNQUALIFIED policy name (the
- *    portal qualifies), forwarding `resource` when provided. The success
+ *    domain qualifies), forwarding `resource` when provided. The success
  *    handler responds 200 with JSON `{ ok: true }`.
  * 3. Register a framework-level hook/middleware that adds the header
  *    `x-app-hook: ran` to EVERY response, including error responses —
@@ -33,7 +33,7 @@ import type { SuiteTestApi } from './adapter-suite.js'
 export interface RouteSpec {
   method: 'GET' | 'POST'
   path: string
-  portal: string
+  domain: string
   policy?: string
   resource?: (req: any) => { type: string; id: string } | null
   getSubjectFrom?: 'header'
@@ -71,15 +71,15 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   const withApp = async (
     config: {
       routes: RouteSpec[]
-      portals?: string[]
+      domains?: string[]
       seed?: (rbac: Rbac) => Promise<void>
     },
     fn: (app: TestApp, rbac: Rbac) => Promise<void>,
   ): Promise<void> => {
     const rbac = createRbac({ adapter: memoryAdapter(), resources: makeResources() })
     try {
-      for (const portal of config.portals ?? ['admin']) {
-        await rbac.sync(makeResources(), portal)
+      for (const domain of config.domains ?? ['admin']) {
+        await rbac.sync(makeResources(), domain)
       }
       await config.seed?.(rbac)
       const app = await options.makeApp(rbac, config.routes)
@@ -96,7 +96,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   const route = (over: Partial<RouteSpec> = {}): RouteSpec => ({
     method: 'GET',
     path: '/thing',
-    portal: 'admin',
+    domain: 'admin',
     policy: 'thing.read',
     getSubjectFrom: 'header',
     ...over,
@@ -125,12 +125,12 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     rbac: Rbac,
     subjectId: string,
     policy: string,
-    opts: { portal?: string; contextId?: string; scope?: string | null } = {},
+    opts: { domain?: string; tenantId?: string; scope?: string | null } = {},
   ): Promise<void> => {
-    const portal = opts.portal ?? 'admin'
+    const domain = opts.domain ?? 'admin'
     return rbac.admin.assignPolicy(
-      { subjectId, portal, contextId: opts.contextId },
-      qualifyPolicyName(portal, policy),
+      { subjectId, domain, tenantId: opts.tenantId },
+      qualifyPolicyName(domain, policy),
       opts.scope,
     )
   }
@@ -162,12 +162,12 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('4: portal isolation — grant on portal admin does not satisfy a branch route → 403', () =>
+    it('4: domain isolation — grant on domain admin does not satisfy a branch route → 403', () =>
       withApp(
         {
-          portals: ['admin', 'branch'],
-          routes: [route({ portal: 'branch', path: '/branch/thing' })],
-          seed: rbac => grant(rbac, 'u1', 'thing.read', { portal: 'admin' }),
+          domains: ['admin', 'branch'],
+          routes: [route({ domain: 'branch', path: '/branch/thing' })],
+          seed: rbac => grant(rbac, 'u1', 'thing.read', { domain: 'admin' }),
         },
         async app => {
           const res = await get(app, '/branch/thing', asUser('u1'))
@@ -176,23 +176,23 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('5: context isolation — a grant at ctx1 only matches x-context-id: ctx1', () =>
+    it('5: tenant isolation — a grant at tenant t1 only matches x-tenant-id: t1', () =>
       withApp(
         {
           routes: [route()],
-          seed: rbac => grant(rbac, 'u1', 'thing.read', { contextId: 'ctx1' }),
+          seed: rbac => grant(rbac, 'u1', 'thing.read', { tenantId: 't1' }),
         },
         async app => {
-          const allowed = await get(app, '/thing', asUser('u1', { 'x-context-id': 'ctx1' }))
+          const allowed = await get(app, '/thing', asUser('u1', { 'x-tenant-id': 't1' }))
           expect(allowed.status).toBe(200)
 
-          const wrongContext = await get(app, '/thing', asUser('u1', { 'x-context-id': 'ctx2' }))
-          expect(wrongContext.status).toBe(403)
-          expect(wrongContext.body.code).toBe('RBAC_POLICY_DENIED')
+          const wrongTenant = await get(app, '/thing', asUser('u1', { 'x-tenant-id': 't2' }))
+          expect(wrongTenant.status).toBe(403)
+          expect(wrongTenant.body.code).toBe('RBAC_POLICY_DENIED')
 
-          const noContext = await get(app, '/thing', asUser('u1'))
-          expect(noContext.status).toBe(403)
-          expect(noContext.body.code).toBe('RBAC_POLICY_DENIED')
+          const noTenant = await get(app, '/thing', asUser('u1'))
+          expect(noTenant.status).toBe(403)
+          expect(noTenant.body.code).toBe('RBAC_POLICY_DENIED')
         },
       ))
 
@@ -246,32 +246,32 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('10: two portals on one app resolve independent subjects (v0 forPortal regression)', () =>
+    it('10: two domains on one app resolve independent subjects (v0 forDomain regression)', () =>
       withApp(
         {
-          portals: ['admin', 'branch'],
+          domains: ['admin', 'branch'],
           routes: [
             route({ path: '/admin/thing' }),
-            route({ portal: 'branch', path: '/branch/thing' }),
+            route({ domain: 'branch', path: '/branch/thing' }),
           ],
           seed: async rbac => {
-            await grant(rbac, 'u1', 'thing.read', { portal: 'admin' })
-            await grant(rbac, 'u2', 'thing.read', { portal: 'branch' })
+            await grant(rbac, 'u1', 'thing.read', { domain: 'admin' })
+            await grant(rbac, 'u2', 'thing.read', { domain: 'branch' })
           },
         },
         async app => {
           expect((await get(app, '/admin/thing', asUser('u1'))).status).toBe(200)
           expect((await get(app, '/branch/thing', asUser('u2'))).status).toBe(200)
-          // Registering the second portal must not clobber the first.
+          // Registering the second domain must not clobber the first.
           expect((await get(app, '/admin/thing', asUser('u1'))).status).toBe(200)
 
-          const crossPortal = await get(app, '/branch/thing', asUser('u1'))
-          expect(crossPortal.status).toBe(403)
-          expect(crossPortal.body.code).toBe('RBAC_POLICY_DENIED')
+          const crossDomain = await get(app, '/branch/thing', asUser('u1'))
+          expect(crossDomain.status).toBe(403)
+          expect(crossDomain.body.code).toBe('RBAC_POLICY_DENIED')
         },
       ))
 
-    it('11: getSubject runs exactly once per request across stacked guards from one portal', () =>
+    it('11: getSubject runs exactly once per request across stacked guards from one domain', () =>
       withApp(
         {
           routes: [route({ policy: 'thing.read+other.read' })],
@@ -314,8 +314,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           seed: rbac =>
             rbac.seedGroups(
               { editors: { label: 'Editors', policies: ['thing.read'] } },
-              undefined,
-              'admin',
+              { domain: 'admin' },
             ),
         },
         async (app, rbac) => {
@@ -323,11 +322,11 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           const denied = await get(app, '/thing', asUser('u1'))
           expect(denied.status).toBe(403)
 
-          await rbac.admin.assignGroup({ subjectId: 'u1', portal: 'admin' }, 'editors')
+          await rbac.admin.assignGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
           const allowed = await get(app, '/thing', asUser('u1'))
           expect(allowed.status).toBe(200)
 
-          await rbac.admin.removeGroup({ subjectId: 'u1', portal: 'admin' }, 'editors')
+          await rbac.admin.removeGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
           const revoked = await get(app, '/thing', asUser('u1'))
           expect(revoked.status).toBe(403)
           expect(revoked.body.code).toBe('RBAC_POLICY_DENIED')

@@ -8,17 +8,18 @@ const enc = encodeURIComponent
  * Core-owned key derivation — cache implementations never construct keys.
  *
  * Regression note: v0 derived keys with
- * `[subjectId, portal, contextId].filter(Boolean).join(':')`, which collides
+ * `[subjectId, domain, tenantId].filter(Boolean).join(':')`, which collides
  * across positions (('u1', null, 'admin') === ('u1', 'admin', null)) and on
- * ':' inside components — one security context could read another's policy
- * map. Fixed arity + encodeURIComponent makes both collisions impossible.
+ * ':' inside components — one (subject, domain, tenant) tuple could read
+ * another's policy map. Fixed arity + encodeURIComponent makes both
+ * collisions impossible.
  */
-export function policyCacheKey(subjectId: string, portal: string, contextId: string): PolicyCacheKey {
+export function policyCacheKey(subjectId: string, domain: string, tenantId: string): PolicyCacheKey {
   return {
-    id: `${PREFIX}:${enc(subjectId)}:${enc(portal)}:${enc(contextId)}`,
+    id: `${PREFIX}:${enc(subjectId)}:${enc(domain)}:${enc(tenantId)}`,
     subjectId,
-    portal,
-    contextId,
+    domain,
+    tenantId,
   }
 }
 

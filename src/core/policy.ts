@@ -28,8 +28,8 @@ export interface ResourceDefinition {
   policies: Policy[]
   /** Drizzle table or Mongoose model — consumed by trackedDb / the plugin. */
   table?: unknown
-  /** context name → policy name → scope names (query-scoping config). */
-  context?: Record<string, ContextPolicies>
+  /** domain name → policy name → scope names (query-scoping config). */
+  domains?: Record<string, PolicyScopeMap>
 }
 
-export type ContextPolicies = Record<string, string[]>
+export type PolicyScopeMap = Record<string, string[]>

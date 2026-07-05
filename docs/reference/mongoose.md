@@ -53,7 +53,7 @@ Returns the six rbac models for direct queries. Safe to call repeatedly on one c
 
 ```ts
 const models = rbacModels(connection)
-const editors = await models.userPolicyGroup.find({ portal: 'admin' })
+const cashiers = await models.userPolicyGroup.find({ domain: 'branch' })
 ```
 
 The document types (`RbacPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
@@ -66,41 +66,41 @@ import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void
 ```
 
-Schema plugin for your own models. It records ownership on save and scopes find queries per portal. Apply it before compiling the model.
+Schema plugin for your own models. It records ownership on save and scopes find queries per domain. Apply it before compiling the model.
 
 | Option | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | Your `createRbac` instance. |
-| `type` | `string` | Resource type in the ownership store, for example `'post'`. |
+| `type` | `string` | Resource type in the ownership store, for example `'sale'`. |
 | `queryScopes` | `Record<string, (subject: Subject) => object>` | Scope name to Mongo filter builder. Optional. |
-| `context` | `Record<string, Record<string, string[]>>` | Portal to policy name to scope names. Optional. |
+| `domains` | `Record<string, Record<string, string[]>>` | Domain to policy name to scope names. Optional. |
 
 ```ts
 import { Schema, model } from 'mongoose'
 import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 import { rbac } from './rbac.js'
 
-const postSchema = new Schema({ title: String, authorId: String, branchId: String })
+const saleSchema = new Schema({ total: Number, cashierId: String, branchId: String })
 
-postSchema.plugin(rbacMongoosePlugin, {
+saleSchema.plugin(rbacMongoosePlugin, {
   rbac,
-  type: 'post',
+  type: 'sale',
   queryScopes: {
-    'same-branch': subject => ({ branchId: subject.context_id }),
+    'same-branch': subject => ({ branchId: subject.tenant_id }),
   },
-  context: {
-    branch: { 'posts.read': ['same-branch'] },
+  domains: {
+    branch: { 'sales.view': ['same-branch'] },
   },
 })
 
-export const Post = model('Post', postSchema)
+export const Sale = model('Sale', saleSchema)
 ```
 
 ### What the plugin does
 
 - `save` and `insertMany` record ownership for the current user. No user means no ownership row and no error.
 - Document `deleteOne` and `findOneAndDelete` remove the document's ownership rows.
-- `find` queries gain the scope filters for the user's portal, OR-combined, then AND-ed with your filter. No user or no matching portal means the query runs unscoped. See [Scopes](/guide/scopes).
+- `find` queries gain the scope filters for the user's domain, OR-combined, then AND-ed with your filter. No user or no matching domain means the query runs unscoped. See [Scopes](/guide/scopes).
 
 ::: warning
 `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `rbac.ownership.record()` and `rbac.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).

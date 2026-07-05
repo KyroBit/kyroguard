@@ -1,7 +1,7 @@
 /**
  * Express-integration specifics beyond the shared framework contract:
  * errorHandler semantics, formatError, next(err)-only guard failures (no
- * unhandled rejections), independent portals, ALS propagation under Bun,
+ * unhandled rejections), independent domains, ALS propagation under Bun,
  * and mounting under an express.Router.
  */
 
@@ -23,9 +23,9 @@ const resources = (): ResourceDefinition[] => [
   { type: 'thing', policies: [new Policy('thing.read')] },
 ]
 
-async function makeRbac(portals: string[] = ['admin']): Promise<Rbac> {
+async function makeRbac(domains: string[] = ['admin']): Promise<Rbac> {
   const rbac = createRbac({ adapter: memoryAdapter(), resources: resources() })
-  for (const portal of portals) await rbac.sync(resources(), portal)
+  for (const domain of domains) await rbac.sync(resources(), domain)
   return rbac
 }
 
@@ -168,8 +168,8 @@ describe('formatError option', () => {
         }),
       })
       app.use(integration.context())
-      const portal = integration.portal('admin', { getSubject: headerSubject })
-      app.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      const domain = integration.domain('admin', { getSubject: headerSubject })
+      app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
       const served = await serve(app)
       try {
@@ -194,12 +194,12 @@ describe('guard error strategy', () => {
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const portal = integration.portal('admin', {
+      const domain = integration.domain('admin', {
         getSubject: () => {
           throw new Error('getSubject exploded')
         },
       })
-      app.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       // errorHandler forwards non-RbacError → express default terminal handler.
       app.use(integration.errorHandler())
       const served = await serve(app)
@@ -228,13 +228,13 @@ describe('guard error strategy', () => {
         next()
       })
       app.use(integration.context())
-      const portal = integration.portal('admin', {
+      const domain = integration.domain('admin', {
         getSubject: async () => {
           await Promise.resolve()
           throw new Error('async explosion')
         },
       })
-      app.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       let sawDownstream = false
       app.use(integration.errorHandler())
       app.use(((error: unknown, _req, res, _next) => {
@@ -260,22 +260,22 @@ describe('guard error strategy', () => {
   })
 })
 
-// ── (d) two portals on one app ───────────────────────────────────────────────
+// ── (d) two domains on one app ───────────────────────────────────────────────
 
-describe('portal independence', () => {
-  test('two portals resolve subjects and grants independently', async () => {
+describe('domain independence', () => {
+  test('two domains resolve subjects and grants independently', async () => {
     const rbac = await makeRbac(['admin', 'branch'])
     try {
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const admin = integration.portal('admin', { getSubject: headerSubject })
-      const branch = integration.portal('branch', { getSubject: headerSubject })
+      const admin = integration.domain('admin', { getSubject: headerSubject })
+      const branch = integration.domain('branch', { getSubject: headerSubject })
       app.get('/admin/thing', admin.requirePolicy('thing.read'), okHandler)
       app.get('/branch/thing', branch.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
 
-      // Portal sugar auto-qualifies: 'thing.read' → '<portal>.thing.read'.
+      // Domain sugar auto-qualifies: 'thing.read' → '<domain>.thing.read'.
       await admin.assignPolicy('u1', 'thing.read')
       await branch.assignPolicy('u2', 'thing.read')
 
@@ -283,7 +283,7 @@ describe('portal independence', () => {
       try {
         expect((await getJson(`${served.url}/admin/thing`, { 'x-subject-id': 'u1' })).status).toBe(200)
         expect((await getJson(`${served.url}/branch/thing`, { 'x-subject-id': 'u2' })).status).toBe(200)
-        // Registering the second portal must not clobber the first (v0 regression).
+        // Registering the second domain must not clobber the first (v0 regression).
         expect((await getJson(`${served.url}/admin/thing`, { 'x-subject-id': 'u1' })).status).toBe(200)
 
         const cross1 = await getJson(`${served.url}/branch/thing`, { 'x-subject-id': 'u1' })
@@ -308,14 +308,14 @@ describe('ALS propagation', () => {
     const rbac = await makeRbac()
     try {
       await rbac.admin.assignPolicy(
-        { subjectId: 'u1', portal: 'admin' },
+        { subjectId: 'u1', domain: 'admin' },
         'admin.thing.read',
       )
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const portal = integration.portal('admin', { getSubject: headerSubject })
-      app.get('/thing', portal.requirePolicy('thing.read'), (async (_req, res) => {
+      const domain = integration.domain('admin', { getSubject: headerSubject })
+      app.get('/thing', domain.requirePolicy('thing.read'), (async (_req, res) => {
         // Cross an await boundary before reading — the Bun regression case.
         await new Promise(resolve => setTimeout(resolve, 5))
         const store = rbac.engine.store.get()
@@ -323,8 +323,8 @@ describe('ALS propagation', () => {
         res.json({
           hasStore: store !== undefined,
           subjectId: subject?.id ?? null,
-          subjectPortal: subject?.portal ?? null,
-          memoized: store?.portalSubjects.get('admin')?.id ?? null,
+          subjectDomain: subject?.domain ?? null,
+          memoized: store?.domainSubjects.get('admin')?.id ?? null,
         })
       }) as RequestHandler)
       app.use(integration.errorHandler())
@@ -335,7 +335,7 @@ describe('ALS propagation', () => {
         expect(res.body).toEqual({
           hasStore: true,
           subjectId: 'u1',
-          subjectPortal: 'admin',
+          subjectDomain: 'admin',
           memoized: 'u1',
         })
       } finally {
@@ -352,8 +352,8 @@ describe('ALS propagation', () => {
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const portal = integration.portal('admin', { getSubject: headerSubject })
-      app.get('/echo', portal.contextHook(), (async (_req, res) => {
+      const domain = integration.domain('admin', { getSubject: headerSubject })
+      app.get('/echo', domain.subjectHook(), (async (_req, res) => {
         await new Promise(resolve => setTimeout(resolve, 20))
         res.json({ id: rbac.engine.store.getSubject()?.id ?? null })
       }) as RequestHandler)
@@ -379,8 +379,8 @@ describe('ALS propagation', () => {
       const app = express()
       const integration = rbacExpress(rbac)
       // context() deliberately NOT registered.
-      const portal = integration.portal('admin', { getSubject: headerSubject })
-      app.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      const domain = integration.domain('admin', { getSubject: headerSubject })
+      app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
       const served = await serve(app)
       try {
@@ -404,14 +404,14 @@ describe('router mounting', () => {
   test('guards work when routes live on a Router mounted at /api', async () => {
     const rbac = await makeRbac()
     try {
-      await rbac.admin.assignPolicy({ subjectId: 'u1', portal: 'admin' }, 'admin.thing.read')
+      await rbac.admin.assignPolicy({ subjectId: 'u1', domain: 'admin' }, 'admin.thing.read')
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const portal = integration.portal('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { getSubject: headerSubject })
 
       const router = Router()
-      router.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      router.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       app.use('/api', router)
       app.use(integration.errorHandler())
 
@@ -442,10 +442,10 @@ describe('router mounting', () => {
       const app = express()
       const integration = rbacExpress(rbac)
       app.use(integration.context())
-      const portal = integration.portal('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { getSubject: headerSubject })
 
       const router = Router()
-      router.get('/thing', portal.requirePolicy('thing.read'), okHandler)
+      router.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       router.use(integration.errorHandler())
       app.use('/api', router)
 

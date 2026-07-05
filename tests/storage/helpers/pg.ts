@@ -6,7 +6,7 @@
  * drizzle's pglite driver, with the six rbac tables created via hand-written
  * DDL that mirrors src/storage/drizzle/schema/pg.ts exactly:
  *  - text ids (application-generated via $defaultFn/createId — no DB default),
- *  - NOT NULL DEFAULT '' sentinels on portal/context columns (S1),
+ *  - NOT NULL DEFAULT '' sentinels on domain/tenant_id columns (S1),
  *  - real booleans on rbac_policy_groups,
  *  - jsonb scope_options/depends_on with '[]' defaults,
  *  - the unique constraints/indexes the idempotent upserts rely on (S10, S13),
@@ -28,7 +28,7 @@ export const RBAC_PG_DDL = `
 CREATE TABLE "rbac_policies" (
   "id" text PRIMARY KEY,
   "name" text NOT NULL UNIQUE,
-  "portal" text NOT NULL DEFAULT '',
+  "domain" text NOT NULL DEFAULT '',
   "label" text NOT NULL,
   "scope_options" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "depends_on" jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -61,25 +61,25 @@ CREATE TABLE "rbac_user_policy_groups" (
   "id" text PRIMARY KEY,
   "subject_id" text NOT NULL,
   "policy_group_id" text NOT NULL REFERENCES "rbac_policy_groups"("id"),
-  "portal" text NOT NULL DEFAULT '',
-  "context_id" text NOT NULL DEFAULT '',
+  "domain" text NOT NULL DEFAULT '',
+  "tenant_id" text NOT NULL DEFAULT '',
   "created_at" timestamp NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX "rbac_upg_tuple_uq"
-  ON "rbac_user_policy_groups" ("subject_id", "policy_group_id", "portal", "context_id");
+  ON "rbac_user_policy_groups" ("subject_id", "policy_group_id", "domain", "tenant_id");
 CREATE INDEX "rbac_upg_subject_idx" ON "rbac_user_policy_groups" ("subject_id");
 
 CREATE TABLE "rbac_user_policies" (
   "id" text PRIMARY KEY,
   "subject_id" text NOT NULL,
   "policy_id" text NOT NULL REFERENCES "rbac_policies"("id"),
-  "portal" text NOT NULL DEFAULT '',
-  "context_id" text NOT NULL DEFAULT '',
+  "domain" text NOT NULL DEFAULT '',
+  "tenant_id" text NOT NULL DEFAULT '',
   "scope" text,
   "created_at" timestamp NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX "rbac_up_tuple_uq"
-  ON "rbac_user_policies" ("subject_id", "policy_id", "portal", "context_id");
+  ON "rbac_user_policies" ("subject_id", "policy_id", "domain", "tenant_id");
 CREATE INDEX "rbac_up_subject_idx" ON "rbac_user_policies" ("subject_id");
 
 CREATE TABLE "rbac_resource_owners" (
@@ -87,8 +87,8 @@ CREATE TABLE "rbac_resource_owners" (
   "resource_type" text NOT NULL,
   "resource_id" text NOT NULL,
   "owner_id" text NOT NULL,
-  "context_type" text NOT NULL DEFAULT '',
-  "context_id" text NOT NULL DEFAULT '',
+  "domain" text NOT NULL DEFAULT '',
+  "tenant_id" text NOT NULL DEFAULT '',
   "created_at" timestamp NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX "rbac_ro_tuple_uq"

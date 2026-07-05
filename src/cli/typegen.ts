@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-export interface PortalTypeInfo {
-  /** '' sentinel for a portal-less setup. */
+export interface DomainTypeInfo {
+  /** '' sentinel for a setup with no domains. */
   name: string
   /** UNQUALIFIED policy names. */
   policyNames: string[]
@@ -11,24 +11,24 @@ export interface PortalTypeInfo {
 /**
  * Writes rbac.d.ts augmenting the RbacTypes interface. Every interpolated
  * name — union literals AND property keys — goes through JSON.stringify so
- * user-controlled policy/portal names can never inject declaration code
+ * user-controlled policy/domain names can never inject declaration code
  * (v0 interpolated them raw).
  */
-export async function generateTypes(portals: PortalTypeInfo[], output: string): Promise<void> {
+export async function generateTypes(domains: DomainTypeInfo[], output: string): Promise<void> {
   const outputPath = resolve(output)
   await mkdir(dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, renderDeclaration(portals), 'utf8')
+  await writeFile(outputPath, renderDeclaration(domains), 'utf8')
 }
 
-function renderDeclaration(portals: PortalTypeInfo[]): string {
-  const portalUnion = union(portals.map(portal => portal.name))
-  const allPolicies = union(portals.flatMap(portal => portal.policyNames))
+function renderDeclaration(domains: DomainTypeInfo[]): string {
+  const domainUnion = union(domains.map(domain => domain.name))
+  const allPolicies = union(domains.flatMap(domain => domain.policyNames))
 
-  const portalPolicies =
-    portals.length === 0
+  const domainPolicies =
+    domains.length === 0
       ? 'Record<string, string>'
-      : `{\n${portals
-          .map(portal => `      ${JSON.stringify(portal.name)}: ${union(portal.policyNames)}`)
+      : `{\n${domains
+          .map(domain => `      ${JSON.stringify(domain.name)}: ${union(domain.policyNames)}`)
           .join('\n')}\n    }`
 
   return [
@@ -40,9 +40,9 @@ function renderDeclaration(portals: PortalTypeInfo[]): string {
     '',
     "declare module '@kyrobit/rbac' {",
     '  interface RbacTypes {',
-    `    Portal: ${portalUnion}`,
+    `    Domain: ${domainUnion}`,
     `    PolicyName: ${allPolicies}`,
-    `    PortalPolicies: ${portalPolicies}`,
+    `    DomainPolicies: ${domainPolicies}`,
     '  }',
     '}',
     '',

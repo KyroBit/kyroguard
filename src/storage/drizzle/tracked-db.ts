@@ -18,8 +18,8 @@ export interface TrackedDbOptions {
   resources: ResourceDefinition[]
   /**
    * scope name → condition builder. Query scoping activates for a select on a
-   * registered resource when the resource's `context` config — keyed by the
-   * SUBJECT'S PORTAL (`resource.context[subject.portal ?? '']` maps
+   * registered resource when the resource's `domains` config — keyed by the
+   * SUBJECT'S DOMAIN (`resource.domains[subject.domain ?? '']` maps
    * policy name → [scope names]) — names scopes present here. ALL matching
    * conditions are OR-combined, then AND-ed into the user's where().
    */
@@ -51,7 +51,7 @@ interface InsertTracking {
 
 const EXEC_METHODS = new Set(['execute', 'run', 'all', 'get'])
 
-const OWNERSHIP_KEYS = ['resourceType', 'resourceId', 'ownerId', 'contextType', 'contextId'] as const
+const OWNERSHIP_KEYS = ['resourceType', 'resourceId', 'ownerId', 'domain', 'tenantId'] as const
 
 // Drizzle builders (any dialect) implement getSQL(); resolved results do not.
 function isQueryBuilder(value: unknown): value is Record<string | symbol, unknown> {
@@ -112,8 +112,8 @@ async function recordFor(t: InsertTracking, subject: Subject, ids: string[]): Pr
       resourceType: t.resourceType,
       resourceId: id,
       ownerId: subject.id,
-      contextType: subject.portal ?? '',
-      contextId: subject.context_id ?? '',
+      domain: subject.domain ?? '',
+      tenantId: subject.tenant_id ?? '',
       ...overrides,
     })),
   )
@@ -224,13 +224,13 @@ function wrapScopedFrom(builder: any, scope: SQL): any {
 function buildScopeSql(ctx: Ctx, raw: unknown, table: unknown): SQL | null {
   if (!ctx.queryScopes) return null
   const resource = ctx.tableMap.get(table)
-  if (!resource?.context) return null
+  if (!resource?.domains) return null
   const subject = ctx.engine.store.getSubject()
   if (!subject?.id) return null
-  const contextPolicies = resource.context[subject.portal ?? '']
-  if (!contextPolicies) return null
+  const domainPolicies = resource.domains[subject.domain ?? '']
+  if (!domainPolicies) return null
 
-  const scopeNames = [...new Set(Object.values(contextPolicies).flat())]
+  const scopeNames = [...new Set(Object.values(domainPolicies).flat())]
   const conditions: SQL[] = []
   for (const name of scopeNames) {
     const build = ctx.queryScopes[name]
@@ -310,7 +310,7 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
  * Wraps a drizzle database so that:
  * - inserts into registered resource tables record ownership rows
  *   (atomically with the insert inside transactions),
- * - selects on registered resources get portal-configured query scoping,
+ * - selects on registered resources get domain-configured query scoping,
  * - `db.untracked` exposes the raw handle.
  * update/delete are intentionally not intercepted.
  */

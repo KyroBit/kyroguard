@@ -16,12 +16,12 @@ export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter
 
   await app.register(rbacFastify(rbac))
 
-  const portal = app.rbac.portal('{{PORTAL}}', {
-    // Resolved lazily at guard time, memoized per request per portal.
+  const domain = app.rbac.domain('{{DOMAIN}}', {
+    // Resolved lazily at guard time, memoized per request per domain.
     // Return null when the request is unauthenticated → 401.
     getSubject: async request => {
       // TODO: resolve your authenticated user (session, JWT, ...):
-      // return { id: request.user.id, context_id: request.user.tenantId }
+      // return { id: request.user.id, tenant_id: request.user.tenantId }
       return null
     },
   })
@@ -30,7 +30,7 @@ export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter
   //
   // app.get(
   //   '/posts/:id',
-  //   { preHandler: portal.requirePolicy('posts.read') },
+  //   { preHandler: domain.requirePolicy('posts.read') },
   //   async request => { /* ... */ },
   // )
   //
@@ -39,12 +39,12 @@ export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter
   // app.patch(
   //   '/posts/:id',
   //   {
-  //     preHandler: portal.requirePolicy('posts.update', {
+  //     preHandler: domain.requirePolicy('posts.update', {
   //       resource: request => ({ type: 'post', id: (request.params as { id: string }).id }),
   //     }),
   //   },
   //   async request => { /* ... */ },
   // )
 
-  return { rbac, portal }
+  return { rbac, domain }
 }

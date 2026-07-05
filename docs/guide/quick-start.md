@@ -2,6 +2,8 @@
 
 A guarded API in five minutes. No database needed. The in-memory adapter holds everything.
 
+The example: the staff API of a hardware store.
+
 ## 1. Install
 
 ```sh
@@ -20,47 +22,47 @@ import { createRbac, Policy } from '@kyrobit/rbac'
 import { rbacFastify } from '@kyrobit/rbac/fastify'
 import { memoryAdapter } from '@kyrobit/rbac/testing'
 
-// Two policies on one resource
-const resources = [
-  { type: 'post', policies: [new Policy('posts.read'), new Policy('posts.write')] },
-]
+// What staff can do
+const policies = [new Policy('sales.view'), new Policy('sales.create')]
 
-const rbac = createRbac({ adapter: memoryAdapter(), resources })
+// One job title
+const groups = {
+  cashier: { label: 'Cashier', policies: ['sales.view', 'sales.create'] },
+}
 
-// Load the policies and one group into the in-memory store
-await rbac.sync(resources, 'app')
-await rbac.seedGroups(
-  { editor: { label: 'Editor', policies: ['posts.read', 'posts.write'] } },
-  undefined, // optional second argument, not needed here
-  'app',     // the portal name
-)
+const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
+
+// Loads policies + groups — with a real database you run: npx rbac sync
+await rbac.sync()
 
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-// Demo auth: the user id comes from a header
-const portal = app.rbac.portal('app', {
+// Demo auth: the staff id comes from a header
+const staff = app.rbac.domain({
   getSubject: async req => {
     const id = req.headers['x-user-id']
     return typeof id === 'string' ? { id } : null
   },
 })
 
-// The guarded route
-app.get('/posts', { preHandler: portal.requirePolicy('posts.read') }, async () => [
-  { id: '1', title: 'Hello' },
+// The register screen: staff need sales.view
+app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => [
+  { id: 'sale-1', item: 'claw hammer', total: 12.5 },
 ])
 
-// Assignment endpoint (unguarded, for the demo)
-app.post('/make-editor/:userId', async req => {
+// Hiring endpoint (unguarded, for the demo)
+app.post('/hire/:userId', async req => {
   const { userId } = req.params as { userId: string }
-  await portal.assignGroup(userId, 'editor')
-  return { userId, group: 'editor' }
+  await staff.assignGroup(userId, 'cashier')
+  return { userId, group: 'cashier' }
 })
 
 await app.listen({ port: 3000 })
 console.log('listening on http://localhost:3000')
 ```
+
+In a real project the policies and groups live in files. You write `src/rbac/policies.ts` and `src/rbac/groups.ts`, and `npx rbac sync` loads both. This file does the same thing in code.
 
 Run it. `npx` downloads `tsx` on first use:
 
@@ -70,10 +72,10 @@ npx tsx server.ts
 
 ## 3. Get denied
 
-No user on the request:
+No staff member on the request:
 
 ```sh
-curl -i localhost:3000/posts
+curl -i localhost:3000/sales
 ```
 
 ```
@@ -81,10 +83,10 @@ HTTP/1.1 401 Unauthorized
 {"statusCode":401,"code":"RBAC_UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
 ```
 
-A user without the policy:
+Someone not hired yet:
 
 ```sh
-curl -i localhost:3000/posts -H 'x-user-id: u1'
+curl -i localhost:3000/sales -H 'x-user-id: u1'
 ```
 
 ```
@@ -92,27 +94,27 @@ HTTP/1.1 403 Forbidden
 {"statusCode":403,"code":"RBAC_POLICY_DENIED","error":"Forbidden","message":"Forbidden"}
 ```
 
-## 4. Assign the group
+## 4. Hire them
 
 ```sh
-curl -X POST localhost:3000/make-editor/u1
+curl -X POST localhost:3000/hire/u1
 ```
 
 ```
-{"userId":"u1","group":"editor"}
+{"userId":"u1","group":"cashier"}
 ```
 
 ## 5. Get allowed
 
 ```sh
-curl localhost:3000/posts -H 'x-user-id: u1'
+curl localhost:3000/sales -H 'x-user-id: u1'
 ```
 
 ```
-[{"id":"1","title":"Hello"}]
+[{"id":"sale-1","item":"claw hammer","total":12.5}]
 ```
 
-That is the whole loop. Define policies, guard routes, assign groups. The grant took effect on the next request. No restart, no token refresh.
+That is the whole loop. Define policies, guard routes, hire staff into groups. The grant took effect on the next request. No restart, no token refresh.
 
 ## Next
 

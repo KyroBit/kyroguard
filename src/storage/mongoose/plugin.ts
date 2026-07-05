@@ -10,8 +10,8 @@ export interface RbacMongoosePluginOptions {
   type: string
   /** Named query-scope builders: scope name → subject → Mongo filter. */
   queryScopes?: Record<string, (subject: Subject) => Record<string, unknown>>
-  /** portal → policy name → scope names (mirrors ResourceDefinition.context). */
-  context?: Record<string, Record<string, string[]>>
+  /** domain → policy name → scope names (mirrors ResourceDefinition.domains). */
+  domains?: Record<string, Record<string, string[]>>
 }
 
 function documentId(doc: unknown): string | null {
@@ -28,7 +28,7 @@ function documentId(doc: unknown): string | null {
  *   request subject (no-op when no subject is set).
  * - `post('deleteOne')` (document) / `post('findOneAndDelete')` remove all
  *   ownership rows for the deleted document.
- * - `pre(/^find/)` merges the subject's portal query scopes ($or-combined)
+ * - `pre(/^find/)` merges the subject's domain query scopes ($or-combined)
  *   into the query filter.
  *
  * LIMITATION: `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and
@@ -42,8 +42,8 @@ export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOp
   async function recordOwnershipFor(docs: unknown[]): Promise<void> {
     const subject = engine.store.getSubject()
     if (!subject) return
-    const contextType = normalizeSentinel(subject.portal)
-    const contextId = normalizeSentinel(subject.context_id)
+    const domain = normalizeSentinel(subject.domain)
+    const tenantId = normalizeSentinel(subject.tenant_id)
     const entries: OwnershipEntry[] = []
     for (const doc of docs) {
       const resourceId = documentId(doc)
@@ -52,8 +52,8 @@ export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOp
         resourceType: options.type,
         resourceId,
         ownerId: subject.id,
-        contextType,
-        contextId,
+        domain,
+        tenantId,
       })
     }
     if (entries.length > 0) await adapter.recordOwnership(entries)
@@ -85,12 +85,12 @@ export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOp
     const subject = engine.store.getSubject()
     if (!subject) return next()
 
-    const portalContext = options.context?.[normalizeSentinel(subject.portal)]
-    if (!portalContext) return next()
+    const domainPolicies = options.domains?.[normalizeSentinel(subject.domain)]
+    if (!domainPolicies) return next()
 
     const filters: Record<string, unknown>[] = []
     const seen = new Set<string>()
-    for (const scopeNames of Object.values(portalContext)) {
+    for (const scopeNames of Object.values(domainPolicies)) {
       for (const scopeName of scopeNames) {
         if (seen.has(scopeName)) continue
         seen.add(scopeName)

@@ -118,8 +118,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         resourceType: entry.resourceType,
         resourceId: entry.resourceId,
         ownerId: entry.ownerId,
-        contextType: entry.contextType,
-        contextId: entry.contextId,
+        domain: entry.domain,
+        tenantId: entry.tenantId,
       })
     }
   }
@@ -135,7 +135,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           .select({
             id: t.policies.id,
             name: t.policies.name,
-            portal: t.policies.portal,
+            domain: t.policies.domain,
             label: t.policies.label,
             scopeOptions: t.policies.scopeOptions,
             dependsOn: t.policies.dependsOn,
@@ -149,7 +149,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           if (!current) {
             await tx.insert(t.policies).values({
               name: row.name,
-              portal: row.portal,
+              domain: row.domain,
               label: row.label,
               scopeOptions: row.scopeOptions,
               dependsOn: row.dependsOn,
@@ -158,14 +158,14 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           }
           const changed =
             current.label !== row.label ||
-            current.portal !== row.portal ||
+            current.domain !== row.domain ||
             !sameArray(toStringArray(current.scopeOptions), row.scopeOptions) ||
             !sameArray(toStringArray(current.dependsOn), row.dependsOn)
           if (!changed) continue
           await tx
             .update(t.policies)
             .set({
-              portal: row.portal,
+              domain: row.domain,
               label: row.label,
               scopeOptions: row.scopeOptions,
               dependsOn: row.dependsOn,
@@ -181,7 +181,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         .select({
           id: t.policies.id,
           name: t.policies.name,
-          portal: t.policies.portal,
+          domain: t.policies.domain,
           dependsOn: t.policies.dependsOn,
         })
         .from(t.policies)
@@ -189,7 +189,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
       return rows.map((r: any) => ({
         id: String(r.id),
         name: String(r.name),
-        portal: String(r.portal ?? ''),
+        domain: String(r.domain ?? ''),
         dependsOn: toStringArray(r.dependsOn),
       }))
     },
@@ -361,8 +361,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
             and(
               eq(t.userPolicyGroups.subjectId, ref.subjectId),
               eq(t.userPolicyGroups.policyGroupId, groupId),
-              eq(t.userPolicyGroups.portal, ref.portal),
-              eq(t.userPolicyGroups.contextId, ref.contextId),
+              eq(t.userPolicyGroups.domain, ref.domain),
+              eq(t.userPolicyGroups.tenantId, ref.tenantId),
             ),
           )
           .limit(1)
@@ -370,8 +370,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         await tx.insert(t.userPolicyGroups).values({
           subjectId: ref.subjectId,
           policyGroupId: groupId,
-          portal: ref.portal,
-          contextId: ref.contextId,
+          domain: ref.domain,
+          tenantId: ref.tenantId,
         })
       })
     },
@@ -385,8 +385,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           and(
             eq(t.userPolicyGroups.subjectId, ref.subjectId),
             eq(t.userPolicyGroups.policyGroupId, groupId),
-            eq(t.userPolicyGroups.portal, ref.portal),
-            eq(t.userPolicyGroups.contextId, ref.contextId),
+            eq(t.userPolicyGroups.domain, ref.domain),
+            eq(t.userPolicyGroups.tenantId, ref.tenantId),
           ),
         )
     },
@@ -403,8 +403,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
             and(
               eq(t.userPolicies.subjectId, ref.subjectId),
               eq(t.userPolicies.policyId, policyId),
-              eq(t.userPolicies.portal, ref.portal),
-              eq(t.userPolicies.contextId, ref.contextId),
+              eq(t.userPolicies.domain, ref.domain),
+              eq(t.userPolicies.tenantId, ref.tenantId),
             ),
           )
           .limit(1)
@@ -412,8 +412,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           await tx.insert(t.userPolicies).values({
             subjectId: ref.subjectId,
             policyId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
             scope: next,
           })
           return
@@ -433,8 +433,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           and(
             eq(t.userPolicies.subjectId, ref.subjectId),
             eq(t.userPolicies.policyId, policyId),
-            eq(t.userPolicies.portal, ref.portal),
-            eq(t.userPolicies.contextId, ref.contextId),
+            eq(t.userPolicies.domain, ref.domain),
+            eq(t.userPolicies.tenantId, ref.tenantId),
           ),
         )
     },
@@ -452,8 +452,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         .where(
           and(
             eq(t.userPolicyGroups.subjectId, ref.subjectId),
-            eq(t.userPolicyGroups.portal, ref.portal),
-            eq(t.userPolicyGroups.contextId, ref.contextId),
+            eq(t.userPolicyGroups.domain, ref.domain),
+            eq(t.userPolicyGroups.tenantId, ref.tenantId),
             // S20: deactivated groups grant nothing.
             eq(t.policyGroups.isActive, true),
           ),
@@ -467,8 +467,8 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         .where(
           and(
             eq(t.userPolicies.subjectId, ref.subjectId),
-            eq(t.userPolicies.portal, ref.portal),
-            eq(t.userPolicies.contextId, ref.contextId),
+            eq(t.userPolicies.domain, ref.domain),
+            eq(t.userPolicies.tenantId, ref.tenantId),
           ),
         )
         .orderBy(asc(t.policies.name))

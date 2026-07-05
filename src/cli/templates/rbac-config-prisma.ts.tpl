@@ -11,9 +11,9 @@ export default defineConfig({
     // in your schema and run `prisma migrate dev` before `rbac sync`.
     return prismaAdapter(new PrismaClient())
   },
-  portals: [
+  domains: [
     {
-      name: '{{PORTAL}}',
+      name: '{{DOMAIN}}',
       policies: './src/rbac/policies.ts',
       groups: './src/rbac/groups.ts',
     },

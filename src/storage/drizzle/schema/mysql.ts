@@ -19,7 +19,7 @@ const id = (name: string) => varchar(name, { length: 191 })
 export const rbacPolicies = mysqlTable('rbac_policies', {
   id: id('id').primaryKey().$defaultFn(() => createId()),
   name: varchar('name', { length: 191 }).notNull().unique(),
-  portal: varchar('portal', { length: 191 }).notNull().default(''),
+  domain: varchar('domain', { length: 191 }).notNull().default(''),
   label: varchar('label', { length: 255 }).notNull(),
   scopeOptions: json('scope_options').$type<string[]>().notNull().default([]),
   dependsOn: json('depends_on').$type<string[]>().notNull().default([]),
@@ -62,12 +62,12 @@ export const rbacUserPolicyGroups = mysqlTable(
     policyGroupId: id('policy_group_id')
       .notNull()
       .references(() => rbacPolicyGroups.id),
-    portal: varchar('portal', { length: 191 }).notNull().default(''),
-    contextId: varchar('context_id', { length: 191 }).notNull().default(''),
+    domain: varchar('domain', { length: 191 }).notNull().default(''),
+    tenantId: varchar('tenant_id', { length: 191 }).notNull().default(''),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [
-    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.portal, table.contextId),
+    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.domain, table.tenantId),
     index('rbac_upg_subject_idx').on(table.subjectId),
   ],
 )
@@ -80,13 +80,13 @@ export const rbacUserPolicies = mysqlTable(
     policyId: id('policy_id')
       .notNull()
       .references(() => rbacPolicies.id),
-    portal: varchar('portal', { length: 191 }).notNull().default(''),
-    contextId: varchar('context_id', { length: 191 }).notNull().default(''),
+    domain: varchar('domain', { length: 191 }).notNull().default(''),
+    tenantId: varchar('tenant_id', { length: 191 }).notNull().default(''),
     scope: varchar('scope', { length: 191 }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [
-    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.portal, table.contextId),
+    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.domain, table.tenantId),
     index('rbac_up_subject_idx').on(table.subjectId),
   ],
 )
@@ -98,8 +98,8 @@ export const rbacResourceOwners = mysqlTable(
     resourceType: varchar('resource_type', { length: 191 }).notNull(),
     resourceId: varchar('resource_id', { length: 191 }).notNull(),
     ownerId: varchar('owner_id', { length: 191 }).notNull(),
-    contextType: varchar('context_type', { length: 191 }).notNull().default(''),
-    contextId: varchar('context_id', { length: 191 }).notNull().default(''),
+    domain: varchar('domain', { length: 191 }).notNull().default(''),
+    tenantId: varchar('tenant_id', { length: 191 }).notNull().default(''),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   table => [

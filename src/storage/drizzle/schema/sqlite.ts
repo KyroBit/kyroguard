@@ -11,7 +11,7 @@ const timestampCol = (name: string) =>
 export const rbacPolicies = sqliteTable('rbac_policies', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   name: text('name').notNull().unique(),
-  portal: text('portal').notNull().default(''),
+  domain: text('domain').notNull().default(''),
   label: text('label').notNull(),
   scopeOptions: text('scope_options', { mode: 'json' }).$type<string[]>().notNull().default([]),
   dependsOn: text('depends_on', { mode: 'json' }).$type<string[]>().notNull().default([]),
@@ -54,12 +54,12 @@ export const rbacUserPolicyGroups = sqliteTable(
     policyGroupId: text('policy_group_id')
       .notNull()
       .references(() => rbacPolicyGroups.id),
-    portal: text('portal').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     createdAt: timestampCol('created_at'),
   },
   table => [
-    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.portal, table.contextId),
+    uniqueIndex('rbac_upg_tuple_uq').on(table.subjectId, table.policyGroupId, table.domain, table.tenantId),
     index('rbac_upg_subject_idx').on(table.subjectId),
   ],
 )
@@ -72,13 +72,13 @@ export const rbacUserPolicies = sqliteTable(
     policyId: text('policy_id')
       .notNull()
       .references(() => rbacPolicies.id),
-    portal: text('portal').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     scope: text('scope'),
     createdAt: timestampCol('created_at'),
   },
   table => [
-    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.portal, table.contextId),
+    uniqueIndex('rbac_up_tuple_uq').on(table.subjectId, table.policyId, table.domain, table.tenantId),
     index('rbac_up_subject_idx').on(table.subjectId),
   ],
 )
@@ -90,8 +90,8 @@ export const rbacResourceOwners = sqliteTable(
     resourceType: text('resource_type').notNull(),
     resourceId: text('resource_id').notNull(),
     ownerId: text('owner_id').notNull(),
-    contextType: text('context_type').notNull().default(''),
-    contextId: text('context_id').notNull().default(''),
+    domain: text('domain').notNull().default(''),
+    tenantId: text('tenant_id').notNull().default(''),
     createdAt: timestampCol('created_at'),
   },
   table => [

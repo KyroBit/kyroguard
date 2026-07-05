@@ -98,7 +98,7 @@ interface RedisSubscriberLike {
 ```ts
 import { policyCacheKey, subjectKeyPrefix } from '@kyrobit/rbac/cache'
 
-function policyCacheKey(subjectId: string, portal: string, contextId: string): PolicyCacheKey
+function policyCacheKey(subjectId: string, domain: string, tenantId: string): PolicyCacheKey
 function subjectKeyPrefix(subjectId: string): string
 ```
 
@@ -119,8 +119,8 @@ interface PolicyCache {
 interface PolicyCacheKey {
   id: string        // full encoded key — use as the storage key
   subjectId: string // raw components, for stores that index differently
-  portal: string
-  contextId: string
+  domain: string
+  tenantId: string
 }
 ```
 

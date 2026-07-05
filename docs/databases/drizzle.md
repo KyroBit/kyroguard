@@ -121,25 +121,25 @@ Link each resource to its table in `src/rbac/policies.ts`:
 
 ```ts
 import { Policy, Scope } from '@kyrobit/rbac'
-import { posts } from '../db/schema.js'
+import { sales } from '../db/schema.js'
 import type { ResourceDefinition } from '@kyrobit/rbac'
 
 export const resources: ResourceDefinition[] = [
   {
-    type: 'post',
-    table: posts,
+    type: 'sale',
+    table: sales,
     policies: [
-      new Policy('posts.read'),
-      new Policy('posts.update', 'Update posts', ['posts.read'], [Scope.owned()]),
+      new Policy('sales.view'),
+      new Policy('sales.void', 'Void sales', ['sales.view'], [Scope.owned()]),
     ],
   },
 ]
 ```
 
-Now inserts into `posts` record the current user as the owner:
+Now inserts into `sales` record the current user — the cashier — as the owner:
 
 ```ts
-const [post] = await db.insert(posts).values({ title }).returning()
+const [sale] = await db.insert(sales).values({ total }).returning()
 ```
 
 Tracking needs the new row's id. On PostgreSQL and SQLite, chain `.returning()`. MySQL cannot return rows from an insert. There, pass ids in `values()` or chain `.$returningId()`. An insert that yields no id records nothing and logs a warning.

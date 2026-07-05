@@ -4,19 +4,21 @@ import { MisconfiguredError, RbacError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
 import type { Rbac } from '../../index.js'
-import type { ErrorFormatter, PortalInstance, PortalOptions } from '../contract.js'
+import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
 /** Async guard compatible with Fastify's preHandler/onRequest hook slots. */
 export type FastifyRbacGuard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
-export type FastifyPortal<P extends string = string> = PortalInstance<
+export type FastifyDomain<P extends string = string> = DomainInstance<
   FastifyRequest,
   FastifyRbacGuard,
   P
 >
 
 export interface FastifyRbacDecoration {
-  portal<P extends string>(name: P, options: PortalOptions<FastifyRequest>): FastifyPortal<P>
+  domain<P extends string>(name: P, options: DomainOptions<FastifyRequest>): FastifyDomain<P>
+  /** Single-area apps don't need a domain name — policies stay unprefixed. */
+  domain(options: DomainOptions<FastifyRequest>): FastifyDomain<''>
   setSubject(subject: Subject): void
   addExtra(extra: Record<string, unknown>): void
   readonly cache: Rbac['cache']
@@ -40,8 +42,13 @@ export function rbacFastify(rbac: Rbac, options?: RbacFastifyOptions): FastifyPl
     })
 
     const decoration: FastifyRbacDecoration = {
-      portal: <P extends string>(name: P, portalOptions: PortalOptions<FastifyRequest>) =>
-        createPortal(rbac, options, name, portalOptions),
+      domain: (<P extends string>(
+        nameOrOptions: P | DomainOptions<FastifyRequest>,
+        domainOptions?: DomainOptions<FastifyRequest>,
+      ) =>
+        typeof nameOrOptions === 'string'
+          ? createDomain(rbac, options, nameOrOptions, domainOptions!)
+          : createDomain(rbac, options, '', nameOrOptions)) as FastifyRbacDecoration['domain'],
       setSubject: subject => rbac.engine.store.setSubject(subject),
       addExtra: extra => rbac.engine.store.addExtra(extra),
       cache: rbac.cache,
@@ -52,16 +59,16 @@ export function rbacFastify(rbac: Rbac, options?: RbacFastifyOptions): FastifyPl
   return fp(plugin, { name: '@kyrobit/rbac', fastify: '5.x' })
 }
 
-function createPortal<P extends string>(
+function createDomain<P extends string>(
   rbac: Rbac,
   pluginOptions: RbacFastifyOptions | undefined,
   name: P,
-  options: PortalOptions<FastifyRequest>,
-): FastifyPortal<P> {
+  options: DomainOptions<FastifyRequest>,
+): FastifyDomain<P> {
   const store = rbac.engine.store
 
-  // Memoized per (request, portal) — null results included, so a failed
-  // resolution is not retried and two portals on one app never collide.
+  // Memoized per (request, domain) — null results included, so a failed
+  // resolution is not retried and two domains on one app never collide.
   const resolveSubject = async (req: FastifyRequest): Promise<Subject | null> => {
     const requestStore = store.get()
     if (!requestStore) {
@@ -69,17 +76,17 @@ function createPortal<P extends string>(
         'rbac request context is missing — register rbacFastify() on this Fastify instance before handling requests',
       )
     }
-    if (requestStore.portalSubjects.has(name)) {
-      const memoized = requestStore.portalSubjects.get(name) ?? null
+    if (requestStore.domainSubjects.has(name)) {
+      const memoized = requestStore.domainSubjects.get(name) ?? null
       if (memoized) store.setSubject(memoized)
       return memoized
     }
     const input = await options.getSubject(req)
-    // Omit<Subject, 'portal'> erases `id`'s declared type behind the index
+    // Omit<Subject, 'domain'> erases `id`'s declared type behind the index
     // signature; the contract guarantees the runtime shape, so re-assert it.
     const subject: Subject | null =
-      input === null ? null : { ...input, id: input.id as string, portal: name }
-    requestStore.portalSubjects.set(name, subject)
+      input === null ? null : { ...input, id: input.id as string, domain: name }
+    requestStore.domainSubjects.set(name, subject)
     if (subject) store.setSubject(subject)
     return subject
   }
@@ -113,28 +120,28 @@ function createPortal<P extends string>(
       }
     },
 
-    contextHook() {
+    subjectHook() {
       return async req => {
         await resolveSubject(req)
       }
     },
 
     assignGroup: (subjectId, group, opts) =>
-      rbac.admin.assignGroup({ subjectId, portal: name, contextId: opts?.contextId }, group),
+      rbac.admin.assignGroup({ subjectId, domain: name, tenantId: opts?.tenantId }, group),
 
     removeGroup: (subjectId, group, opts) =>
-      rbac.admin.removeGroup({ subjectId, portal: name, contextId: opts?.contextId }, group),
+      rbac.admin.removeGroup({ subjectId, domain: name, tenantId: opts?.tenantId }, group),
 
     assignPolicy: (subjectId, policy, opts) =>
       rbac.admin.assignPolicy(
-        { subjectId, portal: name, contextId: opts?.contextId },
+        { subjectId, domain: name, tenantId: opts?.tenantId },
         qualifyPolicyName(name, policy),
         opts?.scope,
       ),
 
     removePolicy: (subjectId, policy, opts) =>
       rbac.admin.removePolicy(
-        { subjectId, portal: name, contextId: opts?.contextId },
+        { subjectId, domain: name, tenantId: opts?.tenantId },
         qualifyPolicyName(name, policy),
       ),
   }

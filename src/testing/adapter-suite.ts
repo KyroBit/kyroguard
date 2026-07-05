@@ -39,15 +39,15 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
 
   const row = (name: string, over: Partial<PolicyDefinitionRow> = {}): PolicyDefinitionRow => ({
     name,
-    portal: '',
+    domain: '',
     label: name,
     scopeOptions: [],
     dependsOn: [],
     ...over,
   })
 
-  const seedPolicies = (adapter: StorageAdapter, policyNames: string[], portal = ''): Promise<void> =>
-    adapter.upsertPolicies(policyNames.map(name => row(name, { portal })))
+  const seedPolicies = (adapter: StorageAdapter, policyNames: string[], domain = ''): Promise<void> =>
+    adapter.upsertPolicies(policyNames.map(name => row(name, { domain })))
 
   const seedGroup = async (
     adapter: StorageAdapter,
@@ -58,10 +58,10 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
     await adapter.setGroupPolicies(name, entries)
   }
 
-  const ref = (subjectId: string, portal = '', contextId = ''): SubjectRef => ({
+  const ref = (subjectId: string, domain = '', tenantId = ''): SubjectRef => ({
     subjectId,
-    portal,
-    contextId,
+    domain,
+    tenantId,
   })
 
   const names = (records: { name: string }[]): string[] => records.map(record => record.name)
@@ -82,68 +82,68 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           ])
         }))
 
-      it("S1: policies persist portal as the '' sentinel string, never null", () =>
+      it("S1: policies persist domain as the '' sentinel string, never null", () =>
         withAdapter(async adapter => {
           await seedPolicies(adapter, ['p.read'])
           const record = (await adapter.listPolicies()).find(policy => policy.name === 'p.read')
-          expect(record?.portal).toBe('')
+          expect(record?.domain).toBe('')
         }))
     })
 
     describe('S2 — strict tuple matching (tenant-isolation invariant)', () => {
       const matrix: {
-        grant: { portal: string; contextId: string }
-        req: { portal: string; contextId: string }
+        grant: { domain: string; tenantId: string }
+        req: { domain: string; tenantId: string }
         visible: boolean
         title: string
       }[] = [
         {
-          grant: { portal: 'branch', contextId: 'b1' },
-          req: { portal: 'branch', contextId: 'b1' },
+          grant: { domain: 'branch', tenantId: 'b1' },
+          req: { domain: 'branch', tenantId: 'b1' },
           visible: true,
           title: "grant at ('branch','b1') is returned for ('branch','b1')",
         },
         {
-          grant: { portal: 'branch', contextId: 'b1' },
-          req: { portal: 'branch', contextId: 'b2' },
+          grant: { domain: 'branch', tenantId: 'b1' },
+          req: { domain: 'branch', tenantId: 'b2' },
           visible: false,
           title: "grant at ('branch','b1') does not match ('branch','b2')",
         },
         {
-          grant: { portal: 'branch', contextId: 'b1' },
-          req: { portal: 'branch', contextId: '' },
+          grant: { domain: 'branch', tenantId: 'b1' },
+          req: { domain: 'branch', tenantId: '' },
           visible: false,
-          title: "context grant at ('branch','b1') does not leak into ('branch','')",
+          title: "tenant grant at ('branch','b1') does not leak into ('branch','')",
         },
         {
-          grant: { portal: 'branch', contextId: '' },
-          req: { portal: 'branch', contextId: 'b1' },
+          grant: { domain: 'branch', tenantId: '' },
+          req: { domain: 'branch', tenantId: 'b1' },
           visible: false,
-          title: "portal-wide grant at ('branch','') does not fall back into ('branch','b1')",
+          title: "domain-wide grant at ('branch','') does not fall back into ('branch','b1')",
         },
         {
-          grant: { portal: '', contextId: '' },
-          req: { portal: 'branch', contextId: '' },
+          grant: { domain: '', tenantId: '' },
+          req: { domain: 'branch', tenantId: '' },
           visible: false,
-          title: "portal-less grant at ('','') does not leak into portal ('branch','')",
+          title: "no-domain grant at ('','') does not leak into domain ('branch','')",
         },
         {
-          grant: { portal: 'branch', contextId: '' },
-          req: { portal: '', contextId: '' },
+          grant: { domain: 'branch', tenantId: '' },
+          req: { domain: '', tenantId: '' },
           visible: false,
-          title: "portal grant at ('branch','') does not leak into the portal-less ('','')",
+          title: "domain grant at ('branch','') does not leak into the no-domain ('','')",
         },
         {
-          grant: { portal: 'admin', contextId: '' },
-          req: { portal: 'branch', contextId: '' },
+          grant: { domain: 'admin', tenantId: '' },
+          req: { domain: 'branch', tenantId: '' },
           visible: false,
-          title: "grant in portal 'admin' does not match portal 'branch'",
+          title: "grant in domain 'admin' does not match domain 'branch'",
         },
         {
-          grant: { portal: '', contextId: 'c1' },
-          req: { portal: '', contextId: 'c2' },
+          grant: { domain: '', tenantId: 'c1' },
+          req: { domain: '', tenantId: 'c2' },
           visible: false,
-          title: "portal-less context grant at ('','c1') does not match ('','c2')",
+          title: "no-domain tenant grant at ('','c1') does not match ('','c2')",
         },
       ]
 
@@ -188,7 +188,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(names(grants).sort()).toEqual(['a.read', 'b.read'])
         }))
 
-      it('S3: a group grant and a direct grant on different portals stay isolated', () =>
+      it('S3: a group grant and a direct grant on different domains stay isolated', () =>
         withAdapter(async adapter => {
           await seedPolicies(adapter, ['a.read', 'b.read'])
           await seedGroup(adapter, 'g', [{ policyName: 'a.read', scope: null }])
@@ -198,12 +198,12 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(names(await adapter.getSubjectPolicies(ref('u1', 'branch')))).toEqual(['b.read'])
         }))
 
-      it('S3: direct grants are context-scoped exactly like group grants', () =>
+      it('S3: direct grants are tenant-scoped exactly like group grants', () =>
         withAdapter(async adapter => {
           await seedPolicies(adapter, ['p.read'])
-          await adapter.assignPolicy(ref('u1', 'portal', 'c1'), 'p.read')
-          expect(await adapter.getSubjectPolicies(ref('u1', 'portal', 'c2'))).toEqual([])
-          expect(names(await adapter.getSubjectPolicies(ref('u1', 'portal', 'c1')))).toEqual([
+          await adapter.assignPolicy(ref('u1', 'branch', 'c1'), 'p.read')
+          expect(await adapter.getSubjectPolicies(ref('u1', 'branch', 'c2'))).toEqual([])
+          expect(names(await adapter.getSubjectPolicies(ref('u1', 'branch', 'c1')))).toEqual([
             'p.read',
           ])
         }))
@@ -440,7 +440,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
     })
 
     describe('S11 — removals match the exact tuple only', () => {
-      it('S11: removeGroup removes only the exact (subject, group, portal, contextId) tuple', () =>
+      it('S11: removeGroup removes only the exact (subject, group, domain, tenantId) tuple', () =>
         withAdapter(async adapter => {
           await seedPolicies(adapter, ['a.read'])
           await seedGroup(adapter, 'g', [{ policyName: 'a.read', scope: null }])
@@ -461,7 +461,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(await adapter.getSubjectPolicies(ref('u1', 'p', 'c2'))).toEqual([])
         }))
 
-      it('S11: removePolicy with a non-matching contextId is a no-op', () =>
+      it('S11: removePolicy with a non-matching tenantId is a no-op', () =>
         withAdapter(async adapter => {
           await seedPolicies(adapter, ['p.read'])
           await adapter.assignPolicy(ref('u1', 'p', 'c1'), 'p.read')
@@ -491,11 +491,11 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
             resourceType: 'post',
             resourceId: '1',
             ownerId: 'u1',
-            contextType: '',
-            contextId: '',
+            domain: '',
+            tenantId: '',
           }
           await adapter.recordOwnership([entry])
-          await adapter.recordOwnership([{ ...entry, contextType: 'admin', contextId: 'c1' }])
+          await adapter.recordOwnership([{ ...entry, domain: 'admin', tenantId: 'c1' }])
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
           await adapter.removeOwnership({ type: 'post', id: '1' })
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(false)
@@ -504,7 +504,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
       it('S13: isOwner requires an exact (ownerId, type, id) match', () =>
         withAdapter(async adapter => {
           await adapter.recordOwnership([
-            { resourceType: 'post', resourceId: '1', ownerId: 'u1', contextType: '', contextId: '' },
+            { resourceType: 'post', resourceId: '1', ownerId: 'u1', domain: '', tenantId: '' },
           ])
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(true)
           expect(await adapter.isOwner('u2', { type: 'post', id: '1' })).toBe(false)
@@ -515,9 +515,9 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
       it('S13: removeOwnership removes ALL owners of the resource and nothing else', () =>
         withAdapter(async adapter => {
           await adapter.recordOwnership([
-            { resourceType: 'post', resourceId: '1', ownerId: 'u1', contextType: '', contextId: '' },
-            { resourceType: 'post', resourceId: '1', ownerId: 'u2', contextType: '', contextId: '' },
-            { resourceType: 'post', resourceId: '2', ownerId: 'u1', contextType: '', contextId: '' },
+            { resourceType: 'post', resourceId: '1', ownerId: 'u1', domain: '', tenantId: '' },
+            { resourceType: 'post', resourceId: '1', ownerId: 'u2', domain: '', tenantId: '' },
+            { resourceType: 'post', resourceId: '2', ownerId: 'u1', domain: '', tenantId: '' },
           ])
           await adapter.removeOwnership({ type: 'post', id: '1' })
           expect(await adapter.isOwner('u1', { type: 'post', id: '1' })).toBe(false)
@@ -580,24 +580,24 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
         }))
     })
 
-    describe('S19 — portal column drives orphan filtering', () => {
-      it('S19: listPolicies exposes the stored portal for filtering', () =>
+    describe('S19 — domain column drives orphan filtering', () => {
+      it('S19: listPolicies exposes the stored domain for filtering', () =>
         withAdapter(async adapter => {
           await adapter.upsertPolicies([
-            row('admin.posts.read', { portal: 'admin' }),
+            row('admin.posts.read', { domain: 'admin' }),
             row('standalone.read'),
           ])
           const list = await adapter.listPolicies()
-          expect(list.find(policy => policy.name === 'admin.posts.read')?.portal).toBe('admin')
-          expect(list.find(policy => policy.name === 'standalone.read')?.portal).toBe('')
+          expect(list.find(policy => policy.name === 'admin.posts.read')?.domain).toBe('admin')
+          expect(list.find(policy => policy.name === 'standalone.read')?.domain).toBe('')
         }))
 
-      it("S19: portal-scoped orphan delete never touches another portal's dotted-name policies (v0 name-shape regression)", () =>
+      it("S19: domain-scoped orphan delete never touches another domain's dotted-name policies (v0 name-shape regression)", () =>
         withAdapter(async adapter => {
-          // A portal-less policy whose NAME looks like it belongs to 'admin'.
-          await adapter.upsertPolicies([row('admin.posts.read', { portal: '' })])
-          await adapter.upsertPolicies([row('admin.users.read', { portal: 'admin' })])
-          const orphans = (await adapter.listPolicies()).filter(policy => policy.portal === 'admin')
+          // A policy with no domain whose NAME looks like it belongs to 'admin'.
+          await adapter.upsertPolicies([row('admin.posts.read', { domain: '' })])
+          await adapter.upsertPolicies([row('admin.users.read', { domain: 'admin' })])
+          const orphans = (await adapter.listPolicies()).filter(policy => policy.domain === 'admin')
           await adapter.deletePolicies(orphans.map(policy => policy.id))
           const remaining = names(await adapter.listPolicies())
           expect(remaining).toContain('admin.posts.read')

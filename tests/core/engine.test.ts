@@ -39,7 +39,7 @@ async function grant(
   scope: string | null = null,
 ): Promise<void> {
   await adapter.upsertPolicies([
-    { name: policy, portal: ref.portal, label: policy, scopeOptions: scope ? [scope] : [], dependsOn: [] },
+    { name: policy, domain: ref.domain, label: policy, scopeOptions: scope ? [scope] : [], dependsOn: [] },
   ])
   await adapter.assignPolicy(ref, policy, scope)
 }
@@ -84,61 +84,64 @@ describe('authorize() decision matrix', () => {
 
   test('granted policy → resolves (200-equivalent)', async () => {
     const { adapter, engine } = makeEngine()
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
-    await engine.authorize({ id: 'u1', portal: 'admin' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
+    await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
   })
 
-  test('portal isolation: grant on admin portal, subject on branch portal → deny', async () => {
+  test('domain isolation: grant on admin domain, subject on branch domain → deny', async () => {
     const { adapter, engine } = makeEngine()
-    await grant(adapter, { subjectId: 'u1', portal: 'admin', contextId: '' }, 'admin.posts.read')
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.read')
     expect(
-      engine.authorize({ id: 'u1', portal: 'branch' }, 'admin.posts.read'),
+      engine.authorize({ id: 'u1', domain: 'branch' }, 'admin.posts.read'),
     ).rejects.toBeInstanceOf(PolicyDeniedError)
   })
 
-  test('context isolation: grant at context b1, subject at context b2 → deny', async () => {
+  test('tenant isolation: grant at tenant b1, subject at tenant b2 → deny', async () => {
     const { adapter, engine } = makeEngine()
     await grant(
       adapter,
-      { subjectId: 'u1', portal: 'branch', contextId: 'b1' },
+      { subjectId: 'u1', domain: 'branch', tenantId: 'b1' },
       'branch.posts.read',
     )
     expect(
-      engine.authorize({ id: 'u1', portal: 'branch', context_id: 'b2' }, 'branch.posts.read'),
+      engine.authorize({ id: 'u1', domain: 'branch', tenant_id: 'b2' }, 'branch.posts.read'),
     ).rejects.toBeInstanceOf(PolicyDeniedError)
   })
 
-  test('null-context grant does NOT match explicit-context subject (v0 global-fallback regression)', async () => {
+  test('null-tenant grant does NOT match explicit-tenant subject (v0 global-fallback regression)', async () => {
     const { adapter, engine } = makeEngine()
-    // Granted with no context (empty-string sentinel).
-    await grant(adapter, { subjectId: 'u1', portal: 'branch', contextId: '' }, 'branch.posts.read')
-    // Subject inside a context must NOT inherit the context-less grant.
+    // Granted with no tenant (empty-string sentinel).
+    await grant(adapter, { subjectId: 'u1', domain: 'branch', tenantId: '' }, 'branch.posts.read')
+    // Subject inside a tenant must NOT inherit the tenant-less grant.
     expect(
-      engine.authorize({ id: 'u1', portal: 'branch', context_id: 'b1' }, 'branch.posts.read'),
+      engine.authorize({ id: 'u1', domain: 'branch', tenant_id: 'b1' }, 'branch.posts.read'),
     ).rejects.toBeInstanceOf(PolicyDeniedError)
   })
 
-  test('explicit-context grant does NOT match null-context subject (reverse direction)', async () => {
+  test('explicit-tenant grant does NOT match null-tenant subject (reverse direction)', async () => {
     const { adapter, engine } = makeEngine()
     await grant(
       adapter,
-      { subjectId: 'u1', portal: 'branch', contextId: 'b1' },
+      { subjectId: 'u1', domain: 'branch', tenantId: 'b1' },
       'branch.posts.read',
     )
-    // Subject with no context must NOT see the context-bound grant.
+    // Subject with no tenant must NOT see the tenant-bound grant.
     expect(
-      engine.authorize({ id: 'u1', portal: 'branch' }, 'branch.posts.read'),
+      engine.authorize({ id: 'u1', domain: 'branch' }, 'branch.posts.read'),
     ).rejects.toBeInstanceOf(PolicyDeniedError)
   })
 })
 
 describe('authorize() scoped grants', () => {
-  const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
-  const subject: Subject = { id: 'u1', portal: 'admin' }
+  const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
+  const subject: Subject = { id: 'u1', domain: 'admin' }
   const resource: ResourceRef = { type: 'post', id: 'p1' }
 
-  test('scoped grant with no resource resolver → ScopeDeniedError (never a bypass)', async () => {
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
+  test('no resource resolver → the scope decides on null (row scope fails closed)', async () => {
+    // A row scope like Scope.owned() must deny when there is no row to check.
+    const scopes = new Map([
+      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? true : false))],
+    ])
     const { adapter, engine } = makeEngine({ scopes })
     await grant(adapter, ref, 'admin.posts.update', 'owned')
     const err = await engine.authorize(subject, 'admin.posts.update').then(
@@ -148,6 +151,42 @@ describe('authorize() scoped grants', () => {
     expect(err).toBeInstanceOf(ScopeDeniedError)
     expect((err as ScopeDeniedError).code).toBe('RBAC_SCOPE_DENIED')
     expect((err as ScopeDeniedError).scope).toBe('owned')
+  })
+
+  test('no resource resolver → a condition scope can allow (business hours)', async () => {
+    // Condition scopes ignore the row entirely — no resolver needed.
+    const withinHours = new Scope('business-hours', 'Business hours', () => true)
+    const scopes = new Map([['business-hours', withinHours]])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.sales.void', 'business-hours')
+    await engine.authorize(subject, 'admin.sales.void')
+  })
+
+  test('no resource resolver → the scope receives resource null', async () => {
+    let seenResource: ResourceRef | null | undefined
+    const scopes = new Map([
+      [
+        'any',
+        new Scope('any', 'Any', (_s, r) => {
+          seenResource = r
+          return true
+        }),
+      ],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'any')
+    await engine.authorize(subject, 'admin.posts.update')
+    expect(seenResource).toBeNull()
+  })
+
+  test('Scope.owned() fails closed without a resource', async () => {
+    const owned = Scope.owned()
+    const scopes = new Map([[owned.name, owned]])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'owned')
+    await expect(engine.authorize(subject, 'admin.posts.update')).rejects.toBeInstanceOf(
+      ScopeDeniedError,
+    )
   })
 
   test('resource resolver returns null → ResourceNotFoundError (404)', async () => {
@@ -198,7 +237,8 @@ describe('authorize() scoped grants', () => {
 
   test('scope check receives (subject, resource, { db, adapter })', async () => {
     const db = { tag: 'the-db-handle' }
-    let seen: { subject: Subject; resource: ResourceRef; ctx: ScopeCheckContext } | null = null
+    let seen: { subject: Subject; resource: ResourceRef | null; ctx: ScopeCheckContext } | null =
+      null
     const scopes = new Map([
       [
         'owned',
@@ -213,7 +253,11 @@ describe('authorize() scoped grants', () => {
     await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
 
     expect(seen).not.toBeNull()
-    const captured = seen! as { subject: Subject; resource: ResourceRef; ctx: ScopeCheckContext }
+    const captured = seen! as {
+      subject: Subject
+      resource: ResourceRef | null
+      ctx: ScopeCheckContext
+    }
     expect(captured.subject).toBe(subject)
     expect(captured.resource).toEqual(resource)
     expect(captured.ctx.db).toBe(db)
@@ -226,7 +270,7 @@ describe('authorize() scoped grants', () => {
         'owned',
         new Scope('owned', 'Owned', async (_s, r) => {
           await Promise.resolve()
-          return r.id === 'p1'
+          return r?.id === 'p1'
         }),
       ],
     ])

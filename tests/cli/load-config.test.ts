@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadConfig } from '../../src/cli/load-config.js'
+import { loadDomainResources } from '../../src/cli/commands/generate.js'
 
 const roots: string[] = []
 
@@ -29,7 +30,7 @@ async function writeConfig(dir: string, basename: string, body: string): Promise
 const VALID_TS_CONFIG = `
 const config = {
   adapter: async () => ({ id: 'stub' }),
-  portals: [
+  domains: [
     { name: 'admin', policies: './src/rbac/policies.ts', groups: './src/rbac/groups.ts' },
   ],
   typegen: { output: './types/rbac.d.ts' },
@@ -65,9 +66,9 @@ describe('loadConfig', () => {
     const result = await loadConfig(path)
     expect(result.path).toBe(path)
     expect(typeof result.config.adapter).toBe('function')
-    expect(result.config.portals).toHaveLength(1)
-    expect(result.config.portals[0]?.name).toBe('admin')
-    expect(result.config.portals[0]?.policies).toBe('./src/rbac/policies.ts')
+    expect(result.config.domains).toHaveLength(1)
+    expect(result.config.domains[0]?.name).toBe('admin')
+    expect(result.config.domains[0]?.policies).toBe('./src/rbac/policies.ts')
     expect(result.config.typegen?.output).toBe('./types/rbac.d.ts')
   })
 
@@ -77,7 +78,7 @@ describe('loadConfig', () => {
 
     const result = await withCwd(dir, () => loadConfig())
     expect(result.path).toBe(path)
-    expect(result.config.portals[0]?.name).toBe('admin')
+    expect(result.config.domains[0]?.name).toBe('admin')
   })
 
   test('rbac.config.mjs also loads', async () => {
@@ -87,16 +88,16 @@ describe('loadConfig', () => {
       'rbac.config.mjs',
       `export default {
         adapter: async () => ({ id: 'stub-mjs' }),
-        portals: [{ policies: './policies.mjs' }],
+        domains: [{ policies: './policies.mjs' }],
       }
       `,
     )
 
     const result = await loadConfig(path)
     expect(result.path).toBe(path)
-    expect(result.config.portals[0]?.policies).toBe('./policies.mjs')
-    // Portal-less setup: name omitted is allowed.
-    expect(result.config.portals[0]?.name).toBeUndefined()
+    expect(result.config.domains[0]?.policies).toBe('./policies.mjs')
+    // Single-app setup with no domain: name omitted is allowed.
+    expect(result.config.domains[0]?.name).toBeUndefined()
 
     // And it is discovered by the cwd search too (search order includes .mjs).
     const searched = await withCwd(dir, () => loadConfig())
@@ -139,7 +140,7 @@ describe('loadConfig', () => {
     const path = await writeConfig(
       dir,
       'rbac.config.ts',
-      `export default { portals: [{ policies: './p.ts' }] }`,
+      `export default { domains: [{ policies: './p.ts' }] }`,
     )
     const error = await rejectionOf(loadConfig(path))
     expect(error.message).toContain('missing "adapter"')
@@ -151,13 +152,13 @@ describe('loadConfig', () => {
     const path = await writeConfig(
       dir,
       'rbac.config.ts',
-      `export default { adapter: { id: 'not-a-factory' }, portals: [] }`,
+      `export default { adapter: { id: 'not-a-factory' }, domains: [] }`,
     )
     const error = await rejectionOf(loadConfig(path))
     expect(error.message).toContain('missing "adapter"')
   })
 
-  test('config missing "portals" → specific validation error', async () => {
+  test('config missing "domains" → specific validation error', async () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
@@ -165,25 +166,25 @@ describe('loadConfig', () => {
       `export default { adapter: async () => ({ id: 'stub' }) }`,
     )
     const error = await rejectionOf(loadConfig(path))
-    expect(error.message).toContain('missing "portals"')
+    expect(error.message).toContain('missing "domains"')
     expect(error.message).toContain(path)
   })
 
-  test('portal entry without "policies" → error naming the bad index', async () => {
+  test('domain entry without "policies" → error naming the bad index', async () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
       'rbac.config.ts',
       `export default {
         adapter: async () => ({ id: 'stub' }),
-        portals: [
+        domains: [
           { name: 'admin', policies: './p.ts' },
           { name: 'customer' },
         ],
       }`,
     )
     const error = await rejectionOf(loadConfig(path))
-    expect(error.message).toContain('portals[1]')
+    expect(error.message).toContain('domains[1]')
     expect(error.message).toContain('"policies"')
   })
 
@@ -193,5 +194,52 @@ describe('loadConfig', () => {
     const error = await rejectionOf(loadConfig(path))
     expect(error.message).toContain('must default-export a config object')
     expect(error.message).toContain('defineConfig')
+  })
+})
+
+describe('loadDomainResources', () => {
+  test('a ResourceDefinition[] export loads as-is', async () => {
+    const dir = await fixtureDir()
+    await writeConfig(
+      dir,
+      'policies.ts',
+      `export const resources = [
+        { type: 'doc', policies: [{ name: 'docs.read', label: 'Read docs', dependsOn: [], scopeOptions: [] }] },
+      ]`,
+    )
+
+    const resources = await loadDomainResources(dir, { policies: './policies.ts' })
+    expect(resources).toHaveLength(1)
+    expect(resources[0]?.type).toBe('doc')
+    expect(resources[0]?.policies.map(policy => policy.name)).toEqual(['docs.read'])
+  })
+
+  test('a plain Policy[] export is wrapped into a single guard-only resource', async () => {
+    const dir = await fixtureDir()
+    await writeConfig(
+      dir,
+      'policies.ts',
+      `export const policies = [
+        { name: 'sales.view', label: 'view', dependsOn: [], scopeOptions: [] },
+        { name: 'sales.create', label: 'create', dependsOn: ['sales.view'], scopeOptions: [] },
+      ]`,
+    )
+
+    const resources = await loadDomainResources(dir, { policies: './policies.ts' })
+    // Same wrapping createRbac({ policies }) applies.
+    expect(resources).toHaveLength(1)
+    expect(resources[0]?.type).toBe('policy')
+    expect(resources[0]?.policies.map(policy => policy.name)).toEqual([
+      'sales.view',
+      'sales.create',
+    ])
+  })
+
+  test('an export that is neither shape → readable error naming both forms', async () => {
+    const dir = await fixtureDir()
+    await writeConfig(dir, 'policies.ts', `export const resources = [{ nope: true }]`)
+
+    const error = await rejectionOf(loadDomainResources(dir, { policies: './policies.ts' }))
+    expect(error.message).toContain('ResourceDefinition[] or Policy[]')
   })
 })

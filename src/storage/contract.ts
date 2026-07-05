@@ -9,14 +9,14 @@
  * passes that suite.
  *
  * ── Contract clauses ─────────────────────────────────────────────────────────
- * S1  Sentinels: `portal`/`contextId`/`contextType` are non-null strings; ''
+ * S1  Sentinels: `domain`/`tenantId` are non-null strings; ''
  *     means "none". Adapters store '' (NOT NULL DEFAULT ''), never NULL.
- * S2  Strict matching: getSubjectPolicies matches portal and contextId by
+ * S2  Strict matching: getSubjectPolicies matches domain and tenantId by
  *     plain equality. A grant at ('', '') is returned ONLY for a request at
  *     ('', ''); a grant at ('branch','b1') ONLY for ('branch','b1'). No
  *     fallback in either direction — this is the tenant-isolation invariant.
  * S3  getSubjectPolicies returns group grants AND direct grants, both
- *     strict-matched per S2. Direct assignments are portal/context-scoped
+ *     strict-matched per S2. Direct assignments are domain/tenant-scoped
  *     exactly like group assignments.
  * S4  getSubjectPolicies returns every matching grant row (no deduplication);
  *     scope precedence (null wins) is the engine's job. Ordering is
@@ -37,10 +37,10 @@
  * S9  addGroupPolicies is additive and idempotent: re-adding an existing
  *     (group, policy) pair does not duplicate and keeps the existing scope.
  * S10 assignGroup/assignPolicy are idempotent upserts against the unique
- *     constraint on (subject, target, portal, contextId); calling twice
+ *     constraint on (subject, target, domain, tenantId); calling twice
  *     leaves one row.
  * S11 removeGroup/removePolicy remove ONLY the row matching the exact
- *     (subject, target, portal, contextId) tuple.
+ *     (subject, target, domain, tenantId) tuple.
  * S12 assignPolicy takes a fully-qualified policy name and throws
  *     UnknownPolicyError if the policy does not exist (sync must run first).
  * S13 Ownership: recordOwnership upserts on (resourceType, resourceId,
@@ -58,10 +58,10 @@
  * S18 All methods reject with an Error (never silently no-op) when the
  *     backing tables/collections are missing, so `rbac sync` can tell users
  *     to run migrations.
- * S19 Policies carry their `portal` ('' sentinel) as a stored column, set at
- *     sync time. Orphan cleanup filters on portal equality — never on
+ * S19 Policies carry their `domain` ('' sentinel) as a stored column, set at
+ *     sync time. Orphan cleanup filters on domain equality — never on
  *     name-shape heuristics (regression: v0 counted dots in policy names to
- *     guess the portal, which could delete another portal's policies).
+ *     guess the domain, which could delete another domain's policies).
  * S20 getSubjectPolicies excludes group grants from groups whose isActive is
  *     false (emergency kill-switch for a whole role). Direct grants are
  *     unaffected.
@@ -72,8 +72,8 @@ import type { ResourceRef, SubjectRef } from '../core/types.js'
 export interface PolicyDefinitionRow {
   /** Fully qualified, e.g. 'admin.posts.read' — the engine does all prefixing. */
   name: string
-  /** The portal this policy was synced under; '' sentinel (S19). */
-  portal: string
+  /** The domain this policy was synced under; '' sentinel (S19). */
+  domain: string
   label: string
   scopeOptions: string[]
   /** Fully qualified. */
@@ -83,7 +83,7 @@ export interface PolicyDefinitionRow {
 export interface PolicyRecord {
   id: string
   name: string
-  portal: string
+  domain: string
   dependsOn: string[]
 }
 
@@ -110,10 +110,10 @@ export interface OwnershipEntry {
   resourceType: string
   resourceId: string
   ownerId: string
-  /** '' sentinel — usually the portal the resource was created from. */
-  contextType: string
-  /** '' sentinel — the tenant context the resource was created in. */
-  contextId: string
+  /** '' sentinel — usually the domain the resource was created from. */
+  domain: string
+  /** '' sentinel — the tenant the resource was created in. */
+  tenantId: string
 }
 
 export interface AdapterCapabilities {
@@ -169,7 +169,7 @@ export interface StorageAdapter {
   removePolicy(ref: SubjectRef, policyName: string): Promise<void>
 
   // ── Enforcement hot path ───────────────────────────────────────────────────
-  /** Group + direct grants, both strict-matched on (portal, contextId) (S2, S3). */
+  /** Group + direct grants, both strict-matched on (domain, tenantId) (S2, S3). */
   getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]>
 
   // ── Ownership (portable floor — powers Scope.owned() on every backend) ─────

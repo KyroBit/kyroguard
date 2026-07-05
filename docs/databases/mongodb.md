@@ -57,23 +57,23 @@ Run this before first traffic — it creates the MongoDB indexes. It also writes
 Policies with `Scope.owned()` check who created each document. The plugin records that for you. Add it to each schema whose documents can be owned:
 
 ```ts
-// src/models/post.ts
+// src/models/sale.ts
 import { Schema, model } from 'mongoose'
 import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 import { rbac } from '../rbac/instance.js'
 
-const postSchema = new Schema({ title: String, body: String })
+const saleSchema = new Schema({ total: Number, branchId: String })
 
-postSchema.plugin(rbacMongoosePlugin, { rbac, type: 'post' })
+saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale' })
 
-export const Post = model('Post', postSchema)
+export const Sale = model('Sale', saleSchema)
 ```
 
 Saving a document now records the current user as its owner:
 
 ```ts
-const post = await Post.create({ title, body })
-// the requesting user now owns post.id
+const sale = await Sale.create({ total, branchId })
+// the requesting cashier now owns sale.id
 ```
 
 `insertMany` is tracked too. Deleting a document with `deleteOne` or `findOneAndDelete` removes its ownership records. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
@@ -82,8 +82,8 @@ const post = await Post.create({ title, body })
 `Model.updateMany`, `Model.deleteMany`, `bulkWrite` and raw collection calls fire no document middleware, so the plugin never sees them. Record or remove ownership yourself on those paths:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'post', id: postId })
-await rbac.ownership.remove({ type: 'post', id: postId })
+await rbac.ownership.record(user.id, { type: 'sale', id: saleId })
+await rbac.ownership.remove({ type: 'sale', id: saleId })
 ```
 :::
 

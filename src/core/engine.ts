@@ -102,7 +102,7 @@ export class RbacEngine {
    * deterministic because adapters return rows in stable order.
    */
   async getPolicyMap(ref: SubjectRef): Promise<{ map: PolicyMap; cacheHit: boolean }> {
-    const key = policyCacheKey(ref.subjectId, ref.portal, ref.contextId)
+    const key = policyCacheKey(ref.subjectId, ref.domain, ref.tenantId)
 
     if (this.policyCache) {
       const hit = await this.policyCache.get(key)
@@ -161,17 +161,25 @@ export class RbacEngine {
       return
     }
 
-    // Scoped grant: a missing scope object or resolver is a deny, never a bypass.
+    // Scoped grant: an unknown scope name is a deny, never a bypass.
     const scope = this.scopes.get(scopeName)
-    if (!scope || !options?.resource) {
+    if (!scope) {
       this.emitDecision(subject, policy, 'deny', 'scope-denied', scopeName, cacheHit, startedAt)
       throw new ScopeDeniedError(policy, scopeName)
     }
 
-    const resource = await options.resource()
-    if (!resource) {
-      this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeName, cacheHit, startedAt)
-      throw new ResourceNotFoundError()
+    // A resolver is only required by scopes that inspect the row. Without
+    // one, the scope decides on null (row-based scopes like Scope.owned()
+    // fail closed; condition scopes like business hours pass regardless).
+    // A resolver that finds nothing is still a 404 — the route pointed at
+    // a row that does not exist.
+    let resource: ResourceRef | null = null
+    if (options?.resource) {
+      resource = (await options.resource()) ?? null
+      if (!resource) {
+        this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeName, cacheHit, startedAt)
+        throw new ResourceNotFoundError()
+      }
     }
 
     const allowed = await scope.check(subject, resource, { db: this.db, adapter: this.adapter })
@@ -233,8 +241,8 @@ export class RbacEngine {
     return this.db
   }
 
-  qualify(portal: string, policy: string): QualifiedPolicyName {
-    return qualifyPolicyName(portal, policy)
+  qualify(domain: string, policy: string): QualifiedPolicyName {
+    return qualifyPolicyName(domain, policy)
   }
 
   private emitDecision(
@@ -250,8 +258,8 @@ export class RbacEngine {
     try {
       this.onDecision({
         subjectId: subject?.id ?? '',
-        portal: (subject?.portal as string | undefined) ?? '',
-        contextId: (subject?.context_id as string | undefined) ?? '',
+        domain: (subject?.domain as string | undefined) ?? '',
+        tenantId: (subject?.tenant_id as string | undefined) ?? '',
         policy,
         decision,
         reason,

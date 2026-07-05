@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { syncPolicies } from '../../src/core/sync.js'
+import { backfillGroupDependencies, syncPolicies } from '../../src/core/sync.js'
 import { Policy } from '../../src/core/policy.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { SubjectRef } from '../../src/core/types.js'
@@ -13,7 +13,7 @@ async function namesFor(adapter: StorageAdapter): Promise<string[]> {
 }
 
 describe('syncPolicies', () => {
-  test('first sync inserts qualified policies with the portal column set', async () => {
+  test('first sync inserts qualified policies with the domain column set', async () => {
     const adapter = memoryAdapter()
     await syncPolicies(
       adapter,
@@ -23,19 +23,19 @@ describe('syncPolicies', () => {
 
     const records = await adapter.listPolicies()
     expect(records.map(r => r.name).sort()).toEqual(['admin.posts.read', 'admin.posts.write'])
-    for (const record of records) expect(record.portal).toBe('admin')
+    for (const record of records) expect(record.domain).toBe('admin')
 
     const write = records.find(r => r.name === 'admin.posts.write')!
     expect(write.dependsOn).toEqual(['admin.posts.read'])
   })
 
-  test("portal-less sync ('' sentinel) leaves names unqualified", async () => {
+  test("sync with no domain ('' sentinel) leaves names unqualified", async () => {
     const adapter = memoryAdapter()
     await syncPolicies(adapter, resources(new Policy('posts.read')))
     const records = await adapter.listPolicies()
     expect(records).toHaveLength(1)
     expect(records[0]!.name).toBe('posts.read')
-    expect(records[0]!.portal).toBe('')
+    expect(records[0]!.domain).toBe('')
   })
 
   test('re-sync with changed label/dependsOn updates metadata in place (S5/S15) — same id, new deps', async () => {
@@ -63,10 +63,10 @@ describe('syncPolicies', () => {
     expect(writeAfter.dependsOn).toEqual(['admin.posts.read'])
   })
 
-  test("orphan cleanup removes only THIS portal's orphans (S19) and cascades assignments (S6)", async () => {
+  test("orphan cleanup removes only THIS domain's orphans (S19) and cascades assignments (S6)", async () => {
     const adapter = memoryAdapter()
 
-    // Seed two portals.
+    // Seed two domains.
     await syncPolicies(
       adapter,
       resources(new Policy('posts.read'), new Policy('posts.write')),
@@ -75,15 +75,15 @@ describe('syncPolicies', () => {
     await syncPolicies(adapter, resources(new Policy('reports.view')), 'branch')
 
     // Hang assignments off the soon-to-be orphan admin.posts.write.
-    const ref: SubjectRef = { subjectId: 'u1', portal: 'admin', contextId: '' }
+    const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
     await adapter.assignPolicy(ref, 'admin.posts.write', null)
     await adapter.upsertGroup({ name: 'editors', label: 'Editors' })
     await adapter.setGroupPolicies('editors', [{ policyName: 'admin.posts.write', scope: null }])
 
-    // Re-sync admin WITHOUT posts.write: it is now an orphan of the admin portal.
+    // Re-sync admin WITHOUT posts.write: it is now an orphan of the admin domain.
     await syncPolicies(adapter, resources(new Policy('posts.read')), 'admin')
 
-    // Only the admin orphan is gone — the branch portal is untouched (S19).
+    // Only the admin orphan is gone — the branch domain is untouched (S19).
     expect(await namesFor(adapter)).toEqual(['admin.posts.read', 'branch.reports.view'])
 
     // Cascade (S6): direct assignment and group entry for the orphan are gone.
@@ -91,7 +91,7 @@ describe('syncPolicies', () => {
     expect(await adapter.getGroupPolicies('editors')).toEqual([])
   })
 
-  test('deleting every policy of one portal never touches the other portal', async () => {
+  test('deleting every policy of one domain never touches the other domain', async () => {
     const adapter = memoryAdapter()
     await syncPolicies(adapter, resources(new Policy('a'), new Policy('b')), 'admin')
     await syncPolicies(adapter, resources(new Policy('c')), 'branch')
@@ -126,10 +126,11 @@ describe('syncPolicies', () => {
       'admin.posts.read',
       'admin.posts.write',
     ])
-    // Additive: the existing entry keeps its scope; filled deps are unrestricted.
+    // Additive: the existing entry keeps its scope; filled deps inherit the
+    // scope of the grant that pulled them in (least privilege).
     expect(byName.get('admin.posts.publish')).toBe('owned')
-    expect(byName.get('admin.posts.write')).toBeNull()
-    expect(byName.get('admin.posts.read')).toBeNull()
+    expect(byName.get('admin.posts.write')).toBe('owned')
+    expect(byName.get('admin.posts.read')).toBe('owned')
     // Unrelated policies are never pulled in.
     expect(byName.has('admin.posts.unrelated')).toBe(false)
   })
@@ -157,7 +158,7 @@ describe('syncPolicies', () => {
     expect(await adapter.listPolicies()).toEqual([])
   })
 
-  test('empty resources list is a no-op — it never wipes a portal', async () => {
+  test('empty resources list is a no-op — it never wipes a domain', async () => {
     const adapter = memoryAdapter()
     await syncPolicies(adapter, resources(new Policy('posts.read')), 'admin')
 
@@ -165,5 +166,88 @@ describe('syncPolicies', () => {
     await syncPolicies(adapter, [{ policies: [] }], 'admin')
 
     expect(await namesFor(adapter)).toEqual(['admin.posts.read'])
+  })
+})
+
+describe('dependency back-fill scope inheritance (least privilege)', () => {
+  const P = (name: string, deps: string[] = []) => ({
+    name,
+    label: name,
+    dependsOn: deps,
+    scopeOptions: [],
+  })
+
+  async function setup(entries: { policyName: string; scope: string | null }[]) {
+    const adapter = memoryAdapter()
+    const resources = [
+      {
+        policies: [
+          P('sales.view'),
+          P('sales.void', ['sales.view']),
+          P('sales.update', ['sales.view']),
+          P('sales.refund', ['sales.void']),
+        ],
+      },
+    ]
+    await syncPolicies(adapter, resources as never)
+    await adapter.upsertGroup({ name: 'g', label: 'G' })
+    await adapter.setGroupPolicies('g', entries)
+    return { adapter, resources }
+  }
+
+  test('a scoped grant fills its dependency with the same scope', async () => {
+    const { adapter, resources } = await setup([{ policyName: 'sales.void', scope: 'owned' }])
+    await backfillGroupDependencies(adapter, resources as never)
+
+    const entries = new Map((await adapter.getGroupPolicies('g')).map(e => [e.policyName, e.scope]))
+    expect(entries.get('sales.view')).toBe('owned')
+  })
+
+  test('scope inheritance propagates down chains', async () => {
+    const { adapter, resources } = await setup([{ policyName: 'sales.refund', scope: 'owned' }])
+    await backfillGroupDependencies(adapter, resources as never)
+
+    const entries = new Map((await adapter.getGroupPolicies('g')).map(e => [e.policyName, e.scope]))
+    expect(entries.get('sales.void')).toBe('owned')
+    expect(entries.get('sales.view')).toBe('owned')
+  })
+
+  test('an unrestricted grant widens a shared dependency to unrestricted', async () => {
+    const { adapter, resources } = await setup([
+      { policyName: 'sales.void', scope: 'owned' },
+      { policyName: 'sales.update', scope: null },
+    ])
+    await backfillGroupDependencies(adapter, resources as never)
+
+    const entries = new Map((await adapter.getGroupPolicies('g')).map(e => [e.policyName, e.scope]))
+    expect(entries.get('sales.view')).toBeNull()
+  })
+
+  test('two different named scopes fall back to unrestricted with a warning', async () => {
+    const { adapter, resources } = await setup([
+      { policyName: 'sales.void', scope: 'owned' },
+      { policyName: 'sales.update', scope: 'same-branch' },
+    ])
+    const logs: string[] = []
+    await backfillGroupDependencies(adapter, resources as never, undefined, {
+      logger: msg => logs.push(msg),
+    })
+
+    const entries = new Map((await adapter.getGroupPolicies('g')).map(e => [e.policyName, e.scope]))
+    expect(entries.get('sales.view')).toBeNull()
+    expect(logs.some(line => line.includes('WARNING') && line.includes('sales.view'))).toBe(true)
+  })
+
+  test('an explicit entry is never overwritten and governs its own dependencies', async () => {
+    const { adapter, resources } = await setup([
+      { policyName: 'sales.refund', scope: 'owned' },
+      { policyName: 'sales.void', scope: null },
+    ])
+    await backfillGroupDependencies(adapter, resources as never)
+
+    const entries = new Map((await adapter.getGroupPolicies('g')).map(e => [e.policyName, e.scope]))
+    expect(entries.get('sales.void')).toBeNull()
+    // sales.view flows from the explicit unrestricted sales.void, not from refund's 'owned'.
+    expect(entries.get('sales.view')).toBeNull()
   })
 })

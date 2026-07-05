@@ -74,7 +74,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
             filter: { name: row.name },
             update: {
               $set: {
-                portal: row.portal,
+                domain: row.domain,
                 label: row.label,
                 scopeOptions: row.scopeOptions,
                 dependsOn: row.dependsOn,
@@ -91,7 +91,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
       return docs.map(doc => ({
         id: doc._id.toString(),
         name: doc.name,
-        portal: doc.portal ?? '',
+        domain: doc.domain ?? '',
         dependsOn: doc.dependsOn ?? [],
       }))
     },
@@ -187,8 +187,8 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
           {
             subjectId: ref.subjectId,
             policyGroupId: groupId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
           },
           { $setOnInsert: { subjectId: ref.subjectId } },
           { upsert: true },
@@ -206,8 +206,8 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
       await models.userPolicyGroup.deleteMany({
         subjectId: ref.subjectId,
         policyGroupId: group._id,
-        portal: ref.portal,
-        contextId: ref.contextId,
+        domain: ref.domain,
+        tenantId: ref.tenantId,
       })
     },
 
@@ -219,8 +219,8 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
           {
             subjectId: ref.subjectId,
             policyId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
           },
           { $set: { scope: scope ?? null } },
           { upsert: true },
@@ -236,16 +236,16 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
       await models.userPolicy.deleteMany({
         subjectId: ref.subjectId,
         policyId: policy._id,
-        portal: ref.portal,
-        contextId: ref.contextId,
+        domain: ref.domain,
+        tenantId: ref.tenantId,
       })
     },
 
     async getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]> {
       const match = {
         subjectId: ref.subjectId,
-        portal: ref.portal,
-        contextId: ref.contextId,
+        domain: ref.domain,
+        tenantId: ref.tenantId,
       }
 
       const groupGrants: PolicyGrant[] = []
@@ -288,7 +288,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
               resourceId: entry.resourceId,
               ownerId: entry.ownerId,
             },
-            update: { $set: { contextType: entry.contextType, contextId: entry.contextId } },
+            update: { $set: { domain: entry.domain, tenantId: entry.tenantId } },
             upsert: true,
           },
         })),

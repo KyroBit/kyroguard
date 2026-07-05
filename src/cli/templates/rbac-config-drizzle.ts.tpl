@@ -13,9 +13,9 @@ export default defineConfig({
     const { db } = await import('./src/db/index.js')
     return drizzleAdapter(db, { schema })
   },
-  portals: [
+  domains: [
     {
-      name: '{{PORTAL}}',
+      name: '{{DOMAIN}}',
       policies: './src/rbac/policies.ts',
       groups: './src/rbac/groups.ts',
     },

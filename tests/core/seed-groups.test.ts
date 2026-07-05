@@ -98,7 +98,7 @@ describe('seedGroups semantics', () => {
     ])
   })
 
-  test('portal qualification: portal prefixes names, no portal leaves them bare', async () => {
+  test('domain qualification: domain prefixes names, no domain leaves them bare', async () => {
     const adapter = memoryAdapter()
     await seedGroups(adapter, { a: { label: 'A', policies: ['posts.read'] } }, undefined, 'branch')
     await seedGroups(adapter, { b: { label: 'B', policies: ['posts.read'] } })
@@ -115,7 +115,6 @@ describe('seedGroups semantics', () => {
       editors: {
         label: 'Editors',
         description: 'Can edit posts',
-        isSystem: true,
         policies: { 'posts.read': null, 'posts.update': 'owned' },
       },
     }
@@ -129,6 +128,6 @@ describe('seedGroups semantics', () => {
     // Still exactly one group with its metadata intact.
     const listed = await adapter.listGroups()
     expect(listed).toHaveLength(1)
-    expect(listed[0]).toMatchObject({ name: 'editors', label: 'Editors', isSystem: true })
+    expect(listed[0]).toMatchObject({ name: 'editors', label: 'Editors', isSystem: false })
   })
 })

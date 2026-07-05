@@ -41,7 +41,7 @@ afterAll(async () => {
   await fixture.cleanup()
 })
 
-const subject: Subject = { id: 'u1', portal: 'admin', context_id: 'b1' }
+const subject: Subject = { id: 'u1', domain: 'admin', tenant_id: 'b1' }
 
 /** Runs fn in a fresh request context with the given subject set. */
 const asSubject = <T>(who: Subject, fn: () => Promise<T>): Promise<T> =>
@@ -59,21 +59,21 @@ describe('rbacPrismaExtension', () => {
     await client.post.deleteMany({})
   })
 
-  test("(a) create inside the request context records ownership with the subject's portal/context", async () => {
+  test("(a) create inside the request context records ownership with the subject's domain/context", async () => {
     const post = await asSubject(subject, () => extended.post.create({ data: { title: 'one' } }))
 
     expect(typeof post.id).toBe('string')
     expect(await isOwner('u1', post.id)).toBe(true)
     expect(await isOwner('u2', post.id)).toBe(false)
 
-    const row: { ownerId: unknown; contextType: unknown; contextId: unknown } | null =
+    const row: { ownerId: unknown; domain: unknown; tenantId: unknown } | null =
       await client.rbacResourceOwner.findFirst({
         where: { resourceType: 'post', resourceId: post.id },
       })
     expect(row).not.toBeNull()
     expect(row?.ownerId).toBe('u1')
-    expect(row?.contextType).toBe('admin')
-    expect(row?.contextId).toBe('b1')
+    expect(row?.domain).toBe('admin')
+    expect(row?.tenantId).toBe('b1')
   })
 
   test('(b) createMany with client-provided ids records ownership for every input row', async () => {

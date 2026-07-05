@@ -14,33 +14,35 @@ import { resources } from './resources.js'
 import { verifySession } from './auth.js'
 
 const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }), resources })
-const { context, portal, errorHandler } = rbacExpress(rbac)
+const { context, domain, errorHandler } = rbacExpress(rbac)
 
 const app = express()
 app.use(context())
 
-const admin = portal('admin', {
+const staff = domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
   },
 })
 
-app.get('/posts', admin.requirePolicy('posts.read'), (req, res) => {
-  res.json({ posts: [] })
+app.get('/sales', staff.requirePolicy('sales.view'), (req, res) => {
+  res.json([])
 })
 
 app.use(errorHandler())
 app.listen(3000)
 ```
 
-`context()` lets guards see the current request. `portal()` creates a portal. `requirePolicy` is plain middleware. `errorHandler()` renders denials as JSON.
+`context()` lets guards see the current request. `domain()` creates a domain. `requirePolicy` is plain middleware. `errorHandler()` renders denials as JSON.
 
 ::: warning Order matters
 Register `context()` before any guard and `errorHandler()` after your routes. In the wrong order, guards fail with a 500 instead of denying properly.
 :::
 
 `resources` holds your policy definitions. See [Policies](/guide/policies). `getSubject` returns the logged-in user, or `null`. See [Protecting routes](/guide/protecting-routes).
+
+`staff` is a domain with no name — the single-app form. Named domains like `admin` and `branch` are covered in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -58,7 +60,7 @@ That is the 403 for a missing policy. No logged-in user gets a 401 with code `RB
 To change the response shape, pass `formatError`:
 
 ```ts
-const { context, portal, errorHandler } = rbacExpress(rbac, {
+const { context, domain, errorHandler } = rbacExpress(rbac, {
   formatError: error => ({
     status: error.statusCode,
     body: { error: error.code },
@@ -69,10 +71,10 @@ const { context, portal, errorHandler } = rbacExpress(rbac, {
 ## Routers
 
 ```ts
-const posts = express.Router()
-posts.get('/', admin.requirePolicy('posts.read'), listPosts)
-posts.post('/', admin.requirePolicy('posts.write'), createPost)
-app.use('/posts', posts)
+const sales = express.Router()
+sales.get('/', staff.requirePolicy('sales.view'), listSales)
+sales.post('/', staff.requirePolicy('sales.create'), createSale)
+app.use('/sales', sales)
 ```
 
 Guards are plain middleware, so they mount on any router. Keep `context()` and `errorHandler()` at the app level.

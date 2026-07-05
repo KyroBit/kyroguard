@@ -101,7 +101,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         const existing: Array<{
           id: unknown
           name: unknown
-          portal: unknown
+          domain: unknown
           label: unknown
           scopeOptions: unknown
           dependsOn: unknown
@@ -110,7 +110,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           select: {
             id: true,
             name: true,
-            portal: true,
+            domain: true,
             label: true,
             scopeOptions: true,
             dependsOn: true,
@@ -129,14 +129,14 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           // incoming values — never a self-referential set.
           const changed =
             current.label !== row.label ||
-            current.portal !== row.portal ||
+            current.domain !== row.domain ||
             !sameArray(toStringArray(current.scopeOptions), row.scopeOptions) ||
             !sameArray(toStringArray(current.dependsOn), row.dependsOn)
           if (!changed) continue
           await tx.rbacPolicy.update({
             where: { id: String(current.id) },
             data: {
-              portal: row.portal,
+              domain: row.domain,
               label: row.label,
               scopeOptions: row.scopeOptions,
               dependsOn: row.dependsOn,
@@ -149,7 +149,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           await tx.rbacPolicy.createMany({
             data: missing.map(row => ({
               name: row.name,
-              portal: row.portal,
+              domain: row.domain,
               label: row.label,
               scopeOptions: row.scopeOptions,
               dependsOn: row.dependsOn,
@@ -160,15 +160,15 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async listPolicies(): Promise<PolicyRecord[]> {
-      const rows: Array<{ id: unknown; name: unknown; portal: unknown; dependsOn: unknown }> =
+      const rows: Array<{ id: unknown; name: unknown; domain: unknown; dependsOn: unknown }> =
         await client.rbacPolicy.findMany({
           orderBy: { name: 'asc' },
-          select: { id: true, name: true, portal: true, dependsOn: true },
+          select: { id: true, name: true, domain: true, dependsOn: true },
         })
       return rows.map(row => ({
         id: String(row.id),
         name: String(row.name),
-        portal: String(row.portal ?? ''),
+        domain: String(row.domain ?? ''),
         dependsOn: toStringArray(row.dependsOn),
       }))
     },
@@ -323,19 +323,19 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       try {
         await client.rbacUserPolicyGroup.upsert({
           where: {
-            subjectId_policyGroupId_portal_contextId: {
+            subjectId_policyGroupId_domain_tenantId: {
               subjectId: ref.subjectId,
               policyGroupId: groupId,
-              portal: ref.portal,
-              contextId: ref.contextId,
+              domain: ref.domain,
+              tenantId: ref.tenantId,
             },
           },
           update: {},
           create: {
             subjectId: ref.subjectId,
             policyGroupId: groupId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
           },
         })
       } catch (error) {
@@ -353,8 +353,8 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         where: {
           subjectId: ref.subjectId,
           policyGroupId: groupId,
-          portal: ref.portal,
-          contextId: ref.contextId,
+          domain: ref.domain,
+          tenantId: ref.tenantId,
         },
       })
     },
@@ -370,19 +370,19 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       try {
         await client.rbacUserPolicy.upsert({
           where: {
-            subjectId_policyId_portal_contextId: {
+            subjectId_policyId_domain_tenantId: {
               subjectId: ref.subjectId,
               policyId,
-              portal: ref.portal,
-              contextId: ref.contextId,
+              domain: ref.domain,
+              tenantId: ref.tenantId,
             },
           },
           update: { scope: next },
           create: {
             subjectId: ref.subjectId,
             policyId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
             scope: next,
           },
         })
@@ -393,8 +393,8 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           where: {
             subjectId: ref.subjectId,
             policyId,
-            portal: ref.portal,
-            contextId: ref.contextId,
+            domain: ref.domain,
+            tenantId: ref.tenantId,
           },
           data: { scope: next },
         })
@@ -412,15 +412,15 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         where: {
           subjectId: ref.subjectId,
           policyId: String(policy.id),
-          portal: ref.portal,
-          contextId: ref.contextId,
+          domain: ref.domain,
+          tenantId: ref.tenantId,
         },
       })
     },
 
     async getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]> {
-      // S2/S3: strict equality on (subjectId, portal, contextId) for BOTH paths.
-      const tuple = { subjectId: ref.subjectId, portal: ref.portal, contextId: ref.contextId }
+      // S2/S3: strict equality on (subjectId, domain, tenantId) for BOTH paths.
+      const tuple = { subjectId: ref.subjectId, domain: ref.domain, tenantId: ref.tenantId }
 
       const assignments: Array<{
         policyGroup: { entries: Array<{ scope: unknown; policy: { name: unknown } }> }
@@ -464,7 +464,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       for (const entry of entries) {
         try {
           // S13: upsert on (resourceType, resourceId, ownerId); last write
-          // wins on the context fields.
+          // wins on the domain/tenant fields.
           await client.rbacResourceOwner.upsert({
             where: {
               resourceType_resourceId_ownerId: {
@@ -473,13 +473,13 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
                 ownerId: entry.ownerId,
               },
             },
-            update: { contextType: entry.contextType, contextId: entry.contextId },
+            update: { domain: entry.domain, tenantId: entry.tenantId },
             create: {
               resourceType: entry.resourceType,
               resourceId: entry.resourceId,
               ownerId: entry.ownerId,
-              contextType: entry.contextType,
-              contextId: entry.contextId,
+              domain: entry.domain,
+              tenantId: entry.tenantId,
             },
           })
         } catch (error) {

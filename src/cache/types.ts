@@ -10,17 +10,17 @@ import type { Awaitable, PolicyMap } from '../core/types.js'
 
 /**
  * Collision-proof cache key. Fixed arity and per-component encoding: a ':'
- * inside a subject id, portal or context id is escaped, and empty components
- * stay in position — ('u1', '', 'ctx') and ('u1', 'ctx', '') produce
+ * inside a subject id, domain or tenant id is escaped, and empty components
+ * stay in position — ('u1', '', 't1') and ('u1', 't1', '') produce
  * different ids. The `rbac:v1:<subject>:` prefix makes per-subject
  * invalidation a prefix operation in external stores.
  */
 export interface PolicyCacheKey {
-  /** Full encoded key: `rbac:v1:<enc(subjectId)>:<enc(portal)>:<enc(contextId)>` */
+  /** Full encoded key: `rbac:v1:<enc(subjectId)>:<enc(domain)>:<enc(tenantId)>` */
   id: string
   subjectId: string
-  portal: string
-  contextId: string
+  domain: string
+  tenantId: string
 }
 
 export interface PolicyCache {

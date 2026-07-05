@@ -18,23 +18,25 @@ const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }), resources })
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-const admin = app.rbac.portal('admin', {
+const staff = app.rbac.domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
   },
 })
 
-app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => {
-  return { posts: [] }
+app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => {
+  return []
 })
 
 await app.listen({ port: 3000 })
 ```
 
-Three steps. Register `rbacFastify(rbac)` once. Create a portal with `app.rbac.portal()`. Guard routes with `requirePolicy` in `preHandler`.
+Three steps. Register `rbacFastify(rbac)` once. Create a domain with `app.rbac.domain()`. Guard routes with `requirePolicy` in `preHandler`.
 
 `resources` holds your policy definitions. See [Policies](/guide/policies). The adapter connects your database. Swap in [Prisma](/databases/prisma) or [MongoDB](/databases/mongodb) the same way. `getSubject` returns the logged-in user, or `null`. See [Protecting routes](/guide/protecting-routes).
+
+`staff` is a domain with no name — the single-app form. Named domains like `admin` and `branch` are covered in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -66,13 +68,13 @@ await app.register(rbacFastify(rbac, {
 
 `formatError` replaces the response for denials. It only sees rbac errors. Everything else keeps flowing through Fastify's own error pipeline.
 
-## contextHook
+## subjectHook
 
 ```ts
 app.register(async scope => {
-  scope.addHook('preHandler', admin.contextHook())
-  scope.post('/drafts', createDraft)
+  scope.addHook('preHandler', staff.subjectHook())
+  scope.post('/sales', createSale)
 })
 ```
 
-`contextHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows who created the row. See [Ownership](/guide/ownership). Register it inside a scoped plugin, not app-wide.
+`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which cashier created the row. See [Ownership](/guide/ownership). Register it inside a scoped plugin, not app-wide.
