@@ -13,10 +13,7 @@ export async function loadConfig(explicitPath?: string): Promise<{ config: RbacC
   return { config: loaded, path }
 }
 
-/**
- * Loads a policy/groups module and returns the first defined export among
- * `candidates`, falling back to the default export.
- */
+/** Returns the first defined export among `candidates`, falling back to the default export. */
 export async function loadModuleExport<T = unknown>(path: string, candidates: string[]): Promise<T> {
   const absolute = isAbsolute(path) ? path : resolve(path)
   if (!existsSync(absolute)) {
@@ -33,10 +30,7 @@ export async function loadModuleExport<T = unknown>(path: string, candidates: st
   )
 }
 
-/**
- * Bun executes TypeScript natively; under Node, jiti transpiles the user's
- * rbac.config.ts / policy files without requiring a build step.
- */
+// Bun executes TypeScript natively; under Node, jiti transpiles the user's files.
 async function importModule(absolutePath: string): Promise<Record<string, unknown>> {
   if (typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined') {
     return (await import(pathToFileURL(absolutePath).href)) as Record<string, unknown>

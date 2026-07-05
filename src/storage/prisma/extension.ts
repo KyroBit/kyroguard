@@ -7,10 +7,7 @@ import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 export interface RbacPrismaResourceRegistration {
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
-  /**
-   * The Prisma CLIENT model property name, case-exact as Prisma reports it —
-   * i.e. the delegate key (`model BlogPost` → `'blogPost'`).
-   */
+  /** The Prisma client delegate key, case-exact (`model BlogPost` → `'blogPost'`). */
   model: string
 }
 
@@ -27,44 +24,16 @@ interface QueryHookParams {
 
 type QueryHook = (params: QueryHookParams) => Promise<any>
 
-/**
- * The plain client-extension object shape accepted by `client.$extends(...)`.
- * Structural on purpose — src/ never imports `@prisma/client`.
- */
+/** The extension object shape for `client.$extends(...)`; structural — src/ never imports `@prisma/client`. */
 export interface RbacPrismaExtension {
   name: string
   query: Record<string, Record<string, QueryHook>>
 }
 
 /**
- * Prisma client extension: automatic ownership tracking for registered
- * resource models. Apply with `client.$extends(rbacPrismaExtension({...}))`.
- *
- * For each registered model, after `create` / `createMany` / `upsert` the
- * extension reads the current subject from the engine's request context
- * (AsyncLocalStorage) and records ownership through the adapter:
- *
- * - `create` — records the created row's `id` from the result.
- * - `createMany` — Prisma returns only `{ count }`, so ids CANNOT be read
- *   back: only input rows that carry a client-provided `id` are recorded.
- *   Rows relying on database-generated ids are a DOCUMENTED GAP — record
- *   those explicitly via `rbac.ownership.record()`.
- * - `upsert` — Prisma cannot tell whether the row was created or updated, so
- *   ownership is recorded idempotently either way (recordOwnership is an
- *   upsert on (resourceType, resourceId, ownerId)).
- *
- * Semantics:
- * - No subject in the request context → no ownership is recorded, no error.
- * - The ownership write is AWAITED before the result is returned; a failing
- *   write rejects the caller (the resource row itself is already committed —
- *   Prisma query extensions run outside any implicit transaction).
- * - The create/upsert result must include the `id` field (the default
- *   selection does); a custom `select` omitting `id` records nothing.
- *
- * NOT intercepted — call `rbac.ownership.record()` explicitly for these:
- * - `$executeRaw` / `$queryRaw` / raw SQL of any kind,
- * - nested writes (creating rows through a relation on another model),
- * - `createManyAndReturn`, `updateMany`, and every other operation.
+ * Prisma client extension: automatic ownership tracking for registered models.
+ * Interception gaps (raw SQL, nested writes, db-generated createMany ids, …)
+ * are documented in docs/reference/prisma.md.
  */
 export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPrismaExtension {
   const { engine, adapter } = options.rbac
@@ -101,9 +70,7 @@ export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPr
 
       async createMany({ args, query: run }: QueryHookParams): Promise<any> {
         const result = await run(args)
-        // createMany returns { count } only: record the ids present in the
-        // input rows (client-provided ids); db-generated ids are the
-        // documented gap above.
+        // createMany returns { count } only — db-generated ids are a documented gap.
         const data: unknown = (args as { data?: unknown } | null | undefined)?.data
         const rows = Array.isArray(data) ? data : data !== undefined && data !== null ? [data] : []
         await recordOwnershipFor(resource.type, rows.map(extractId))

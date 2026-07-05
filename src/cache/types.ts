@@ -1,11 +1,3 @@
-/**
- * Policy cache abstraction.
- *
- * The cache is created inside createRbac() — instance-scoped, never
- * module-level, so two apps in one process cannot share (or poison) each
- * other's entries and tests reset it for free.
- */
-
 import type { Awaitable, PolicyMap } from '../core/types.js'
 
 /**
@@ -30,24 +22,14 @@ export interface PolicyCache {
   clear(): Awaitable<void>
 }
 
-/**
- * Cross-instance invalidation (the casbin "watcher" analog). The engine
- * publishes after every assignment mutation it performs and invalidates its
- * local cache on every delivery. Events are idempotent, so receiving your
- * own publication is harmless. The default bus is in-process; `redisBus()`
- * adapts any ioredis-compatible client pair.
- */
+/** Cross-instance invalidation events; idempotent — receiving your own publication is harmless. */
 export type InvalidationEvent = { type: 'subject'; subjectId: string } | { type: 'all' }
 
 export interface InvalidationBus {
   publish(event: InvalidationEvent): Awaitable<void>
   /** Returns an unsubscribe function. */
   subscribe(handler: (event: InvalidationEvent) => void): () => void
-  /**
-   * Release underlying transport resources (e.g. the Redis channel
-   * subscription). The bus owner calls this at shutdown — engine.dispose()
-   * only detaches its own handler.
-   */
+  /** Releases transport resources; the bus owner calls this — engine.dispose() only detaches its handler. */
   close?(): Awaitable<void>
 }
 

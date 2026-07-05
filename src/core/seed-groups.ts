@@ -1,11 +1,7 @@
 import { qualifyPolicyName } from './types.js'
 import type { GroupPolicyEntry, StorageAdapter } from '../storage/contract.js'
 
-/**
- * 'all' = every synced policy (requires allPolicies); string[] = those
- * policies unrestricted; Record = policy → scope (null = unrestricted).
- * Names are UNQUALIFIED — seedGroups qualifies them with the domain sentinel.
- */
+/** Policy names are UNQUALIFIED — seedGroups qualifies them with the domain sentinel. */
 export type GroupPoliciesInput = 'all' | string[] | Record<string, string | null>
 
 export interface GroupDefinition {

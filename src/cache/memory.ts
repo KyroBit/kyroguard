@@ -12,10 +12,7 @@ interface Entry {
   subjectId: string
 }
 
-/**
- * Bounded in-memory LRU with per-entry TTL. Recency is Map insertion order:
- * get() re-inserts the entry, eviction removes the first (least recent) key.
- */
+/** Bounded in-memory LRU with per-entry TTL; recency is Map insertion order. */
 export function memoryCache(options: MemoryCacheOptions): PolicyCache {
   const { maxEntries, ttlMs } = options
   const entries = new Map<string, Entry>()

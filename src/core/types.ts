@@ -1,27 +1,8 @@
-/**
- * Core public types. This module imports nothing framework- or ORM-specific.
- */
-
 export type Awaitable<T> = T | Promise<T>
 
 /**
- * Augment this interface from your project (the CLI's `rbac sync` /
- * `rbac generate` writes rbac.d.ts doing exactly this) to get typed domain
- * names and per-domain policy autocompletion:
- *
- * ```ts
- * declare module '@kyrobit/rbac' {
- *   interface RbacTypes {
- *     Domain: 'admin' | 'branch'
- *     PolicyName: 'posts.read' | 'posts.write'
- *     DomainPolicies: { admin: 'posts.read' | 'posts.write'; branch: 'posts.read' }
- *   }
- * }
- * ```
- *
- * The interface is empty by default so augmentation ADDS members instead of
- * re-declaring them (TypeScript rejects re-declaring a property with a
- * narrower type). Use the Resolved* aliases below to consume it.
+ * Augmented from user projects via the CLI-generated rbac.d.ts. Must stay
+ * empty: augmentation ADDS members, TypeScript rejects re-declaring one.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface RbacTypes {}
@@ -50,9 +31,8 @@ export interface Subject {
 }
 
 /**
- * What a domain's getSubject returns — domain is added by the domain itself.
- * Declared explicitly (not Omit<Subject, 'domain'>): Subject's index
- * signature makes Omit collapse to a bare index signature and erases `id`.
+ * What a domain's getSubject returns — the domain adds `domain` itself.
+ * Not Omit<Subject, 'domain'>: the index signature makes Omit erase `id`.
  */
 export interface SubjectInput {
   id: string
@@ -90,11 +70,7 @@ export function normalizeSentinel(value: string | null | undefined): string {
 /** A fully-qualified policy name, e.g. `admin.posts.read` for domain `admin`. */
 export type QualifiedPolicyName = string
 
-/**
- * Exactly one layer qualifies policy names: the engine. Domain guards and
- * domain assignment sugar take unqualified names and qualify them here;
- * the low-level admin API takes already-qualified names and says so.
- */
+/** Exactly one layer qualifies policy names: the engine. */
 export function qualifyPolicyName(domain: string, policy: string): QualifiedPolicyName {
   return domain === '' ? policy : `${domain}.${policy}`
 }
@@ -108,8 +84,8 @@ export interface ResourceRef {
 }
 
 /**
- * Fired after every authorization decision (allow or deny). Errors thrown by
- * the hook are swallowed — observability must never affect authorization.
+ * Fired after every decision. Hook errors are swallowed — observability must
+ * never affect authorization.
  */
 export interface DecisionEvent {
   subjectId: string

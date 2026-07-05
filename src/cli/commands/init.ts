@@ -6,8 +6,7 @@ import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import { detectStack } from '../detect.js'
 import type { DetectedStack } from '../detect.js'
-// Pure string constant (no imports) — the single source of truth for the six
-// Prisma models. The CLI still never imports a DB driver or ORM.
+// A pure string constant — this import keeps the CLI free of DB drivers and ORMs.
 import { prismaSchemaSnippet } from '../../storage/prisma/schema-snippet.js'
 
 export interface InitOptions {
@@ -123,11 +122,6 @@ export async function run(options: InitOptions): Promise<void> {
   }
 }
 
-/**
- * Where the Prisma snippet lands: prisma/rbac.prisma by default; when the
- * project keeps a root-level schema.prisma and has no prisma/ directory,
- * write rbac.prisma next to it instead.
- */
 function prismaSnippetDest(cwd: string): string {
   if (!existsSync(join(cwd, 'prisma')) && existsSync(join(cwd, 'schema.prisma'))) {
     return 'rbac.prisma'
@@ -158,8 +152,6 @@ async function prompt(detected: DetectedStack): Promise<Answers> {
   try {
     const framework = await choose(rl, 'Framework', ['fastify', 'express'], detected.framework ?? 'fastify')
     const orm = await choose(rl, 'ORM', ['drizzle', 'prisma', 'mongoose'], detected.orm ?? 'drizzle')
-    // Only drizzle needs a dialect choice (per-dialect schema template); the
-    // Prisma snippet is provider-agnostic and mongoose has no dialect.
     const dialect =
       orm === 'drizzle'
         ? await choose(rl, 'Dialect', ['pg', 'mysql', 'sqlite'], detected.dialect ?? 'pg')

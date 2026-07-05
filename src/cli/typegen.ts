@@ -11,8 +11,7 @@ export interface DomainTypeInfo {
 /**
  * Writes rbac.d.ts augmenting the RbacTypes interface. Every interpolated
  * name — union literals AND property keys — goes through JSON.stringify so
- * user-controlled policy/domain names can never inject declaration code
- * (v0 interpolated them raw).
+ * user-controlled policy/domain names can never inject declaration code.
  */
 export async function generateTypes(domains: DomainTypeInfo[], output: string): Promise<void> {
   const outputPath = resolve(output)

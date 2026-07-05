@@ -1,10 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Subject } from './types.js'
 
-/**
- * Per-request state. Created once per request by the framework integration's
- * context hook/middleware; read by guards and by ownership tracking.
- */
+/** Per-request state, created by the framework integration's context hook. */
 export interface RequestStore {
   /** The active subject (set by a guard after resolution, or by setSubject). */
   subject: Subject | null
@@ -15,9 +12,7 @@ export interface RequestStore {
 }
 
 /**
- * Instance-scoped ALS wrapper. Each RbacEngine owns its own storage —
- * module-level state is gone, so two engines in one process are isolated
- * and tests never leak context between apps.
+ * Instance-scoped ALS wrapper; each RbacEngine owns its own storage.
  *
  * Bun note: callers must use the callback form (`run(store, done)`) inside
  * framework hooks — awaiting a promise that resolves inside `run()` does not

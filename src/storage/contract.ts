@@ -3,7 +3,7 @@
  *
  * Every storage backend (Drizzle pg/mysql/sqlite, Mongoose, in-memory test
  * adapter, future backends) implements this interface. The numbered clauses
- * S1–S18 below are the normative semantics; each clause maps 1:1 to a case in
+ * S1–S20 below are the normative semantics; each clause maps 1:1 to a case in
  * the contract test suite (`@kyrobit/rbac/testing`,
  * runStorageAdapterContractSuite). An adapter is conforming exactly when it
  * passes that suite.
@@ -135,21 +135,16 @@ export interface StorageAdapter {
   readonly id: string
   readonly capabilities: AdapterCapabilities
 
-  /**
-   * Optional DDL/index hook, run by `rbac sync` before writing (S17).
-   * Drizzle: no-op — migrations own DDL. Mongoose: syncIndexes().
-   */
+  /** Optional DDL/index hook, run by `rbac sync` before writing (S17). */
   ensureSchema?(): Promise<void>
   /** Release connections. Called by the CLI after sync. */
   close?(): Promise<void>
 
-  // ── Policy sync ────────────────────────────────────────────────────────────
   upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void>
   listPolicies(): Promise<PolicyRecord[]>
   /** Cascades group entries and direct assignments (S6). */
   deletePolicies(ids: string[]): Promise<void>
 
-  // ── Groups ─────────────────────────────────────────────────────────────────
   upsertGroup(group: {
     name: string
     label: string
@@ -162,17 +157,14 @@ export interface StorageAdapter {
   setGroupPolicies(groupName: string, entries: GroupPolicyEntry[]): Promise<void>
   addGroupPolicies(groupName: string, entries: GroupPolicyEntry[]): Promise<void>
 
-  // ── Assignments ────────────────────────────────────────────────────────────
   assignGroup(ref: SubjectRef, groupName: string): Promise<void>
   removeGroup(ref: SubjectRef, groupName: string): Promise<void>
   assignPolicy(ref: SubjectRef, policyName: string, scope?: string | null): Promise<void>
   removePolicy(ref: SubjectRef, policyName: string): Promise<void>
 
-  // ── Enforcement hot path ───────────────────────────────────────────────────
   /** Group + direct grants, both strict-matched on (domain, tenantId) (S2, S3). */
   getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]>
 
-  // ── Ownership (portable floor — powers Scope.owned() on every backend) ─────
   recordOwnership(entries: OwnershipEntry[]): Promise<void>
   isOwner(ownerId: string, resource: ResourceRef): Promise<boolean>
   removeOwnership(resource: ResourceRef): Promise<void>

@@ -1,12 +1,4 @@
-/**
- * @kyrobit/rbac — framework-agnostic core.
- *
- * This entry imports nothing from Fastify, Express, Drizzle or Mongoose.
- * Framework and storage integrations live at subpaths:
- *   @kyrobit/rbac/fastify   @kyrobit/rbac/express
- *   @kyrobit/rbac/drizzle   @kyrobit/rbac/mongoose
- *   @kyrobit/rbac/cache     @kyrobit/rbac/testing
- */
+/** @kyrobit/rbac — framework-agnostic core entry; integrations live at subpaths. */
 
 import { RbacEngine } from './core/engine.js'
 import { collectScopes } from './core/scope.js'
@@ -31,21 +23,11 @@ export interface CreateRbacOptions {
   adapter: StorageAdapter
   /** Resource definitions — source of the scope registry and tracking config. */
   resources?: ResourceDefinition[]
-  /**
-   * Plain policy list for guard-only apps — shorthand for a single resource
-   * definition. Use `resources` when you want ownership tracking or
-   * query scoping for specific tables/models.
-   */
+  /** Shorthand for a single guard-only resource definition. */
   policies?: Policy[]
-  /**
-   * Group (role) definitions. rbac.sync() seeds them after syncing policies —
-   * the same behavior as `npx rbac sync` with a groups file.
-   */
+  /** Group (role) definitions, seeded by rbac.sync() after policies. */
   groups?: GroupsDefinition
-  /**
-   * Policy cache. Default: bounded in-memory LRU with a 30s TTL.
-   * Pass `false` to disable caching entirely.
-   */
+  /** Policy cache. Default: bounded in-memory LRU (30s TTL). `false` disables caching. */
   cache?: PolicyCache | false
   /** TTL for the default memory cache. Ignored when `cache` is provided. */
   cacheTtlMs?: number
@@ -69,27 +51,14 @@ export interface Rbac {
   readonly adapter: StorageAdapter
   readonly resources: ResourceDefinition[]
 
-  /**
-   * Load your definitions into storage — the programmatic `npx rbac sync`.
-   * With no arguments it syncs the policies given to createRbac and seeds
-   * the groups given to createRbac. Pass a domain name to load them under
-   * that domain. The explicit resources form is for multi-domain setups and
-   * does not touch groups.
-   */
+  /** Programmatic `npx rbac sync`. The explicit resources form does not touch groups. */
   sync(): Promise<void>
   sync(domain: string): Promise<void>
   sync(resources: ResourceDefinition[], domain?: string): Promise<void>
-  /**
-   * Seed policy groups (replace-all per group). `'all'` group definitions
-   * resolve against the policies given to createRbac unless overridden.
-   */
+  /** Seed policy groups (replace-all per group). */
   seedGroups(groups: GroupsDefinition, options?: { domain?: string; allPolicies?: { name: string }[] }): Promise<void>
 
-  /**
-   * Low-level assignment API. Takes FULLY-QUALIFIED policy names and explicit
-   * domain/tenant coordinates. Domain instances (framework layer) offer the auto-prefixed
-   * ergonomic form — prefer those in app code.
-   */
+  /** Low-level assignment API — takes FULLY-QUALIFIED policy names and explicit coordinates. */
   admin: {
     assignGroup(subject: AdminSubjectRef, group: string): Promise<void>
     removeGroup(subject: AdminSubjectRef, group: string): Promise<void>
@@ -167,8 +136,6 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       const domainName = explicit ? domain : resourcesOrDomain
       await options.adapter.ensureSchema?.()
       await syncPolicies(options.adapter, res, domainName)
-      // Instance forms mirror the CLI: groups seed after policies, then the
-      // dependency back-fill runs against the seeded state.
       if (!explicit && options.groups) {
         await seedGroups(
           options.adapter,
@@ -262,8 +229,7 @@ export type {
   SubjectInput,
   SubjectRef,
 } from './core/types.js'
-// Re-exported so CLI-generated schema files in user projects don't need a
-// direct dependency on @paralleldrive/cuid2 (strict pnpm layouts).
+// Re-exported so CLI-generated schema files don't need a direct cuid2 dependency.
 export { createId } from '@paralleldrive/cuid2'
 export { UnknownPolicyError } from './storage/contract.js'
 export type {

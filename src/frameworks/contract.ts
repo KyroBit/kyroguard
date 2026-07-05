@@ -1,15 +1,6 @@
 /**
- * Framework integration contract.
- *
- * A framework layer is a translator with exactly three responsibilities:
- *   1. Context — open the engine's per-request ALS store once per request.
- *   2. Domains — hook-free domain factories whose guards resolve the subject
- *      lazily AT GUARD TIME, memoized per (request, domain). Registering a
- *      domain never installs an app-wide hook, so two domains on one app can
- *      never overwrite each other's subject (v0 forDomain regression).
- *   3. Errors — guards throw typed RbacError subclasses through the
- *      framework's OWN error pipeline. No hijacked replies, no raw sockets:
- *      onSend hooks, CORS headers and custom error handlers keep working.
+ * Framework integration contract. Registering a domain must never install an
+ * app-wide hook — otherwise two domains on one app overwrite each other's subject.
  */
 
 import type { RbacError } from '../core/errors.js'
@@ -21,10 +12,7 @@ export interface GuardOptions<TReq> {
 }
 
 export interface DomainOptions<TReq> {
-  /**
-   * Called lazily at guard time, memoized per request per domain.
-   * Return null when the request has no authenticated user → 401.
-   */
+  /** Called lazily at guard time, memoized per (request, domain); null → 401. */
   getSubject: (req: TReq) => Awaitable<SubjectInput | null>
 }
 
@@ -34,14 +22,9 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   /** Unqualified policy name; the domain qualifies it. */
   requirePolicy(policy: DomainPolicyName<P>, options?: GuardOptions<TReq>): TGuard
 
-  /**
-   * Optional hook/middleware that resolves and sets the subject WITHOUT
-   * guarding — for unguarded routes that still need ownership tracking.
-   * Register it in an encapsulated scope, never app-wide.
-   */
+  /** Resolves and sets the subject without guarding; register in an encapsulated scope, never app-wide. */
   subjectHook(): TGuard
 
-  // Assignment sugar — auto-qualified, strict (domain = this.name):
   assignGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   removeGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   assignPolicy(

@@ -32,8 +32,6 @@ export async function loadDomainResources(
       `[rbac] ${path} must export a ResourceDefinition[] or Policy[] (as \`resources\`, \`policies\` or the default export).`,
     )
   }
-  // A plain Policy[] — the same shorthand createRbac({ policies }) accepts —
-  // is wrapped into a single guard-only resource definition.
   if (loaded.length > 0 && loaded.every(isPolicyLike)) {
     return [{ type: 'policy', policies: loaded }]
   }

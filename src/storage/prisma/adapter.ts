@@ -42,19 +42,8 @@ function byName(a: PolicyGrant, b: PolicyGrant): number {
 }
 
 /**
- * Prisma StorageAdapter.
- *
- * The client is structural (see ./client-contract.ts): pass any generated
- * `PrismaClient` whose schema contains the six models from
- * `prismaSchemaSnippet`. Lifecycle notes:
- *
- * - `ensureSchema` is omitted — Prisma migrations (`prisma migrate` /
- *   `prisma db push`) own DDL, exactly like the Drizzle adapter.
- * - `close` is omitted — the caller owns the client (`$disconnect()`).
- * - S10 under races: concurrent assigns on the same tuple can make the
- *   loser's `upsert` throw P2002; that is treated as success (assignGroup)
- *   or converted into the scope update the upsert would have run
- *   (assignPolicy), so idempotency holds under concurrency.
+ * Prisma StorageAdapter. The client is structural (see ./client-contract.ts);
+ * ensureSchema/close are omitted — migrations own DDL, the caller owns the client.
  */
 export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
   const findGroupId = async (
@@ -245,8 +234,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async setGroupPolicies(groupName: string, entries: GroupPolicyEntry[]): Promise<void> {
-      // S8: replace exactly — remove absent, add missing, update changed
-      // scopes — all inside one transaction, touching only this group.
+      // S8: replace exactly, in one transaction, touching only this group.
       await client.$transaction(async tx => {
         const groupId = await requireGroupId(tx, groupName)
         const idByName = await resolvePolicyIds(tx, entries.map(entry => entry.policyName))
@@ -339,8 +327,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           },
         })
       } catch (error) {
-        // S10 race: a concurrent assign inserted the same tuple first; the
-        // unique constraint makes the loser's P2002 equivalent to success.
+        // S10 race: loser's P2002 on the same tuple is equivalent to success.
         if (!isUniqueViolation(error)) throw error
       }
     },
@@ -463,8 +450,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       if (entries.length === 0) return
       for (const entry of entries) {
         try {
-          // S13: upsert on (resourceType, resourceId, ownerId); last write
-          // wins on the domain/tenant fields.
+          // S13: upsert on (resourceType, resourceId, ownerId); last write wins on domain/tenant.
           await client.rbacResourceOwner.upsert({
             where: {
               resourceType_resourceId_ownerId: {

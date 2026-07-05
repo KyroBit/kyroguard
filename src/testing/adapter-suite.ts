@@ -1,10 +1,6 @@
 /**
- * Executable specification of src/storage/contract.ts.
- *
- * Every clause S1–S20 has at least one case named with its clause id. The
- * suite is runner-injected — pass { describe, it, expect } from bun:test or
- * vitest — and creates a FRESH adapter per case via makeAdapter, so cases
- * never share state.
+ * Executable specification of src/storage/contract.ts: every clause S1–S20
+ * has at least one case named with its clause id.
  */
 
 import type { SubjectRef } from '../index.js'

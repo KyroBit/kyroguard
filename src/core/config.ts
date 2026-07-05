@@ -1,9 +1,8 @@
 import type { StorageAdapter } from '../storage/contract.js'
 
 /**
- * rbac.config.ts shape. The adapter factory is lazy so commands that don't
- * need a database (`rbac generate`) never open a connection, and the CLI
- * itself never imports a driver — the user's config does.
+ * rbac.config.ts shape. The adapter factory is lazy — the user's config owns
+ * the driver imports, never the CLI.
  */
 export interface RbacConfig {
   adapter: () => Promise<StorageAdapter> | StorageAdapter

@@ -1,13 +1,3 @@
-/**
- * Typed authorization errors.
- *
- * Core never writes HTTP responses. Guards throw these; each framework
- * integration surfaces them through the framework's own error pipeline
- * (Fastify: thrown → error handler, onSend hooks and CORS all run;
- * Express: next(err) → rbacErrorHandler()). Every error carries a stable
- * machine-readable `code` documented in the error reference.
- */
-
 export type RbacErrorCode =
   | 'RBAC_UNAUTHENTICATED'
   | 'RBAC_POLICY_DENIED'

@@ -11,10 +11,8 @@ export function detectStack(cwd: string): DetectedStack {
   const deps = readDependencies(cwd)
 
   const framework = deps.has('fastify') ? 'fastify' : deps.has('express') ? 'express' : null
-  // Precedence: drizzle > prisma > mongoose. drizzle-orm in a project's deps
-  // almost always means drizzle IS the app's ORM (prisma often lingers as a
-  // tooling/transitive dep during migrations), and prisma likewise outranks
-  // mongoose.
+  // Precedence: drizzle > prisma > mongoose — prisma often lingers as a
+  // tooling dep in projects that migrated away from it.
   const orm: DetectedStack['orm'] = deps.has('drizzle-orm')
     ? 'drizzle'
     : deps.has('@prisma/client') || deps.has('prisma')
@@ -86,8 +84,7 @@ function detectPrismaDialect(cwd: string): DetectedStack['dialect'] {
     if (!existsSync(path)) continue
     try {
       const source = readFileSync(path, 'utf8')
-      // Matches only the datasource provider — the generator block's
-      // provider ("prisma-client-js") never matches these alternatives.
+      // The alternatives never match the generator block's provider ("prisma-client-js").
       const match = /provider\s*=\s*["'](postgresql|mysql|sqlite)["']/.exec(source)
       const declared = match?.[1]
       if (declared === 'postgresql') return 'pg'

@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * rbac CLI. Never imports a DB driver or ORM — the user's rbac.config.ts
- * owns those imports via its lazy adapter factory.
- */
 import { parseArgs } from 'node:util'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'

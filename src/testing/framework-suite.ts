@@ -1,28 +1,6 @@
 /**
- * Black-box HTTP contract for framework integrations (Fastify, Express,
- * future adapters). The suite builds its own rbac instances on memoryAdapter()
- * and seeds grants per case; the integration under test only has to translate
- * RouteSpec[] into a running app.
- *
- * ── Harness protocol — every makeApp implementation MUST ────────────────────
- * 1. Create ONE domain per distinct `route.domain` via the integration's
- *    domain factory. When `getSubjectFrom === 'header'`, getSubject reads:
- *      x-subject-id   → subject id; absent or empty → return null (→ 401)
- *      x-tenant-id    → tenant_id, when present
- *      x-super: '1'   → is_super: true
- *    getSubject must count its own invocations per request, and every
- *    response must carry the header `x-getsubject-calls` with that request's
- *    total (proves guard-time memoization).
- * 2. Mount each route at (method, path). When `policy` is set, attach one
- *    requirePolicy guard per '+'-separated UNQUALIFIED policy name (the
- *    domain qualifies), forwarding `resource` when provided. The success
- *    handler responds 200 with JSON `{ ok: true }`.
- * 3. Register a framework-level hook/middleware that adds the header
- *    `x-app-hook: ran` to EVERY response, including error responses —
- *    RbacErrors must travel the framework's own pipeline, never a hijacked
- *    reply (v0 regression).
- * 4. TestApp.request results use lowercase header names and a parsed JSON
- *    body.
+ * Black-box HTTP contract for framework integrations. The makeApp harness
+ * protocol is normative in docs/reference/testing.md ("The makeApp contract").
  */
 
 import { Policy, Scope, createRbac, qualifyPolicyName } from '../index.js'

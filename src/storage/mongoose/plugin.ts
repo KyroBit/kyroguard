@@ -23,18 +23,8 @@ function documentId(doc: unknown): string | null {
 
 /**
  * Mongoose schema plugin: automatic ownership tracking + query scoping.
- *
- * - `post('save')` / `post('insertMany')` record ownership for the current
- *   request subject (no-op when no subject is set).
- * - `post('deleteOne')` (document) / `post('findOneAndDelete')` remove all
- *   ownership rows for the deleted document.
- * - `pre(/^find/)` merges the subject's domain query scopes ($or-combined)
- *   into the query filter.
- *
- * LIMITATION: `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and
- * raw collection operations fire NO document middleware, so ownership is not
- * tracked or cleaned up for those paths — call `rbac.ownership.record()` /
- * `rbac.ownership.remove()` explicitly there.
+ * updateMany/deleteMany/bulkWrite and raw collection ops fire NO document
+ * middleware, so they are not tracked — see docs/reference/mongoose.md.
  */
 export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void {
   const { engine, adapter } = options.rbac

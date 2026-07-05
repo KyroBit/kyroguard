@@ -40,11 +40,7 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-/**
- * Links one resource (a Drizzle table, a Mongoose model, or just a type name)
- * to its policies. `table` is optional: storage-level features (ownership
- * auto-tracking, query scoping) need it; guard-only usage does not.
- */
+/** Links one resource to its policies; `table` is only needed for storage-level features. */
 export interface ResourceDefinition {
   type: string
   policies: Policy[]

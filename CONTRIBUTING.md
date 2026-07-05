@@ -28,9 +28,19 @@ src/cli/         imports core + jiti — never a DB driver or ORM
 src/testing/     imports the public core surface only
 ```
 
-`src/storage/contract.ts` is normative: its numbered clauses (S1–S19) map
+`src/storage/contract.ts` is normative: its numbered clauses (S1–S20) map
 1:1 to cases in `src/testing/adapter-suite.ts`. Changing adapter behavior
 means changing the clause, the suite, and every adapter together.
+
+## Comments
+
+The docs are the single source of truth — API behavior, examples and
+rationale belong in `docs/`, not in code comments. A comment is justified
+only for a constraint the code cannot express and a future edit would
+silently break: a security invariant, a cross-runtime quirk (e.g. Bun's
+AsyncLocalStorage propagation), a contract-clause reference. Narration,
+restated docs content, and "why this change is correct" notes get removed
+in review.
 
 ## Tests
 

@@ -3,11 +3,9 @@ import type { Policy } from './policy.js'
 import type { StorageAdapter } from '../storage/contract.js'
 
 /**
- * Sync policies-as-code into storage for one domain ('' sentinel = no domain):
- * upsert, delete orphans (filtered on the stored domain column, S19), then
- * back-fill missing transitive dependencies into every group.
- *
- * An empty policy list returns early on purpose — it never wipes a domain.
+ * Sync policies-as-code into storage for one domain. Orphan cleanup filters
+ * on the stored domain column (S19). An empty policy list returns early on
+ * purpose — it never wipes a domain.
  */
 export async function syncPolicies(
   adapter: StorageAdapter,
@@ -64,10 +62,8 @@ export async function syncPolicies(
 
 /**
  * Fill missing transitive dependsOn entries into every group (additive, S9).
- *
- * Called by syncPolicies, and AGAIN by the CLI after group seeding: seeding
- * is replace-all per group (S8), so dependencies filled before a seed would
- * be wiped by it — the post-seed pass is what makes them stick.
+ * Must run AGAIN after group seeding — seeding is replace-all per group (S8)
+ * and wipes dependencies filled before it.
  */
 export async function backfillGroupDependencies(
   adapter: StorageAdapter,
@@ -96,12 +92,9 @@ export async function backfillGroupDependencies(
     const explicitScopes = new Map(assigned.map(entry => [entry.policyName, entry.scope]))
 
     // Least privilege: a filled-in dependency inherits the scope of the grant
-    // that pulled it in, propagated down chains. When several grants pull the
-    // same dependency, unrestricted (null) wins — a scoped dependency would
-    // break the unrestricted root. Two DIFFERENT named scopes cannot be
-    // expressed in one entry, so that falls back to unrestricted with a loud
-    // warning telling the user to define the entry explicitly. Explicit
-    // entries are never overwritten and govern their own dependencies.
+    // that pulled it in; null (unrestricted) wins on merge, conflicting named
+    // scopes fall back to unrestricted with a warning. Explicit entries are
+    // never overwritten.
     const effective = new Map<string, string | null>()
     const conflicts = new Set<string>()
     for (const [name, scope] of explicitScopes) {

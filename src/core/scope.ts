@@ -19,10 +19,7 @@ export type ScopeCheckFn = (
   ctx: ScopeCheckContext,
 ) => Awaitable<boolean>
 
-/**
- * A named row-level check. When a grant carries a scope, the guard resolves
- * the target resource and the scope's check decides allow/deny.
- */
+/** A named row-level check, run when the resolved grant carries a scope. */
 export class Scope {
   constructor(
     readonly name: string,
@@ -30,11 +27,7 @@ export class Scope {
     readonly check: ScopeCheckFn,
   ) {}
 
-  /**
-   * Built-in ownership scope, backed by the adapter's ownership store —
-   * identical behavior on every storage backend. A row scope: without a
-   * resource it fails closed.
-   */
+  /** Built-in ownership scope backed by the adapter's ownership store; fails closed without a resource. */
   static owned(name = 'owned', label = 'Owned by the user'): Scope {
     return new Scope(name, label, (subject, resource, ctx) =>
       resource ? ctx.adapter.isOwner(subject.id, resource) : false,
@@ -42,7 +35,7 @@ export class Scope {
   }
 }
 
-/** Collect the scope registry from resource definitions (replaces the v0 RBAC_SCOPES symbol). */
+/** Collect the scope registry from resource definitions. */
 export function collectScopes(resources: Iterable<{ policies: { scopeOptions: Scope[] }[] }>): Map<string, Scope> {
   const registry = new Map<string, Scope>()
   for (const resource of resources) {

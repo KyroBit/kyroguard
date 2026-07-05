@@ -1,9 +1,6 @@
 /**
- * In-memory reference implementation of the storage contract (S1–S20).
- *
- * This adapter is both the fastest way to test guarded routes (no database)
- * and the executable specification other adapters are measured against via
- * runStorageAdapterContractSuite. Every behavior here is normative.
+ * In-memory reference implementation of the storage contract (S1–S20);
+ * every behavior here is normative via runStorageAdapterContractSuite.
  */
 
 import { UnknownPolicyError } from '../index.js'

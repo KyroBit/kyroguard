@@ -1,21 +1,9 @@
 /**
- * The Prisma model definitions for the RBAC tables — the source of truth the
- * CLI scaffolds from. Users paste this into `schema.prisma` (or a separate
- * `rbac.prisma` file when using multi-file schemas) and run their normal
- * Prisma migration flow; the adapter itself never executes DDL.
- *
- * Interop guarantee: `@@map` / `@map` pin the exact table and snake_case
- * column names of the canonical Drizzle schema
- * (src/storage/drizzle/schema/pg.ts), and the named unique/index constraints
- * match too — a Prisma client and a Drizzle client can operate on the SAME
- * database. Provider-agnostic: validates for the postgresql, mysql and
- * sqlite providers.
- *
- * The compound `@@unique` constraints double as the client's compound-unique
- * inputs the adapter relies on (default names):
- * - RbacUserPolicyGroup → `subjectId_policyGroupId_domain_tenantId`
- * - RbacUserPolicy      → `subjectId_policyId_domain_tenantId`
- * - RbacResourceOwner   → `resourceType_resourceId_ownerId`
+ * The Prisma models the CLI scaffolds from. `@@map`/`@map` pin the exact
+ * table/column names of the canonical Drizzle schema (schema/pg.ts) so a
+ * Prisma client and a Drizzle client can operate on the SAME database, and
+ * the compound `@@unique` names double as the compound-unique inputs the
+ * adapter relies on — change either only in lockstep with the adapter.
  */
 export const prismaSchemaSnippet = `// ── @kyrobit/rbac models ─────────────────────────────────────────────────────
 // Generated tables interoperate with the Drizzle schema: identical table

@@ -2,10 +2,8 @@ import type { Awaitable } from '../core/types.js'
 import type { InvalidationBus, InvalidationEvent } from './types.js'
 
 /**
- * Minimal structural slices of an ioredis-compatible client pair. The clients
- * are dependency-injected — this module never imports a redis driver. Redis
- * requires separate connections for publishing and subscribing, hence two
- * parameters.
+ * Structural slices of an ioredis-compatible client pair — Redis requires
+ * separate connections for publishing and subscribing.
  */
 export interface RedisPublisherLike {
   publish(channel: string, message: string): Awaitable<unknown>
@@ -40,12 +38,7 @@ function parseEvent(message: string): InvalidationEvent | null {
   return null
 }
 
-/**
- * Cross-instance invalidation over redis pub/sub. publish() only goes to
- * redis — the engine already invalidated its local cache before publishing,
- * and the self-delivered copy is an idempotent no-op. Malformed messages and
- * other channels are ignored.
- */
+/** Cross-instance invalidation over redis pub/sub. */
 export function redisBus(
   publisher: RedisPublisherLike,
   subscriber: RedisSubscriberLike,
@@ -69,9 +62,8 @@ export function redisBus(
     }
   }
 
-  // Lazy: no redis traffic until something actually subscribes. The bus
-  // contract's subscribe() is synchronous, so a failed SUBSCRIBE cannot
-  // propagate — it resets the flag and the next subscribe() retries.
+  // The bus contract's subscribe() is synchronous, so a failed SUBSCRIBE
+  // cannot propagate — it resets the flag and the next subscribe() retries.
   const wire = (): void => {
     if (!listenerAttached) {
       listenerAttached = true

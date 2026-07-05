@@ -67,8 +67,8 @@ function createDomain<P extends string>(
 ): FastifyDomain<P> {
   const store = rbac.engine.store
 
-  // Memoized per (request, domain) — null results included, so a failed
-  // resolution is not retried and two domains on one app never collide.
+  // Memoized per (request, domain), null results included — two domains on
+  // one app must never collide.
   const resolveSubject = async (req: FastifyRequest): Promise<Subject | null> => {
     const requestStore = store.get()
     if (!requestStore) {
@@ -112,8 +112,6 @@ function createDomain<P extends string>(
             // hijack(): onSend hooks and CORS headers must keep running.
             return reply
           }
-          // Default: throw through Fastify's own error pipeline. RbacError
-          // carries statusCode + code, so the default serializer is correct.
           throw error
         }
         return undefined

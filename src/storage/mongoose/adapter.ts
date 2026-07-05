@@ -26,11 +26,9 @@ function byName(a: PolicyGrant, b: PolicyGrant): number {
 }
 
 /**
- * Mongoose StorageAdapter. Uses connection-scoped models; the caller owns the
- * connection lifecycle (no close()). deletePolicies has no multi-collection
- * transaction requirement — it deletes best-effort in dependency order:
- * group entries and direct assignments first, policy documents last, so a
- * partial failure never leaves assignments pointing at deleted policies.
+ * Mongoose StorageAdapter; the caller owns the connection lifecycle.
+ * deletePolicies deletes in dependency order (entries and assignments first)
+ * so a partial failure never leaves assignments pointing at deleted policies.
  */
 export function mongooseAdapter(connection: Connection): StorageAdapter {
   const models: RbacModels = rbacModels(connection)
@@ -194,8 +192,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
           { upsert: true },
         )
       } catch (error) {
-        // A concurrent upsert on the same tuple can race to insert; the unique
-        // index makes the loser's duplicate-key error equivalent to success.
+        // S10 race: loser's duplicate-key error on the same tuple is equivalent to success.
         if (!isDuplicateKeyError(error)) throw error
       }
     },

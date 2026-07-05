@@ -17,18 +17,12 @@ export interface TrackedDbOptions {
   }
   resources: ResourceDefinition[]
   /**
-   * scope name → condition builder. Query scoping activates for a select on a
-   * registered resource when the resource's `domains` config — keyed by the
-   * SUBJECT'S DOMAIN (`resource.domains[subject.domain ?? '']` maps
-   * policy name → [scope names]) — names scopes present here. ALL matching
-   * conditions are OR-combined, then AND-ed into the user's where().
+   * scope name → condition builder, activated via the resource's `domains`
+   * config (keyed by the SUBJECT'S domain). Matching conditions are
+   * OR-combined, then AND-ed into the caller's where().
    */
   queryScopes?: Record<string, QueryScopeFn>
-  /**
-   * What to do when an insert on a registered resource yields no trackable
-   * ids (no ids in values() and no .returning()): 'warn' logs once per
-   * resource (default), 'error' rejects with MisconfiguredError, 'off' skips.
-   */
+  /** Behavior when an insert yields no trackable ids: 'warn' (default) | 'error' | 'off'. */
   strictTracking?: 'warn' | 'error' | 'off'
 }
 
@@ -122,12 +116,9 @@ async function recordFor(t: InsertTracking, subject: Subject, ids: string[]): Pr
 function wrapInsertChain(builder: any, t: InsertTracking, valueIds: string[] | null, hasReturning: boolean): any {
   const executeTracked = async (run: () => Promise<unknown>): Promise<unknown> => {
     const subject = t.engine.store.getSubject()
-    // No subject (seeders, CLI, jobs): plain insert, nothing to attribute.
     if (!subject?.id) return run()
     if (valueIds) {
       const result = await run()
-      // Awaited BEFORE the caller's promise resolves; a failed ownership
-      // write must reject, never hang or vanish (v0 regression).
       await recordFor(t, subject, valueIds)
       return result
     }
@@ -192,7 +183,6 @@ function wrapScopedFrom(builder: any, scope: SQL): any {
   return new Proxy(builder, {
     get(target, prop) {
       if (prop === 'where') {
-        // Scope applied here; the returned builder needs no further wrapping.
         return (condition?: unknown) =>
           target.where(condition === undefined ? scope : and(condition as SQL, scope))
       }
@@ -262,8 +252,7 @@ function wrapSelectBuilder(builder: any, ctx: Ctx, raw: unknown): any {
 function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
   const write = (entries: OwnershipEntry[]): Promise<void> => {
     const withExecutor = (ctx.adapter as Partial<DrizzleStorageAdapter>).recordOwnershipWith
-    // Writing through `raw` (this db or this transaction) keeps ownership
-    // rows atomic with the resource insert inside transactions.
+    // Writing through `raw` keeps ownership rows atomic with the insert inside transactions.
     return typeof withExecutor === 'function'
       ? withExecutor.call(ctx.adapter, raw, entries)
       : ctx.adapter.recordOwnership(entries)
@@ -307,12 +296,9 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
 }
 
 /**
- * Wraps a drizzle database so that:
- * - inserts into registered resource tables record ownership rows
- *   (atomically with the insert inside transactions),
- * - selects on registered resources get domain-configured query scoping,
- * - `db.untracked` exposes the raw handle.
- * update/delete are intentionally not intercepted.
+ * Wraps a drizzle db: inserts on registered tables record ownership, selects
+ * get query scoping, `db.untracked` is the raw handle. update/delete are not
+ * intercepted — see docs/reference/drizzle.md.
  */
 export function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T } {
   const tableMap = new Map<unknown, ResourceDefinition>()

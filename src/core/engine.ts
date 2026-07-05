@@ -40,10 +40,7 @@ export interface AuthorizeOptions {
   resource?: () => Awaitable<ResourceRef | null | undefined>
 }
 
-/**
- * Framework-free authorization engine. Guards call authorize(); it either
- * resolves (allow) or throws a typed RbacError (deny). No HTTP anywhere.
- */
+/** Framework-free engine: authorize() resolves (allow) or throws a typed RbacError (deny). */
 export class RbacEngine {
   readonly store = new SubjectStore()
 
@@ -67,8 +64,6 @@ export class RbacEngine {
     this.onDecision = options.onDecision
     this.onCacheEvent = options.onCacheEvent
 
-    // Every bus delivery invalidates locally. Events are idempotent, so
-    // receiving our own publication is harmless.
     this.unsubscribe = this.bus.subscribe(event => {
       if (!this.policyCache) return
       void (event.type === 'all'
@@ -94,13 +89,7 @@ export class RbacEngine {
 
   // ── Enforcement ─────────────────────────────────────────────────────────────
 
-  /**
-   * Resolve the subject's policy map, via cache when enabled.
-   * The merge rule (S4 is adapter-side no-dedup; precedence is ours):
-   * for duplicate grants of one policy, a null scope (unrestricted) wins
-   * over any named scope; two different named scopes keep the first —
-   * deterministic because adapters return rows in stable order.
-   */
+  /** Resolve the subject's policy map, via cache when enabled. */
   async getPolicyMap(ref: SubjectRef): Promise<{ map: PolicyMap; cacheHit: boolean }> {
     const key = policyCacheKey(ref.subjectId, ref.domain, ref.tenantId)
 
@@ -123,13 +112,7 @@ export class RbacEngine {
     return { map, cacheHit: false }
   }
 
-  /**
-   * The decision procedure. Throws:
-   *   UnauthenticatedError  — no subject / empty subject id      (401)
-   *   PolicyDeniedError     — policy not granted here            (403)
-   *   ScopeDeniedError      — scoped grant, check rejected       (403)
-   *   ResourceNotFoundError — scoped grant, resource unresolved  (404)
-   */
+  /** The decision procedure: resolves on allow, throws a typed RbacError on deny. */
   async authorize(
     subject: Subject | null | undefined,
     policy: QualifiedPolicyName,
@@ -168,11 +151,8 @@ export class RbacEngine {
       throw new ScopeDeniedError(policy, scopeName)
     }
 
-    // A resolver is only required by scopes that inspect the row. Without
-    // one, the scope decides on null (row-based scopes like Scope.owned()
-    // fail closed; condition scopes like business hours pass regardless).
-    // A resolver that finds nothing is still a 404 — the route pointed at
-    // a row that does not exist.
+    // No resolver: the scope decides on null (row-based scopes fail closed).
+    // A resolver that finds nothing is a 404.
     let resource: ResourceRef | null = null
     if (options?.resource) {
       resource = (await options.resource()) ?? null

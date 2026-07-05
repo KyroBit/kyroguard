@@ -1,12 +1,3 @@
-/**
- * Express 4/5 integration.
- *
- * Guards never write responses: failures travel through next(err) into the
- * app's error pipeline, terminated by errorHandler(). Async rejections are
- * forwarded explicitly so behavior is identical on Express 4 (no automatic
- * async error forwarding) and Express 5.
- */
-
 import { MisconfiguredError, RbacError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
