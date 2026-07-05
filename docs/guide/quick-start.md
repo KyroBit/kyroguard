@@ -1,146 +1,119 @@
 # Quick start
 
-In about ten minutes you build a guarded Fastify API with no database: the in-memory adapter stores policies and grants, you watch a request go from 401 to 403 to 200, and every response body below is what the code actually returns. When it clicks, you swap one line to move to a real database.
+A guarded API in five minutes. No database needed. The in-memory adapter holds everything.
 
-::: tip Prerequisites
-Bun (or Node.js 20.19+ with [tsx](https://tsx.is)) and curl. The package is published to the GitHub Packages registry — if `bun add` cannot find `@kyrobit/rbac`, set up the `.npmrc` from [Installation, step 1](/guide/installation#_1-install-the-package) first.
-:::
-
-## 1. Create a project
+## 1. Install
 
 ```sh
-mkdir rbac-quick-start && cd rbac-quick-start
-bun init -y
-bun add fastify @kyrobit/rbac
+mkdir rbac-demo && cd rbac-demo
+npm init -y && npm pkg set type=module
+npm install @kyrobit/rbac fastify
 ```
 
-## 2. Write the server
+## 2. Create the server
 
-Create `server.ts`. This is the whole app — read the comments top to bottom, they mirror the request lifecycle:
+Paste this into `server.ts`:
 
 ```ts
-// server.ts
 import Fastify from 'fastify'
 import { createRbac, Policy } from '@kyrobit/rbac'
 import { rbacFastify } from '@kyrobit/rbac/fastify'
 import { memoryAdapter } from '@kyrobit/rbac/testing'
-import type { ResourceDefinition } from '@kyrobit/rbac'
 
-// One resource, one policy. Names are unqualified — the portal prefixes them.
-const resources: ResourceDefinition[] = [
-  { type: 'post', policies: [new Policy('posts.read')] },
+// Two policies on one resource
+const resources = [
+  { type: 'post', policies: [new Policy('posts.read'), new Policy('posts.write')] },
 ]
 
-// memoryAdapter() implements the full storage contract in memory —
-// same behavior as the Drizzle, Prisma and Mongoose adapters, zero setup.
 const rbac = createRbac({ adapter: memoryAdapter(), resources })
 
-// Programmatic equivalent of the `rbac sync` CLI: store the policy
-// catalog (as app.posts.read) and seed a group that grants it.
+// Load the policies and one group into the in-memory store
 await rbac.sync(resources, 'app')
 await rbac.seedGroups(
-  { reader: { label: 'Reader', policies: ['posts.read'] } },
-  undefined,
-  'app',
+  { editor: { label: 'Editor', policies: ['posts.read', 'posts.write'] } },
+  undefined, // optional second argument, not needed here
+  'app',     // the portal name
 )
 
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-// A portal named 'app'. getSubject turns a request into a subject;
-// here a header stands in for real authentication.
+// Demo auth: the user id comes from a header
 const portal = app.rbac.portal('app', {
-  getSubject: async request => {
-    const id = request.headers['x-user-id']
-    return typeof id === 'string' && id !== '' ? { id } : null
+  getSubject: async req => {
+    const id = req.headers['x-user-id']
+    return typeof id === 'string' ? { id } : null
   },
 })
 
-// The guarded route: the preHandler checks app.posts.read at guard time.
-app.get(
-  '/posts',
-  { preHandler: portal.requirePolicy('posts.read') },
-  async () => [{ id: 'p_1', title: 'Hello' }],
-)
+// The guarded route
+app.get('/posts', { preHandler: portal.requirePolicy('posts.read') }, async () => [
+  { id: '1', title: 'Hello' },
+])
 
-// Tutorial-only: grants the reader group to any caller. Protect or delete
-// this route before shipping anything.
-app.post('/grant/:userId', async request => {
-  const { userId } = request.params as { userId: string }
-  await portal.assignGroup(userId, 'reader')
-  return { granted: true, userId }
+// Assignment endpoint (unguarded, for the demo)
+app.post('/make-editor/:userId', async req => {
+  const { userId } = req.params as { userId: string }
+  await portal.assignGroup(userId, 'editor')
+  return { userId, group: 'editor' }
 })
 
 await app.listen({ port: 3000 })
-console.log('quick start listening on http://localhost:3000')
+console.log('listening on http://localhost:3000')
 ```
 
-## 3. Run it
+Run it. `npx` downloads `tsx` on first use:
 
-```console
-$ bun server.ts
-quick start listening on http://localhost:3000
+```sh
+npx tsx server.ts
 ```
 
-(On Node, run `npx tsx server.ts` instead.)
+## 3. Get denied
 
-## 4. Request without a user — 401
+No user on the request:
 
-No `x-user-id` header means `getSubject` returns `null`, so the guard throws `UnauthenticatedError` through Fastify's own error pipeline:
+```sh
+curl -i localhost:3000/posts
+```
 
-```console
-$ curl -s http://localhost:3000/posts
+```
+HTTP/1.1 401 Unauthorized
 {"statusCode":401,"code":"RBAC_UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
 ```
 
-## 5. Request as a user with no grant — 403
+A user without the policy:
 
-Now the subject resolves (`id: 'u_1'`, portal `app`), but the storage lookup finds no grant of `app.posts.read` for that exact (subject, portal, context) tuple, so the guard throws `PolicyDeniedError`:
+```sh
+curl -i localhost:3000/posts -H 'x-user-id: u1'
+```
 
-```console
-$ curl -s -H 'x-user-id: u_1' http://localhost:3000/posts
+```
+HTTP/1.1 403 Forbidden
 {"statusCode":403,"code":"RBAC_POLICY_DENIED","error":"Forbidden","message":"Forbidden"}
 ```
 
-`RBAC_POLICY_DENIED` is one of five stable error codes — the full list is in the [error reference](/reference/errors).
+## 4. Assign the group
 
-## 6. Grant the group
-
-`portal.assignGroup('u_1', 'reader')` records the assignment for portal `app` (the portal fills in its own name — grants are matched on portal by strict equality, so an assignment on the wrong portal never applies):
-
-```console
-$ curl -s -X POST http://localhost:3000/grant/u_1
-{"granted":true,"userId":"u_1"}
+```sh
+curl -X POST localhost:3000/make-editor/u1
 ```
 
-The 403 in step 5 cached `u_1`'s empty policy map, but this works immediately anyway: assignment mutations invalidate the subject's cache entry through the engine's invalidation bus, so the next request re-reads storage.
-
-## 7. Request again — 200
-
-```console
-$ curl -s -H 'x-user-id: u_1' http://localhost:3000/posts
-[{"id":"p_1","title":"Hello"}]
+```
+{"userId":"u1","group":"editor"}
 ```
 
-The guard resolved the subject, found `app.posts.read` granted without a scope, and let the handler run.
+## 5. Get allowed
 
-::: warning Everything here resets on restart
-`memoryAdapter()` keeps policies and grants in process memory — restart the server and `u_1` is back to 403 until you repeat the grant in step 6 (the `rbac.sync` and `seedGroups` calls re-seed the catalog on every boot, but grants are not re-seeded). It is built for tests and tutorials, not persistence. The `x-user-id` header and the open `/grant` route are stand-ins for real authentication and a real admin surface.
-:::
-
-## Move to a real database
-
-Swap the adapter and everything else stays the same — the guard, the portal and the error bodies are identical on every backend:
-
-```ts
-import { memoryAdapter } from '@kyrobit/rbac/testing' // [!code --]
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle' // [!code ++]
+```sh
+curl localhost:3000/posts -H 'x-user-id: u1'
 ```
 
-[Installation](/guide/installation) walks through the full setup: scaffolding with `rbac init`, migrations, syncing from the CLI and wiring your real authentication.
+```
+[{"id":"1","title":"Hello"}]
+```
 
-## Next steps
+That is the whole loop. Define policies, guard routes, assign groups. The grant took effect on the next request. No restart, no token refresh.
 
-- [Installation](/guide/installation) — the same flow on PostgreSQL, MySQL, SQLite or MongoDB.
-- [Defining policies](/guide/defining-policies) — dependencies, scopes and resource definitions.
-- [Testing your app](/guide/testing-your-app) — `memoryAdapter` is also the fastest way to test guarded routes.
+## Next
+
+The in-memory adapter forgets everything on restart. Use your real database: [Installation](/guide/installation).

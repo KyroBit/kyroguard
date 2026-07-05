@@ -1,6 +1,6 @@
 # Mongoose
 
-Reference for `@kyrobit/rbac/mongoose`. Requires Mongoose 8.x. For a setup walkthrough, see [Mongoose](/databases/mongoose).
+Reference for `@kyrobit/rbac/mongoose`. Requires Mongoose 8. Setup walkthrough: [MongoDB](/databases/mongodb).
 
 ## mongooseAdapter()
 
@@ -13,17 +13,7 @@ function mongooseAdapter(connection: Connection): StorageAdapter
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `connection` | `Connection` | A Mongoose connection. Models are registered on this connection, so two connections in one process stay isolated. |
-
-**Returns** a `StorageAdapter`:
-
-- `id`: `'mongoose'`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true }`.
-- `ensureSchema()`: runs `syncIndexes()` on all six RBAC models — `rbac.sync()` and the [`rbac sync` CLI](/reference/cli) call it before writing, so the unique indexes exist without a separate migration step.
-- No `close()` — the caller owns the connection lifecycle.
-- `deletePolicies` has no multi-collection transaction requirement; it deletes in dependency order (group entries and direct assignments first, policy documents last), so a partial failure never leaves assignments pointing at deleted policies.
-
-**Throws** `UnknownPolicyError` from `assignPolicy` (and from group-entry writes naming unsynced policies).
+| `connection` | `Connection` | A Mongoose connection. Models register on this connection, so two connections in one process stay separate. |
 
 ```ts
 import mongoose from 'mongoose'
@@ -34,6 +24,14 @@ const connection = await mongoose.createConnection(process.env.MONGO_URL!).asPro
 const rbac = createRbac({ adapter: mongooseAdapter(connection) })
 ```
 
+The returned adapter:
+
+- `id`: `'mongoose'`.
+- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true }`.
+- Creates its indexes when `rbac sync` runs. No separate migration step.
+- Does not close the connection. You own the connection lifecycle.
+- Throws `UnknownPolicyError` when an assignment names an unsynced policy.
+
 ## rbacModels()
 
 ```ts
@@ -42,69 +40,23 @@ import { rbacModels } from '@kyrobit/rbac/mongoose'
 function rbacModels(connection: Connection): RbacModels
 ```
 
-Connection-scoped model factory — safe to call repeatedly on one connection (it reuses already-registered models instead of re-registering). `mongooseAdapter()` calls it internally; call it yourself for direct queries against the RBAC collections.
+Returns the six rbac models for direct queries. Safe to call repeatedly on one connection. `mongooseAdapter()` calls it internally.
+
+| Property | Model name | Collection |
+| --- | --- | --- |
+| `policy` | `RbacPolicy` | `rbacpolicies` |
+| `policyGroup` | `RbacPolicyGroup` | `rbacpolicygroups` |
+| `policyGroupPolicy` | `RbacPolicyGroupPolicy` | `rbacpolicygrouppolicies` |
+| `userPolicyGroup` | `RbacUserPolicyGroup` | `rbacuserpolicygroups` |
+| `userPolicy` | `RbacUserPolicy` | `rbacuserpolicies` |
+| `resourceOwner` | `RbacResourceOwner` | `rbacresourceowners` |
 
 ```ts
-interface RbacModels {
-  policy: Model<RbacPolicyDoc>                     // model name 'RbacPolicy'
-  policyGroup: Model<RbacPolicyGroupDoc>           // 'RbacPolicyGroup'
-  policyGroupPolicy: Model<RbacPolicyGroupPolicyDoc> // 'RbacPolicyGroupPolicy'
-  userPolicyGroup: Model<RbacUserPolicyGroupDoc>   // 'RbacUserPolicyGroup'
-  userPolicy: Model<RbacUserPolicyDoc>             // 'RbacUserPolicy'
-  resourceOwner: Model<RbacResourceOwnerDoc>       // 'RbacResourceOwner'
-}
+const models = rbacModels(connection)
+const editors = await models.userPolicyGroup.find({ portal: 'admin' })
 ```
 
-### Document types
-
-```ts
-interface RbacPolicyDoc {
-  name: string
-  portal: string
-  label: string
-  scopeOptions: string[]
-  dependsOn: string[]
-}
-
-interface RbacPolicyGroupDoc {
-  name: string
-  label: string
-  description: string
-  isSystem: boolean
-  isActive: boolean
-}
-
-interface RbacPolicyGroupPolicyDoc {
-  policyGroupId: Types.ObjectId
-  policyId: Types.ObjectId
-  scope: string | null
-}
-
-interface RbacUserPolicyGroupDoc {
-  subjectId: string
-  policyGroupId: Types.ObjectId
-  portal: string
-  contextId: string
-}
-
-interface RbacUserPolicyDoc {
-  subjectId: string
-  policyId: Types.ObjectId
-  portal: string
-  contextId: string
-  scope: string | null
-}
-
-interface RbacResourceOwnerDoc {
-  resourceType: string
-  resourceId: string
-  ownerId: string
-  contextType: string
-  contextId: string
-}
-```
-
-Unique indexes: policy `name`; group `name`; `(policyGroupId, policyId)`; `(subjectId, policyGroupId, portal, contextId)`; `(subjectId, policyId, portal, contextId)`; `(resourceType, resourceId, ownerId)`. `portal`, `contextId` and `contextType` store the `''` sentinel, never null — strict matching stays plain equality and the unique indexes behave identically to the SQL backends.
+The document types (`RbacPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
 
 ## rbacMongoosePlugin()
 
@@ -114,22 +66,14 @@ import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void
 ```
 
-Schema plugin for automatic ownership tracking and query scoping on your **own** models. Apply it with `schema.plugin()` before compiling the model.
+Schema plugin for your own models. It records ownership on save and scopes find queries per portal. Apply it before compiling the model.
 
-### RbacMongoosePluginOptions
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `rbac` | `{ engine: RbacEngine; adapter: StorageAdapter }` | required | Pass your `Rbac` instance — it satisfies this shape. |
-| `type` | `string` | required | The resource type recorded in the ownership store, e.g. `'post'`. |
-| `queryScopes` | `Record<string, (subject: Subject) => Record<string, unknown>>` | `undefined` | Named query-scope builders: scope name → subject → Mongo filter. |
-| `context` | `Record<string, Record<string, string[]>>` | `undefined` | Portal → policy name → scope names (mirrors `ResourceDefinition.context`). Keyed by the subject's portal at query time. |
-
-### Behavior
-
-- `post('save')` and `post('insertMany')` record ownership for the current request subject. No subject set (seeders, jobs) → no-op.
-- `post('deleteOne')` (document middleware) and `post('findOneAndDelete')` remove all ownership rows for the deleted document.
-- `pre(/^find/)` merges the subject's portal query scopes into the query filter: all scope filters named by `context[subject.portal ?? '']` and present in `queryScopes` are `$or`-combined, then `$and`-ed with the existing filter. No subject or no matching portal key → the query runs unscoped.
+| Option | Type | Description |
+| --- | --- | --- |
+| `rbac` | `Rbac` | Your `createRbac` instance. |
+| `type` | `string` | Resource type in the ownership store, for example `'post'`. |
+| `queryScopes` | `Record<string, (subject: Subject) => object>` | Scope name to Mongo filter builder. Optional. |
+| `context` | `Record<string, Record<string, string[]>>` | Portal to policy name to scope names. Optional. |
 
 ```ts
 import { Schema, model } from 'mongoose'
@@ -152,6 +96,12 @@ postSchema.plugin(rbacMongoosePlugin, {
 export const Post = model('Post', postSchema)
 ```
 
+### What the plugin does
+
+- `save` and `insertMany` record ownership for the current user. No user means no ownership row and no error.
+- Document `deleteOne` and `findOneAndDelete` remove the document's ownership rows.
+- `find` queries gain the scope filters for the user's portal, OR-combined, then AND-ed with your filter. No user or no matching portal means the query runs unscoped. See [Scopes](/guide/scopes).
+
 ::: warning
-`Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection operations fire no document middleware, so ownership is not tracked or cleaned up on those paths. Call [`rbac.ownership.record()`](/reference/core-api#rbac-ownership) / `rbac.ownership.remove()` explicitly there, or stale ownership rows will keep satisfying `Scope.owned()` checks for deleted documents.
+`Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `rbac.ownership.record()` and `rbac.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
 :::

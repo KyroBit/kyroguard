@@ -1,0 +1,73 @@
+# Running in production
+
+## Caching
+
+Grants are cached in memory for 30 seconds by default. That cuts the database out of most requests. The cost: a revoked permission can outlive revocation by up to 30 seconds on other servers.
+
+```ts
+const rbac = createRbac({
+  adapter,
+  resources,
+  cacheTtlMs: 10_000,      // default 30_000
+  cacheMaxEntries: 50_000, // default 10_000
+})
+```
+
+Assigning or revoking through this library clears that server's cache immediately. Other servers wait out the TTL — unless you connect them (next section). Pass `cache: false` to turn caching off.
+
+## Multiple servers
+
+Each server caches on its own. Connect them with `redisBus` so a revocation on one server clears all of them:
+
+```ts
+import { Redis } from 'ioredis'
+import { createRbac } from '@kyrobit/rbac'
+import { redisBus } from '@kyrobit/rbac/cache'
+
+const publisher = new Redis(process.env.REDIS_URL!)
+const subscriber = new Redis(process.env.REDIS_URL!)
+
+const rbac = createRbac({
+  adapter,
+  resources,
+  invalidationBus: redisBus(publisher, subscriber),
+})
+```
+
+Redis needs one connection for publishing and one for subscribing, so pass two clients. Nothing else changes.
+
+## Audit log
+
+`onDecision` fires after every allow and deny. Ship it to your logger:
+
+```ts
+const rbac = createRbac({
+  adapter,
+  resources,
+  onDecision: event => {
+    logger.info({
+      user: event.subjectId,
+      policy: event.policy,
+      decision: event.decision,
+      reason: event.reason,
+      durationMs: event.durationMs,
+    })
+  },
+})
+```
+
+`reason` says why: `granted`, `super`, `no-policy`, `scope-denied`, `no-subject` or `resource-not-found`. An error thrown inside the hook is ignored. The hook can never block or change a decision.
+
+## Health check
+
+`rbac status` confirms the app can reach its policy tables:
+
+```
+$ npx rbac status
+adapter:      drizzle-pg
+capabilities: autoOwnershipTracking=true queryScoping=true
+policies:     24
+groups:       3
+```
+
+Zero policies after a deploy means `rbac sync` has not run. See [Syncing policies](/guide/sync).

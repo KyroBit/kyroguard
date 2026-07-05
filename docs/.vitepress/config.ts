@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: '@kyrobit/rbac',
   description:
-    'Policy-based access control with portals, tenant contexts, scopes and resource ownership. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite), Prisma and Mongoose integrations.',
+    'Permissions for your Node app. Define them in code, assign them to users, enforce them on routes.',
 
   themeConfig: {
     nav: [
@@ -17,41 +17,35 @@ export default defineConfig({
         text: 'Getting started',
         items: [
           { text: 'Introduction', link: '/guide/introduction' },
-          { text: 'Installation', link: '/guide/installation' },
           { text: 'Quick start', link: '/guide/quick-start' },
+          { text: 'Installation', link: '/guide/installation' },
         ],
       },
       {
         text: 'Guides',
         items: [
-          { text: 'Defining policies', link: '/guide/defining-policies' },
-          { text: 'Organizing groups', link: '/guide/organizing-groups' },
-          { text: 'Syncing policies', link: '/guide/syncing-policies' },
-          { text: 'Setting up Fastify', link: '/guide/setting-up-fastify' },
-          { text: 'Setting up Express', link: '/guide/setting-up-express' },
-          { text: 'Resolving the subject', link: '/guide/resolving-the-subject' },
+          { text: 'Policies', link: '/guide/policies' },
+          { text: 'Groups', link: '/guide/groups' },
+          { text: 'Sync', link: '/guide/sync' },
+          { text: 'Fastify', link: '/guide/fastify' },
+          { text: 'Express', link: '/guide/express' },
           { text: 'Protecting routes', link: '/guide/protecting-routes' },
-          { text: 'Assigning access', link: '/guide/assigning-access' },
           { text: 'Portals', link: '/guide/portals' },
-          { text: 'Tenant contexts', link: '/guide/tenant-contexts' },
-          { text: 'Writing scopes', link: '/guide/writing-scopes' },
-          { text: 'Tracking ownership', link: '/guide/tracking-ownership' },
-          { text: 'Caching', link: '/guide/caching' },
-          { text: 'Observability', link: '/guide/observability' },
-          { text: 'Super users', link: '/guide/super-users' },
+          { text: 'Assigning access', link: '/guide/assigning-access' },
+          { text: 'Scopes', link: '/guide/scopes' },
+          { text: 'Ownership', link: '/guide/ownership' },
+          { text: 'Production', link: '/guide/production' },
           { text: 'TypeScript', link: '/guide/typescript' },
-          { text: 'Writing a storage adapter', link: '/guide/writing-a-storage-adapter' },
-          { text: 'Testing your app', link: '/guide/testing-your-app' },
+          { text: 'Testing', link: '/guide/testing' },
+          { text: 'Custom adapters', link: '/guide/custom-adapters' },
         ],
       },
       {
         text: 'Databases',
         items: [
-          { text: 'Drizzle + PostgreSQL', link: '/databases/drizzle-postgres' },
-          { text: 'Drizzle + MySQL', link: '/databases/drizzle-mysql' },
-          { text: 'Drizzle + SQLite', link: '/databases/drizzle-sqlite' },
+          { text: 'Drizzle', link: '/databases/drizzle' },
           { text: 'Prisma', link: '/databases/prisma' },
-          { text: 'Mongoose', link: '/databases/mongoose' },
+          { text: 'MongoDB', link: '/databases/mongodb' },
         ],
       },
       {
@@ -71,10 +65,6 @@ export default defineConfig({
           { text: 'Errors', link: '/reference/errors' },
           { text: 'Compatibility', link: '/reference/compatibility' },
         ],
-      },
-      {
-        text: 'Migration',
-        items: [{ text: 'Migrating from v0', link: '/guide/migrating-from-v0' }],
       },
     ],
 

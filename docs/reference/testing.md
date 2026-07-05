@@ -1,6 +1,6 @@
 # Testing
 
-Reference for `@kyrobit/rbac/testing`: an in-memory adapter for fast app tests and two contract suites — one for storage adapters, one for framework integrations. Both suites are runner-injected: pass `{ describe, it, expect }` from `bun:test` or Vitest. For usage guidance, see [Testing your app](/guide/testing-your-app).
+Reference for `@kyrobit/rbac/testing`: an in-memory adapter for fast app tests, plus two contract suites — one for storage adapters, one for framework integrations. For usage guidance, see [Testing](/guide/testing).
 
 ## memoryAdapter()
 
@@ -10,12 +10,7 @@ import { memoryAdapter } from '@kyrobit/rbac/testing'
 function memoryAdapter(): StorageAdapter
 ```
 
-A complete in-memory `StorageAdapter` — the reference implementation of the storage contract (clauses S1–S20) and the fastest way to test guarded routes without a database. Every behavior is normative: other adapters are measured against it via the contract suite.
-
-- `id`: `'memory'`.
-- `capabilities`: `{ autoOwnershipTracking: false, queryScoping: false }`.
-- `ensureSchema()`: no-op.
-- Ids are `mem_1`, `mem_2`, … — opaque and stable within one instance.
+A complete in-memory storage adapter. No database needed. It is also the reference implementation the contract suite measures other adapters against.
 
 ```ts
 import { createRbac, Policy } from '@kyrobit/rbac'
@@ -28,9 +23,13 @@ const rbac = createRbac({
 await rbac.sync(rbac.resources, 'admin')
 ```
 
+- `id` is `'memory'`.
+- `capabilities` are `{ autoOwnershipTracking: false, queryScoping: false }`.
+- `ensureSchema()` is a no-op.
+
 ## SuiteTestApi
 
-The runner injection shape both suites take as `test`:
+Both suites run on your own test runner. Pass `{ describe, it, expect }` from `bun:test` or Vitest:
 
 ```ts
 interface SuiteTestApi {
@@ -48,22 +47,15 @@ interface SuiteTestApi {
 import { runStorageAdapterContractSuite } from '@kyrobit/rbac/testing'
 
 function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptions): void
-
-interface StorageAdapterSuiteOptions {
-  name: string
-  makeAdapter: () => Promise<{ adapter: StorageAdapter; cleanup?: () => Promise<void> }>
-  test: SuiteTestApi
-}
 ```
-
-The executable specification of the storage contract. Every clause S1–S20 has at least one case named with its clause id; an adapter is conforming exactly when the suite passes. Covered: `''`-sentinel storage (S1), strict tuple matching — the tenant-isolation invariant (S2), group plus direct grants (S3), no deduplication and stable ordering (S4), metadata updates on re-sync (S5/S15), delete cascades (S6), group upsert semantics including omitted-field preservation (S7), exact entry replacement (S8), additive idempotent entry adds (S9), idempotent assignment upserts (S10), exact-tuple removals (S11), `UnknownPolicyError` on unsynced policies (S12), ownership upsert/match/removal (S13), stable policy ids (S14), qualified names from `getGroupPolicies` (S16), `ensureSchema` idempotency (S17), rejected invalid mutations (S18), portal-column orphan filtering (S19), and the inactive-group kill-switch (S20).
 
 | Option | Description |
 | --- | --- |
 | `name` | Appears in the `describe` title: `storage adapter contract: <name>`. |
-| `makeAdapter` | Called once **per test case** — cases never share state. Return a fresh adapter backed by a clean database (or a fresh schema/collection namespace). |
-| `cleanup` | Optional per-case teardown returned by `makeAdapter`. When omitted, the suite calls `adapter.close?.()` instead. |
-| `test` | Runner injection — see [SuiteTestApi](#suitetestapi). |
+| `makeAdapter` | `() => Promise<{ adapter, cleanup? }>`. Called once per test case. Return a fresh adapter on a clean database. |
+| `test` | Your test runner's functions. See [SuiteTestApi](#suitetestapi). |
+
+This suite defines the storage contract. An adapter conforms exactly when the suite passes. It covers policy sync, groups, grants, tenant matching, ownership and cascade deletes. See [Custom adapters](/guide/custom-adapters).
 
 ```ts
 // my-adapter.contract.test.ts
@@ -81,8 +73,10 @@ runStorageAdapterContractSuite({
 })
 ```
 
+When `cleanup` is omitted, the suite calls `adapter.close?.()` after each case.
+
 ::: warning
-`makeAdapter` runs for every case — around fifty times. Returning an adapter that reuses a dirty database makes unrelated clauses fail with confusing diffs — isolate state per call (transaction rollback, schema-per-case, or a truncate in `cleanup`).
+`makeAdapter` runs for every case — around fifty times. Each call must return a clean database. A dirty database makes unrelated cases fail with confusing diffs.
 :::
 
 ## runFrameworkContractSuite()
@@ -91,73 +85,21 @@ runStorageAdapterContractSuite({
 import { runFrameworkContractSuite } from '@kyrobit/rbac/testing'
 
 function runFrameworkContractSuite(options: FrameworkSuiteOptions): void
-
-interface FrameworkSuiteOptions {
-  name: string
-  makeApp: (rbac: Rbac, routes: RouteSpec[]) => Promise<TestApp>
-  test: SuiteTestApi
-}
 ```
 
-Black-box HTTP contract for framework integrations. The suite builds its own `Rbac` instances on `memoryAdapter()` and seeds grants per case; your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases verify: 401 `RBAC_UNAUTHENTICATED` without a subject, 403 `RBAC_POLICY_DENIED` without a grant, 200 with one, portal isolation, context isolation, `is_super` bypass, scoped grants (200 / 403 `RBAC_SCOPE_DENIED` / 404 `RBAC_RESOURCE_NOT_FOUND`), independent subjects for two portals on one app, exactly-once `getSubject` across stacked guards, errors traveling the framework's own pipeline, and mid-process cache invalidation on `assignGroup`/`removeGroup`.
+| Option | Description |
+| --- | --- |
+| `name` | Appears in the `describe` title: `framework integration contract: <name>`. |
+| `makeApp` | `(rbac: Rbac, routes: RouteSpec[]) => Promise<TestApp>`. Builds a running app from route specs. |
+| `test` | Your test runner's functions. See [SuiteTestApi](#suitetestapi). |
 
-### RouteSpec
-
-```ts
-interface RouteSpec {
-  method: 'GET' | 'POST'
-  path: string
-  portal: string
-  policy?: string        // '+'-separated UNQUALIFIED policy names
-  resource?: (req: any) => { type: string; id: string } | null
-  getSubjectFrom?: 'header'
-}
-```
-
-### TestApp
-
-```ts
-interface TestApp {
-  request(opts: {
-    method: 'GET' | 'POST'
-    path: string
-    headers?: Record<string, string>
-  }): Promise<TestAppResponse>
-  close(): Promise<void>
-}
-
-interface TestAppResponse {
-  status: number
-  body: any                        // parsed JSON
-  headers: Record<string, string>  // lowercase names
-}
-```
-
-### Harness protocol
-
-Every `makeApp` implementation MUST satisfy all four requirements — the suite asserts each one:
-
-1. **Portals and subject resolution.** Create one portal per distinct `route.portal` via the integration's portal factory. When `getSubjectFrom === 'header'`, `getSubject` reads:
-
-   | Header | Meaning |
-   | --- | --- |
-   | `x-subject-id` | Subject id. Absent or empty → return `null` (→ 401). |
-   | `x-context-id` | `context_id`, when present. |
-   | `x-super: '1'` | `is_super: true`. |
-
-   `getSubject` must count its own invocations per request, and **every** response must carry the header `x-getsubject-calls` with that request's total. This proves guard-time memoization: case 11 stacks two guards from one portal and expects `x-getsubject-calls: '1'`.
-
-2. **Routes and guards.** Mount each route at `(method, path)`. When `policy` is set, attach one `requirePolicy` guard per `'+'`-separated unqualified policy name (the portal qualifies them), forwarding `resource` when provided. The success handler responds 200 with JSON `{ ok: true }`.
-
-3. **Framework pipeline proof.** Register a framework-level hook/middleware that adds the header `x-app-hook: ran` to **every** response, **including error responses**. RbacErrors must travel the framework's own error pipeline — a hijacked reply that writes directly to the socket skips the hook and fails case 12.
-
-4. **Response normalization.** `TestApp.request` results use lowercase header names and a parsed JSON body.
+Black-box HTTP contract for framework integrations. The suite builds its own `Rbac` on `memoryAdapter()` and seeds grants per case. Your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases cover 401/403/404 responses, portal and tenant isolation, `is_super`, scoped grants, per-request memoization and cache invalidation.
 
 ```ts
 // my-framework.contract.test.ts
 import { describe, it, expect } from 'bun:test'
 import { runFrameworkContractSuite } from '@kyrobit/rbac/testing'
-import { makeTestApp } from './harness.js' // your RouteSpec[] → TestApp translation
+import { makeTestApp } from './harness.js'
 
 runFrameworkContractSuite({
   name: 'my-framework',
@@ -166,6 +108,37 @@ runFrameworkContractSuite({
 })
 ```
 
-::: warning
-Forgetting `x-app-hook` on error responses is the most common harness mistake — it usually means your integration formats denials by writing to the raw response instead of throwing through the framework's error pipeline. That is the exact regression the case exists to catch, not a defect in the harness.
-:::
+### RouteSpec and TestApp
+
+```ts
+interface RouteSpec {
+  method: 'GET' | 'POST'
+  path: string
+  portal: string
+  policy?: string        // '+'-separated unqualified policy names
+  resource?: (req: any) => { type: string; id: string } | null
+  getSubjectFrom?: 'header'
+}
+
+interface TestApp {
+  request(opts: {
+    method: 'GET' | 'POST'
+    path: string
+    headers?: Record<string, string>
+  }): Promise<{ status: number; body: any; headers: Record<string, string> }>
+  close(): Promise<void>
+}
+```
+
+### The makeApp contract
+
+The suite asserts each of these. Your `makeApp` must:
+
+- Create one portal per distinct `route.portal` via your integration's portal factory.
+- When `getSubjectFrom` is `'header'`, read the user from request headers: `x-subject-id` is the user id (absent or empty means `null`, so 401), `x-context-id` sets `context_id`, and `x-super: '1'` sets `is_super: true`.
+- Count `getSubject` calls per request. Send the total on every response as the `x-getsubject-calls` header. This proves `getSubject` runs once even with stacked guards.
+- Mount each route at `(method, path)`. When `policy` is set, attach one `requirePolicy` guard per `'+'`-separated name, forwarding `resource` when given. On success respond 200 with `{ ok: true }`.
+- Add the header `x-app-hook: ran` to every response via a framework-level hook — including error responses. This proves denials travel the framework's own error pipeline.
+- Return responses with lowercase header names and a parsed JSON body.
+
+Missing `x-app-hook` on error responses is the most common harness mistake. It usually means your integration writes denials to the raw response instead of throwing through the framework's error pipeline.

@@ -1,6 +1,6 @@
 # Express
 
-Reference for `@kyrobit/rbac/express`. Works on Express 4.18+ and Express 5. For a walkthrough, see [Setting up Express](/guide/setting-up-express).
+Reference for `@kyrobit/rbac/express`. Works on Express 4.18+ and Express 5. For a walkthrough, see [Express](/guide/express).
 
 ## rbacExpress()
 
@@ -13,20 +13,15 @@ function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | The instance from [`createRbac()`](/reference/core-api#createrbac). |
-| `options.formatError` | `(error: RbacError, req: Request) => { status: number; body: unknown }` | Optional. Overrides the default error response rendered by `errorHandler()`. |
+| `options.formatError` | `(error: RbacError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
-**Returns** `ExpressRbac`:
+**Returns** three factories:
 
-```ts
-interface ExpressRbac {
-  context(): RequestHandler
-  portal<P extends string>(
-    name: P,
-    options: PortalOptions<Request>,
-  ): PortalInstance<Request, RequestHandler, P>
-  errorHandler(): ErrorRequestHandler
-}
-```
+| Member | Description |
+| --- | --- |
+| `context()` | Middleware that opens the request context. Register once, before any guard. |
+| `portal(name, options)` | Create a [portal instance](#portal-instance). `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per portal. |
+| `errorHandler()` | Error middleware that sends the denial response. Register after your routes. |
 
 ```ts
 import express from 'express'
@@ -52,52 +47,29 @@ app.get('/posts', admin.requirePolicy('posts.read'), (req, res) => {
 app.use(errorHandler()) // after the routes
 ```
 
-## context()
+## Portal instance
 
-```ts
-context(): RequestHandler
-```
+| Method | Description |
+| --- | --- |
+| `name` | The portal name. |
+| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`posts.read`, not `admin.posts.read`). `options.resource(req)` resolves the target row; required for scoped grants. |
+| `contextHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Mount on specific routers, never app-wide. |
+| `assignGroup(subjectId, group, options?)` | Assign a group in this portal. `options.contextId` targets a tenant. |
+| `removeGroup(subjectId, group, options?)` | Remove a group. |
+| `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `contextId`, `scope`. |
+| `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |
 
-Opens the engine's per-request `AsyncLocalStorage` store. Register it once, before any portal guard. It calls `store.enter(next)` — the callback form is mandatory because under Bun a promise-wrapped `store.run()` does not propagate ALS context to the rest of the middleware chain.
+Guards never write responses. A denial travels through `next(err)` into your error pipeline. Behavior is identical on Express 4 and Express 5.
 
-Any guard that runs without `context()` in front of it throws `MisconfiguredError` (500, `RBAC_MISCONFIGURED`).
-
-## portal()
-
-```ts
-portal<P extends string>(name: P, options: PortalOptions<Request>): PortalInstance<Request, RequestHandler, P>
-```
-
-`options.getSubject: (req: Request) => Awaitable<SubjectInput | null>` — called lazily at guard time, memoized per request per portal; return `null` when the request has no authenticated user (→ 401). The portal adds `portal: name` to the returned subject itself. Registering a portal never touches app-wide state, so two portals on one app cannot overwrite each other's subject.
-
-### Portal instance
-
-| Method | Signature | Description |
-| --- | --- | --- |
-| `name` | `P` | The portal name. |
-| `requirePolicy` | `(policy: PortalPolicyName<P>, options?: { resource?: (req) => Awaitable<ResourceRef \| null \| undefined> }) => RequestHandler` | Guard middleware. Takes the **unqualified** policy name — the portal qualifies it (`admin` + `posts.read` → `admin.posts.read`). `resource` resolves the row-level target; required whenever the resolved grant is scoped, otherwise the guard denies with `ScopeDeniedError`. |
-| `contextHook` | `() => RequestHandler` | Resolves and sets the subject without guarding — for unguarded routes that still need ownership tracking. Mount it on specific routers, never app-wide. |
-| `assignGroup` | `(subjectId: string, group: string, options?: { contextId?: string }) => Promise<void>` | Assignment sugar, strict to this portal. |
-| `removeGroup` | `(subjectId: string, group: string, options?: { contextId?: string }) => Promise<void>` | Same. |
-| `assignPolicy` | `(subjectId: string, policy: PortalPolicyName<P>, options?: { contextId?: string; scope?: string \| null }) => Promise<void>` | Takes the unqualified name and qualifies it with the portal. |
-| `removePolicy` | `(subjectId: string, policy: PortalPolicyName<P>, options?: { contextId?: string }) => Promise<void>` | Same. |
-
-## Guard semantics
-
-Guards never write responses. A denial travels through `next(err)` into the app's error pipeline, terminated by `errorHandler()`. Rejections are forwarded explicitly, so behavior is identical on Express 4 (which has no automatic async error forwarding) and Express 5. Two invariants:
-
-- `next()` is called only on fulfillment, outside any catch path, so a throw from downstream middleware can never re-enter `next(err)` inside the guard.
-- A falsy rejection (`Promise.reject()`) is upgraded to a `MisconfiguredError` — Express treats `next(undefined)` as success, which would authorize the request.
+**Throws** `MisconfiguredError` (500) from any guard when `context()` is not mounted in front of it.
 
 ## errorHandler()
 
 ```ts
-errorHandler(): ErrorRequestHandler
+app.use(errorHandler())
 ```
 
-Terminal error middleware. Register it after your routes. For an `RbacError` it responds with `error.statusCode` and `error.toBody()` as JSON; everything else — non-`RbacError` errors, or any error arriving after headers were already sent — is delegated to `next(error)` so your own error middleware and Express defaults still apply.
-
-Default denied responses:
+For an `RbacError` it responds with `error.statusCode` and a JSON body. Everything else is passed to `next(error)`, so your own error middleware still applies.
 
 ```json
 // 403 — policy not granted
@@ -107,9 +79,11 @@ Default denied responses:
 { "message": "Unauthorized", "code": "RBAC_UNAUTHENTICATED" }
 ```
 
-Scoped denials produce `RBAC_SCOPE_DENIED` (403) and `RBAC_RESOURCE_NOT_FOUND` (404) the same way. See [Errors](/reference/errors) for every code.
+Scoped denials produce `RBAC_SCOPE_DENIED` (403) and `RBAC_RESOURCE_NOT_FOUND` (404) the same way. See [Errors](/reference/errors).
 
-With `formatError` set on `rbacExpress()`, the handler responds with your `{ status, body }` instead:
+### formatError
+
+Pass `formatError` to shape the denial response yourself:
 
 ```ts
 const { context, portal, errorHandler } = rbacExpress(rbac, {
@@ -121,5 +95,5 @@ const { context, portal, errorHandler } = rbacExpress(rbac, {
 ```
 
 ::: warning
-Without `errorHandler()` (or your own error middleware that understands `RbacError`), a denial falls through to Express's default handler, which renders an HTML error page (including a stack trace outside production) instead of the JSON body API clients expect. Always register `errorHandler()` after the last route.
+Without `errorHandler()`, a denial falls through to Express's default handler. That renders an HTML error page instead of JSON. Always register it after the last route.
 :::

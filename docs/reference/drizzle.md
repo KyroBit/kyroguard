@@ -1,28 +1,19 @@
 # Drizzle
 
-Reference for `@kyrobit/rbac/drizzle` and the schema subpaths. Supports PostgreSQL, MySQL and SQLite via `drizzle-orm` (>=0.36.0 <2). For setup walkthroughs, see [Drizzle + PostgreSQL](/databases/drizzle-postgres), [Drizzle + MySQL](/databases/drizzle-mysql) and [Drizzle + SQLite](/databases/drizzle-sqlite).
+Reference for `@kyrobit/rbac/drizzle`. Supports PostgreSQL, MySQL and SQLite with `drizzle-orm` >=0.36.0. Setup walkthrough: [Drizzle](/databases/drizzle).
 
 ## drizzleAdapter()
 
 ```ts
 import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
 
-function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): DrizzleStorageAdapter
+function drizzleAdapter(db: unknown, options: { schema: DrizzleRbacSchema }): DrizzleStorageAdapter
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `db` | `unknown` | A Drizzle database handle for the matching dialect. Untyped by design — the three dialects' database types do not unify statically. |
+| `db` | `unknown` | A Drizzle database handle for the matching dialect. |
 | `options.schema` | `DrizzleRbacSchema` | The whole schema module: `import * as schema from '@kyrobit/rbac/drizzle/schema/pg'`. |
-
-**Returns** a `DrizzleStorageAdapter`:
-
-- `id`: `'drizzle-pg'`, `'drizzle-mysql'` or `'drizzle-sqlite'`, from `schema.dialect`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true }`.
-- No `ensureSchema()` — migrations own DDL; generate and run them with your Drizzle Kit workflow before syncing.
-- No `close()` — the caller owns the connection lifecycle.
-- Multi-step mutations (`upsertPolicies`, `deletePolicies`, `setGroupPolicies`, assignments) run inside `db.transaction()`.
-- `recordOwnershipWith(executor, entries)` — internal hook for `trackedDb`: writes ownership rows through a specific executor (the surrounding transaction) so they commit atomically with the tracked resource insert.
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
@@ -33,33 +24,14 @@ const db = drizzle(process.env.DATABASE_URL!)
 const adapter = drizzleAdapter(db, { schema })
 ```
 
-### Types
+The returned adapter:
 
-```ts
-type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
-
-interface DrizzleRbacTables {
-  policies: unknown
-  policyGroups: unknown
-  policyGroupPolicies: unknown
-  userPolicyGroups: unknown
-  userPolicies: unknown
-  resourceOwners: unknown
-}
-
-interface DrizzleRbacSchema {
-  dialect: DrizzleDialect
-  tables: DrizzleRbacTables
-}
-
-interface DrizzleAdapterOptions {
-  schema: DrizzleRbacSchema
-}
-
-interface DrizzleStorageAdapter extends StorageAdapter {
-  recordOwnershipWith(executor: unknown, entries: OwnershipEntry[]): Promise<void>
-}
-```
+- `id`: `'drizzle-pg'`, `'drizzle-mysql'` or `'drizzle-sqlite'`, from the schema's dialect.
+- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true }`.
+- Does not create tables. Run your Drizzle Kit migrations before `rbac sync`.
+- Does not close the connection. You own the connection lifecycle.
+- Multi-step writes run in a transaction.
+- Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
 ## trackedDb()
 
@@ -69,29 +41,14 @@ import { trackedDb } from '@kyrobit/rbac/drizzle'
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
 
-Wraps a Drizzle database in a proxy so that:
-
-- **inserts** into registered resource tables record ownership rows for the current request subject — atomically with the insert inside transactions,
-- **selects** (`select`, `selectDistinct`) on registered resources get portal-configured query scoping,
-- **transactions** hand the callback a wrapped `tx` with the same behavior,
-- `db.untracked` exposes the raw, unwrapped handle.
-
-`update` and `delete` are intentionally not intercepted — call [`rbac.ownership.remove()`](/reference/core-api#rbac-ownership) when you delete an owned resource.
-
-### TrackedDbOptions
+Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user. Selects on registered resources get per-portal query scoping. `db.untracked` is the raw handle.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `rbac` | `{ engine: RbacEngine; adapter: StorageAdapter }` | required | Pass your `Rbac` instance — it satisfies this shape. |
-| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` set are registered; inserts and selects on other tables pass through untouched. |
-| `queryScopes` | `Record<string, QueryScopeFn>` | `undefined` | Scope name → condition builder for query scoping. Without it, no select is scoped. |
-| `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert on a registered resource yields no trackable ids: `'warn'` logs once per resource, `'error'` rejects with `MisconfiguredError`, `'off'` skips silently. |
-
-```ts
-type QueryScopeFn = (subject: Subject, db: unknown) => unknown
-```
-
-Builds a per-request Drizzle condition (`SQL`); return `undefined` to skip scoping for this request.
+| `rbac` | `Rbac` | required | Your `createRbac` instance. |
+| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked. Other tables pass through. |
+| `queryScopes` | `Record<string, QueryScopeFn>` | none | Scope name to condition builder. Without it, no select is scoped. |
+| `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
@@ -111,28 +68,35 @@ export const db = trackedDb(rawDb, {
 })
 ```
 
-### Ownership tracking behavior
+A `QueryScopeFn` builds a Drizzle condition per request:
 
-For an insert into a registered resource table, the proxy needs the new row ids. It finds them, in order:
+```ts
+type QueryScopeFn = (subject: Subject, db: unknown) => unknown
+```
 
-1. From `values()` — every row carries a string or number `id`.
-2. From a `.returning()` / `.$returningId()` result — rows with an `id` field.
+Return `undefined` to skip scoping for that request.
 
-When neither yields ids, the `strictTracking` setting applies. When no subject is set on the request (seeders, CLI, background jobs), the insert runs plainly — there is nothing to attribute. The ownership write is awaited before the caller's promise resolves; a failed ownership write rejects the insert rather than vanishing.
+### What gets tracked
 
-One-shot overrides set via `rbac.ownership.addExtra()` are consumed here: string values for `resourceType`, `resourceId`, `ownerId`, `contextType`, `contextId` replace the auto-derived fields for the next tracked insert.
+An insert needs the new row ids. The wrapper reads them from `values()` rows that carry an `id`, or from a `.returning()` result. When no user is set on the request, seeders and jobs for example, the insert runs plainly. Inside a transaction, the ownership row commits together with the insert.
+
+Updates and deletes are not intercepted. Call `rbac.ownership.remove()` when you delete an owned resource.
 
 ::: warning
-An insert without ids in `values()` and without `.returning()` cannot be attributed. The default only warns once per resource — set `strictTracking: 'error'` in development to catch these paths, or use `db.untracked` where tracking is intentional to skip.
+An insert without ids in `values()` and without `.returning()` cannot be attributed. Set `strictTracking: 'error'` in development to catch these paths. Use `db.untracked` where skipping tracking is intentional.
 :::
 
-### Query scoping behavior
+### How selects are scoped
 
-A select on a registered resource is scoped when the resource's `context` config — keyed by the **subject's portal** (`resource.context[subject.portal ?? '']`, mapping policy name → scope names) — names scopes present in `queryScopes`. All matching conditions are OR-combined, then AND-ed into your `where()`. No subject on the request, no matching portal key, or no matching scope builders means no scoping. Chained builder methods (`limit`, `orderBy`, joins) keep the scope.
+For a select on a registered resource, the wrapper:
+
+1. Looks up the resource's `context` entry for the user's portal.
+2. Collects the scope names it lists that also exist in `queryScopes`.
+3. Builds each scope's condition, OR-combines them, and AND-s the result into your `where()`.
+
+No user, no matching portal, or no matching scopes: the select runs unscoped. See [Scopes](/guide/scopes).
 
 ## Schema subpaths
-
-Each dialect module exports the same names; pass the whole module to `drizzleAdapter` as `schema`.
 
 ```ts
 import * as schema from '@kyrobit/rbac/drizzle/schema/pg'     // PostgreSQL
@@ -140,21 +104,17 @@ import * as schema from '@kyrobit/rbac/drizzle/schema/mysql'  // MySQL
 import * as schema from '@kyrobit/rbac/drizzle/schema/sqlite' // SQLite
 ```
 
-| Export | Table name | Description |
-| --- | --- | --- |
-| `dialect` | — | Dialect const: `'pg'`, `'mysql'` or `'sqlite'`. |
-| `rbacPolicies` | `rbac_policies` | Policy definitions (name, portal, label, scope options, dependencies). |
-| `rbacPolicyGroups` | `rbac_policy_groups` | Groups (name, label, description, `is_system`, `is_active`). |
-| `rbacPolicyGroupPolicies` | `rbac_policy_group_policies` | Group → policy entries with optional scope. |
-| `rbacUserPolicyGroups` | `rbac_user_policy_groups` | Subject → group assignments, unique on (subject, group, portal, context). |
-| `rbacUserPolicies` | `rbac_user_policies` | Subject → policy direct grants, unique on (subject, policy, portal, context). |
-| `rbacResourceOwners` | `rbac_resource_owners` | Ownership rows, unique on (resource type, resource id, owner id). |
-| `tables` | — | Barrel object `{ policies, policyGroups, policyGroupPolicies, userPolicyGroups, userPolicies, resourceOwners }` — the shape `drizzleAdapter` consumes. |
+Each module exports the same names. Pass the whole module to `drizzleAdapter` as `schema`.
 
-Dialect notes:
+| Export | Table |
+| --- | --- |
+| `rbacPolicies` | `rbac_policies` |
+| `rbacPolicyGroups` | `rbac_policy_groups` |
+| `rbacPolicyGroupPolicies` | `rbac_policy_group_policies` |
+| `rbacUserPolicyGroups` | `rbac_user_policy_groups` |
+| `rbacUserPolicies` | `rbac_user_policies` |
+| `rbacResourceOwners` | `rbac_resource_owners` |
+| `dialect` | `'pg'`, `'mysql'` or `'sqlite'` |
+| `tables` | Barrel object consumed by `drizzleAdapter` |
 
-- **pg** — `text` ids (cuid2 via `createId()`), `jsonb` for `scope_options`/`depends_on`, `timestamp` columns.
-- **mysql** — `varchar(191)` ids and key columns (the max indexable utf8mb4 length that keeps 4-column unique keys under InnoDB's 3072-byte index limit), `json` columns.
-- **sqlite** — `text` ids, JSON-mode `text` columns, `integer` timestamps in timestamp mode.
-
-Column-by-column DDL is in [Database schema](/reference/database-schema).
+Column-by-column details are in [Database schema](/reference/database-schema).
