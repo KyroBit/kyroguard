@@ -305,14 +305,15 @@ export class RbacEngine {
     await this.invalidateSubject(ref.subjectId)
   }
 
-  async assignPolicy(ref: SubjectRef, policyName: QualifiedPolicyName, scope?: string | null): Promise<void> {
-    if (typeof scope === 'string') {
+  async assignPolicy(ref: SubjectRef, policyName: QualifiedPolicyName, scope?: string): Promise<void> {
+    const stored = scope === 'all' || scope === undefined ? null : scope
+    if (typeof stored === 'string') {
       const record = (await this.adapter.listPolicies()).find(policy => policy.name === policyName)
-      if (record && !record.scopeOptions.includes(scope)) {
-        throw new UnknownScopeError(policyName, scope)
+      if (record && !record.scopeOptions.includes(stored)) {
+        throw new UnknownScopeError(policyName, stored)
       }
     }
-    await this.adapter.assignPolicy(ref, policyName, scope)
+    await this.adapter.assignPolicy(ref, policyName, stored)
     await this.invalidateSubject(ref.subjectId)
   }
 

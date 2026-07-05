@@ -2,7 +2,7 @@ import { qualifyPolicyName } from './types.js'
 import type { GroupPolicyEntry, StorageAdapter } from '../storage/contract.js'
 
 /** Policy names are UNQUALIFIED — seedGroups qualifies them with the domain sentinel. */
-export type GroupPoliciesInput = 'all' | string[] | Record<string, string | null>
+export type GroupPoliciesInput = 'all' | string[] | Record<string, string>
 
 export interface GroupDefinition {
   label: string
@@ -75,5 +75,7 @@ function normalize(
 ): Record<string, string | null> {
   if (input === 'all') return Object.fromEntries(allPolicies.map(policy => [policy.name, null]))
   if (Array.isArray(input)) return Object.fromEntries(input.map(name => [name, null]))
-  return input
+  return Object.fromEntries(
+    Object.entries(input).map(([name, scope]) => [name, scope === 'all' ? null : scope]),
+  )
 }

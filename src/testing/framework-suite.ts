@@ -103,7 +103,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     rbac: Rbac,
     subjectId: string,
     policy: string,
-    opts: { domain?: string; tenantId?: string; scope?: string | null } = {},
+    opts: { domain?: string; tenantId?: string; scope?: string } = {},
   ): Promise<void> => {
     const domain = opts.domain ?? 'admin'
     return rbac.admin.assignPolicy(

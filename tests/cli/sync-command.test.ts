@@ -95,7 +95,7 @@ export const adapter = {
     join(dir, 'groups.ts'),
     `export const groups = {
   admin: { label: 'Administrator', policies: 'all' },
-  editor: { label: 'Editor', policies: { 'docs.write': null } },
+  editor: { label: 'Editor', policies: { 'docs.write': 'all' } },
 }
 `,
     'utf8',

@@ -28,14 +28,14 @@ describe('seedGroups formats', () => {
     ])
   })
 
-  test('record format: policy → scope, null meaning unrestricted', async () => {
+  test("record format: policy → scope, 'all' meaning unrestricted — stored as scope null", async () => {
     const adapter = memoryAdapter()
     await seedGroups(
       adapter,
       {
         authors: {
           label: 'Authors',
-          policies: { 'posts.read': null, 'posts.update': 'owned' },
+          policies: { 'posts.read': 'all', 'posts.update': 'owned' },
         },
       },
       undefined,
@@ -125,11 +125,24 @@ describe('seedGroups scope validation', () => {
     ])
   })
 
-  test('null scopes are never validated', async () => {
+  test("'all' is always valid, even against declared scopeOptions that do not list it", async () => {
     const adapter = memoryAdapter()
     await seedGroups(
       adapter,
-      { viewers: { label: 'Viewers', policies: { 'posts.read': null } } },
+      { editors: { label: 'Editors', policies: { 'posts.update': 'all' } } },
+      [new Policy('posts.update', { scopeOptions: [owned] })],
+      'admin',
+    )
+    expect(await entriesOf(adapter, 'editors')).toEqual([
+      { policyName: 'admin.posts.update', scope: null },
+    ])
+  })
+
+  test("'all' is never validated when the policy declares no scopeOptions", async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(
+      adapter,
+      { viewers: { label: 'Viewers', policies: { 'posts.read': 'all' } } },
       [new Policy('posts.read')],
       'admin',
     )
@@ -187,7 +200,7 @@ describe('seedGroups semantics', () => {
       editors: {
         label: 'Editors',
         description: 'Can edit posts',
-        policies: { 'posts.read': null, 'posts.update': 'owned' },
+        policies: { 'posts.read': 'all', 'posts.update': 'owned' },
       },
     }
     await seedGroups(adapter, groups, undefined, 'admin')

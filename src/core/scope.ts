@@ -46,7 +46,12 @@ export class Scope {
     readonly check: ScopeCheckFn,
     /** List-path compilation. Omit for condition-only scopes — check(subject, null, ctx) is used. */
     readonly filter?: ScopeFilterFn,
-  ) {}
+  ) {
+    // 'all' is the reserved unrestricted-grant marker — a scope by that name could never be granted.
+    if (name === 'all') {
+      throw new Error(`[rbac] Scope: the name 'all' is reserved — it marks an unrestricted grant.`)
+    }
+  }
 
   /** Built-in ownership scope backed by the adapter's ownership store; fails closed without a resource. */
   static owned(name = 'owned', label = 'Owned by the user'): Scope {

@@ -76,7 +76,7 @@ import type { GroupsDefinition } from '@kyrobit/rbac'
 export const groups: GroupsDefinition = {
   cashier: {
     label: 'Cashier',
-    policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+    policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
   },
   manager: { label: 'Manager', policies: 'all' },
 }

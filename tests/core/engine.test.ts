@@ -557,11 +557,20 @@ describe('assignPolicy scope validation', () => {
     ])
   })
 
-  test('null and omitted scopes skip validation even with empty scopeOptions', async () => {
+  test("'all' and omitted scopes skip validation even with empty scopeOptions — both store null", async () => {
     const { adapter, engine } = makeEngine()
     await sync(adapter, [])
-    await engine.assignPolicy(ref, 'admin.posts.update', null)
+    await engine.assignPolicy(ref, 'admin.posts.update', 'all')
     await engine.assignPolicy(ref, 'admin.posts.update')
+    expect(await adapter.getSubjectPolicies(ref)).toEqual([
+      { name: 'admin.posts.update', scope: null },
+    ])
+  })
+
+  test("'all' passes validation regardless of the declared scopeOptions", async () => {
+    const { adapter, engine } = makeEngine()
+    await sync(adapter, ['owned'])
+    await engine.assignPolicy(ref, 'admin.posts.update', 'all')
     expect(await adapter.getSubjectPolicies(ref)).toEqual([
       { name: 'admin.posts.update', scope: null },
     ])

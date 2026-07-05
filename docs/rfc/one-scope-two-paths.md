@@ -399,7 +399,7 @@ The cashier's grant is `'sales.view': 'owned'`, so `f` comes back as `{ kind: 'w
 
 ### The manager's list
 
-Same route, no new code. The manager's grant is `'sales.view': null` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. No filter built, no IDs enumerated, nothing to pay. One grant through a group with a scope **and** another without? The unrestricted one wins, exactly as it does at the guard.
+Same route, no new code. The manager's grant is `'sales.view': 'all'` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. No filter built, no IDs enumerated, nothing to pay. One grant through a group with a scope **and** another without? The unrestricted one wins, exactly as it does at the guard.
 
 ### Outside business hours
 

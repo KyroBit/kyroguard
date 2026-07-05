@@ -42,9 +42,9 @@ const rbac = createRbac({
 const postResource = rbac.resources[0]!
 
 await rbac.sync()
-await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.view', null)
+await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.view', 'all')
 await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.void', 'owned')
-await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'posts.view', null)
+await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'posts.view', 'all')
 await rbac.admin.assignPolicy({ subjectId: 'stranger' }, 'posts.flag', 'window')
 
 interface PostRow {

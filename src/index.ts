@@ -65,7 +65,7 @@ export interface Rbac {
   admin: {
     assignGroup(subject: AdminSubjectRef, group: string): Promise<void>
     removeGroup(subject: AdminSubjectRef, group: string): Promise<void>
-    assignPolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName, scope?: string | null): Promise<void>
+    assignPolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName, scope?: string): Promise<void>
     removePolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName): Promise<void>
   }
 

@@ -50,3 +50,13 @@ describe('Policy options form', () => {
     expect(policy.dependsOn).toEqual(['sales.view'])
   })
 })
+
+describe('Scope name reservation', () => {
+  test("a Scope named 'all' throws — 'all' is the unrestricted-grant marker", () => {
+    expect(() => new Scope('all', 'Everything', () => true)).toThrow(/'all' is reserved/)
+  })
+
+  test('the built-in factories reject the reserved name too', () => {
+    expect(() => Scope.owned('all')).toThrow(/'all' is reserved/)
+  })
+})

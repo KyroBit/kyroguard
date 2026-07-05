@@ -32,16 +32,16 @@ const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
 async function seed(rbac: Rbac): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
-  const grant = (subjectId: string, scope: string | null, policy = 'sales.view'): Promise<void> =>
+  const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
       { subjectId, domain: 'staff' },
       qualifyPolicyName('staff', policy),
       scope,
     )
   await grant('cashier', 'owned')
-  await grant('manager', null)
+  await grant('manager', 'all')
   await grant('nightowl', 'closed-hours')
-  await grant('supervisor', null)
+  await grant('supervisor', 'all')
   await grant('supervisor', 'owned', 'sales.void')
   await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
   await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })

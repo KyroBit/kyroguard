@@ -37,7 +37,7 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   assignPolicy(
     subjectId: string,
     policy: DomainPolicyName<P>,
-    options?: { tenantId?: string; scope?: string | null },
+    options?: { tenantId?: string; scope?: string },
   ): Promise<void>
   removePolicy(
     subjectId: string,

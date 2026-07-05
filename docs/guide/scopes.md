@@ -21,15 +21,15 @@ new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned
 // groups.ts — the same policy, a different condition per role
 cashier: {
   label: 'Cashier',
-  policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+  policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
 },
 manager: {
   label: 'Manager',
-  policies: { 'sales.view': null, 'sales.void': null },
+  policies: { 'sales.view': 'all', 'sales.void': 'all' },
 },
 ```
 
-Each value is a scope name, or `null` for no condition. That one file is the org chart: cashiers void what they recorded, managers void anything. [Ownership](/guide/ownership) explains how sales get owners.
+Each value is a scope name, or `'all'` for no condition — every row. That one file is the org chart: cashiers void what they recorded, managers void anything. [Ownership](/guide/ownership) explains how sales get owners.
 
 This rule looks at a row, so the guard needs to know which row. Give it a `resource` resolver:
 
@@ -139,7 +139,7 @@ app.get('/sales', staff.requirePolicy('sales.view'), async (req, res) => {
 
 :::
 
-The cashier's grant is `'sales.view': 'owned'`: twenty of their own sales — and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's. The manager's grant is `'sales.view': null`: twenty of anyone's. No grant never reaches the query — the guard already answered 403.
+The cashier's grant is `'sales.view': 'owned'`: twenty of their own sales — and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's. The manager's grant is `'sales.view': 'all'`: twenty of anyone's. No grant never reaches the query — the guard already answered 403.
 
 The filter follows the guard's policy, not the table. Put the same table behind a different guard and the reads change with it:
 
@@ -213,7 +213,7 @@ The void guard from Rule 1 already knows cashiers only touch their own sales. On
 
 ### The manager's list
 
-Same route, no new code. The manager's grant is `'sales.view': null` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. Nothing built, nothing enumerated, nothing to pay. One grant with a scope and another without? The unrestricted one wins, exactly as it does at the guard.
+Same route, no new code. The manager's grant is `'sales.view': 'all'` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. Nothing built, nothing enumerated, nothing to pay. One grant with a scope and another without? The unrestricted one wins, exactly as it does at the guard.
 
 ### Outside business hours
 

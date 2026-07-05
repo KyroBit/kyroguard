@@ -37,7 +37,7 @@ const rbac = createRbac({
   groups: {
     cashier: {
       label: 'Cashier',
-      policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+      policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
     },
     manager: { label: 'Manager', policies: 'all' },
   },
@@ -61,7 +61,7 @@ The instance returned by `createRbac()`.
 | `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
 | `admin.assignGroup(subject, group)` | Assign a group. |
 | `admin.removeGroup(subject, group)` | Remove a group. |
-| `admin.assignPolicy(subject, policy, scope?)` | Grant one policy directly. |
+| `admin.assignPolicy(subject, policy, scope?)` | Grant one policy directly. `scope` is a scope name; omitted or `'all'` means no restriction — every row. |
 | `admin.removePolicy(subject, policy)` | Remove a direct grant. |
 | `ownership.record(owner, resource, at?)` | Record who owns a resource (relation `'owner'`). `at`: `domain`, `tenantId`. |
 | `ownership.isOwner(ownerId, resource)` | Check ownership. Matches only `'owner'` entries. |
@@ -88,7 +88,7 @@ await rbac.admin.assignPolicy({ subjectId: 'amina', domain: 'admin' }, 'admin.re
 
 Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
 
-**Throws** from `assignPolicy`: `UnknownPolicyError` when the policy was never synced, `UnknownScopeError` when the scope is not among the policy's `scopeOptions`.
+**Throws** from `assignPolicy`: `UnknownPolicyError` when the policy was never synced, `UnknownScopeError` when the scope is not among the policy's `scopeOptions`. `'all'` is always accepted — it is the unrestricted marker, not a scope name.
 
 ## Policy
 
@@ -152,7 +152,7 @@ A scope is a named condition on a grant — about the row (`Scope.owned()`: only
 - `check` guards a single row. It receives the resource when the guard resolves one, or `null` — row scopes must fail closed on `null`.
 - `filter` compiles the same condition for list queries. It returns `true` (no row restriction), `false` (no rows — fail closed), or `{ where }` — a native fragment for the app's ORM. Optional: a scope without one is folded through `check(subject, null, ctx)` on the list path, which makes condition scopes work in lists with no extra code and keeps filterless row scopes from leaking.
 
-The built-ins ship both halves. Default names: `owned`, `granted`, `in-tenant`. See [Scopes](/guide/scopes).
+The built-ins ship both halves. Default names: `owned`, `granted`, `in-tenant`. The name `'all'` is reserved — it marks an unrestricted grant, and the constructor rejects it. See [Scopes](/guide/scopes).
 
 ## filterFor()
 
@@ -197,11 +197,11 @@ type GroupsDefinition = Record<string, GroupDefinition>
 interface GroupDefinition {
   label: string
   description?: string
-  policies: 'all' | string[] | Record<string, string | null>
+  policies: 'all' | string[] | Record<string, string>
 }
 ```
 
-Groups are job titles: `cashier`, `manager`. `'all'` grants every synced policy. An array grants those policies, unrestricted. A record maps each policy to a scope; `null` means unrestricted. See [Groups](/guide/groups).
+Groups are job titles: `cashier`, `manager`. `'all'` grants every synced policy. An array grants those policies, unrestricted. A record maps each policy to a scope; `'all'` means no restriction — every row. See [Groups](/guide/groups).
 
 ## Subject
 
@@ -242,7 +242,7 @@ Functions:
 - `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
 - `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
-- `mergeGrants(grants)` — merge grant rows into a `PolicyMap` (`Map<string, string[] | null>`). An unrestricted grant (`null`) from anywhere wins the whole policy; otherwise the value is every granted scope name, deduped. Scopes OR on both paths: `authorize()` passes when any scope passes, `filterFor()` combines their fragments.
+- `mergeGrants(grants)` — merge grant rows into a `PolicyMap` (`Map<string, string[] | null>`). An unrestricted grant from anywhere wins the whole policy; otherwise the value is every granted scope name, deduped. Scopes OR on both paths: `authorize()` passes when any scope passes, `filterFor()` combines their fragments.
 - `defineConfig(config)` — returns `config` unchanged, with types. Use it in `rbac.config.ts`. See [Configuration](/reference/configuration).
 - `createId()` — random string id generator (cuid2). Used by generated schemas.
 

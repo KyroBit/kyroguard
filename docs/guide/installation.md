@@ -90,7 +90,7 @@ export const groups: GroupsDefinition = {
   cashier: {
     label: 'Cashier',
     // 'owned': a cashier can void only their own sales
-    policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+    policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
   },
   manager: {
     label: 'Manager', // a manager can void any sale

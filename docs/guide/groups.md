@@ -11,7 +11,7 @@ export const groups: GroupsDefinition = {
     label: 'Cashier',
     policies: {
       'sales.view': 'owned',
-      'sales.create': null,
+      'sales.create': 'all',
       'sales.void': 'owned',
     },
   },
@@ -63,11 +63,11 @@ Each listed policy is granted without limits. A manager voids any sale in the st
 ```ts
 cashier: {
   label: 'Cashier',
-  policies: { 'sales.view': 'owned', 'sales.create': null, 'sales.void': 'owned' },
+  policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
 }
 ```
 
-`null` means no limit. `'owned'` limits that policy to rows the user owns. A cashier voids only the sales they rang up. See [Scopes](/guide/scopes).
+`'all'` means no restriction — every row. `'owned'` limits that policy to rows the user owns. A cashier voids only the sales they rang up. See [Scopes](/guide/scopes).
 
 ## Dependencies are filled in
 

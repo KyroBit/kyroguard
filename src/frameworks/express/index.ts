@@ -126,7 +126,7 @@ function createDomain<P extends string>(
     assignPolicy: (
       subjectId: string,
       policy: string,
-      opts?: { tenantId?: string; scope?: string | null },
+      opts?: { tenantId?: string; scope?: string },
     ) =>
       rbac.admin.assignPolicy(
         adminRef(subjectId, opts?.tenantId),
