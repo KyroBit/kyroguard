@@ -2,10 +2,9 @@
 /**
  * rbacMongoosePlugin behavior on a real mongod (mongodb-memory-server):
  * automatic ownership tracking through document middleware, ownership cleanup
- * on findOneAndDelete, plan-driven read filtering (engine.filterForResource)
- * on find/countDocuments when the resource declares `list`, and the
- * DOCUMENTED gap that updateMany fires no document middleware and therefore
- * records nothing.
+ * on findOneAndDelete, guard-driven read filtering on find/countDocuments
+ * (keyed on the request's activeFilters plan), and the DOCUMENTED gap that
+ * updateMany fires no document middleware and therefore records nothing.
  */
 
 import mongoose from 'mongoose'
@@ -52,11 +51,10 @@ if (!available) {
     authorId: { type: String, required: true },
     branchId: { type: String, required: true },
   })
-  const postResource: ResourceDefinition = { type: 'post', policies: [], list: 'posts.read' }
+  const postResource: ResourceDefinition = { type: 'post', policies: [] }
   rbacMongoosePlugin(postSchema as unknown as mongoose.Schema, {
     rbac: { engine, adapter },
     type: 'post',
-    resource: postResource,
   })
   const Post = connection.model<PostDoc>('Post', postSchema)
   postResource.table = Post
@@ -90,11 +88,22 @@ if (!available) {
   const nobody: Subject = { id: 'nobody', domain: 'admin', tenant_id: 'b1' }
   const peeker: Subject = { id: 'peeker', domain: 'admin', tenant_id: 'b1' }
 
-  /** Runs fn in a fresh request context with the given subject set. */
+  /** Runs fn in a fresh request context with the given subject set — no guard. */
   const asSubject = <T>(who: Subject, fn: () => Promise<T>): Promise<T> =>
     engine.runWithRequestContext(async () => {
       engine.setRequestSubject(who)
       return fn()
+    })
+
+  /** The framework guard's flow: context, subject, then store the exercised policy's plan. */
+  const asGuarded = <T>(who: Subject, fn: () => Promise<T>): Promise<T> =>
+    engine.runWithRequestContext(async () => {
+      engine.setRequestSubject(who)
+      await engine.storeFilterFor(who, 'admin.posts.read', postResource)
+      // `return await`, not `return`: under Bun, resolving the context
+      // callback WITH a bare thenable (a mongoose Query) subscribes to it
+      // outside the ALS frame, so the pre-find hook would run storeless.
+      return await fn()
     })
 
   const isOwner = (ownerId: string, id: unknown): Promise<boolean> =>
@@ -111,7 +120,7 @@ if (!available) {
   }
 
   const titlesFor = (who: Subject, filter: Record<string, unknown> = {}): Promise<string[]> =>
-    asSubject(who, async () => {
+    asGuarded(who, async () => {
       const found = await Post.find(filter).lean()
       return found.map(doc => doc.title).sort()
     })
@@ -181,33 +190,41 @@ if (!available) {
       expect(await isOwner('cashier', kept._id)).toBe(true)
     })
 
-    test("(e) cashier ('owned' grant): find and countDocuments see only owned docs", async () => {
+    test("(e) cashier guarded by the 'owned' grant: find and countDocuments see only owned docs", async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(cashier)).toEqual(['cashier-1', 'cashier-2'])
-      expect(await asSubject(cashier, () => Post.countDocuments({}))).toBe(2)
+      expect(await asGuarded(cashier, () => Post.countDocuments({}))).toBe(2)
 
       // The plan composes with the caller's filter ($and), it does not replace it.
       expect(await titlesFor(cashier, { title: 'cashier-2' })).toEqual(['cashier-2'])
       expect(await titlesFor(cashier, { title: 'manager-1' })).toEqual([])
       expect(
-        await asSubject(cashier, () => Post.findOne({ title: 'manager-1' }).lean()),
+        await asGuarded(cashier, () => Post.findOne({ title: 'manager-1' }).lean()),
       ).toBeNull()
     })
 
-    test('(e) manager (unscoped grant): plan is all — find and countDocuments are unfiltered', async () => {
+    test('(e) manager guarded by the unscoped grant: plan is all — find and countDocuments are unfiltered', async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(manager)).toEqual(['cashier-1', 'cashier-2', 'manager-1'])
-      expect(await asSubject(manager, () => Post.countDocuments({}))).toBe(3)
+      expect(await asGuarded(manager, () => Post.countDocuments({}))).toBe(3)
     })
 
-    test('(e) no grant: plan is none — empty results without matching any doc', async () => {
+    test('(e) no grant: the stored plan is none — empty results without matching any doc', async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(nobody)).toEqual([])
-      expect(await asSubject(nobody, () => Post.countDocuments({}))).toBe(0)
-      expect(await asSubject(nobody, () => Post.findOne({}).lean())).toBeNull()
+      expect(await asGuarded(nobody, () => Post.countDocuments({}))).toBe(0)
+      expect(await asGuarded(nobody, () => Post.findOne({}).lean())).toBeNull()
+    })
+
+    test('(e) a subject WITHOUT a guard reads unfiltered — no static fallback exists', async () => {
+      await seedBothAuthors()
+
+      const found = await asSubject(cashier, () => Post.find({}).lean())
+      expect(found.map(doc => doc.title).sort()).toEqual(['cashier-1', 'cashier-2', 'manager-1'])
+      expect(await asSubject(cashier, () => Post.countDocuments({}))).toBe(3)
     })
 
     test('(e) no ALS context: find is unfiltered', async () => {
@@ -221,13 +238,25 @@ if (!available) {
     test('(e) scope filter halves run suppressed: their model queries see the unfiltered collection', async () => {
       await seedBothAuthors()
 
-      // peek's filter queries Post itself; without isInAuthz suppression that
-      // inner find would re-enter filterForResource and recurse.
       expect(await titlesFor(peeker)).toEqual(['cashier-1', 'cashier-2', 'manager-1'])
       expect(observedInAuthz).toEqual([true])
       await asSubject(peeker, async () => {
         await Post.find({}).lean()
         expect(engine.store.isInAuthz()).toBe(false)
+      })
+    })
+
+    test("(e) a filter half building while another guard's filter is active still sees every doc", async () => {
+      await seedBothAuthors()
+
+      // peek's filter half queries Post itself; without isInAuthz suppression
+      // it would be filtered by the cashier's active 'owned' plan (2 docs) —
+      // or re-enter the plugin's read hook and recurse.
+      await asGuarded(cashier, async () => {
+        const plan = await engine.filterFor(peeker, 'admin.posts.read', postResource)
+        if (plan.kind !== 'where') throw new Error(`expected where, got ${plan.kind}`)
+        const fragment = plan.where as { _id: { $in: unknown[] } }
+        expect(fragment._id.$in).toHaveLength(3)
       })
     })
 

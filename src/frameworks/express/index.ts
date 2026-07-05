@@ -96,6 +96,7 @@ function createDomain<P extends string>(
     requirePolicy(policy: string, guardOptions?: GuardOptions<Request>): RequestHandler {
       const qualified = qualifyPolicyName(name, policy)
       const resource = guardOptions?.resource
+      const filterTarget = rbac.resourceForPolicy.get(policy)
       return guard(async req => {
         const subject = await resolveSubject(req)
         await rbac.engine.authorize(
@@ -103,6 +104,7 @@ function createDomain<P extends string>(
           qualified,
           resource ? { resource: () => resource(req) } : undefined,
         )
+        if (filterTarget) await rbac.engine.storeFilterFor(subject, qualified, filterTarget)
       })
     },
 
@@ -137,9 +139,7 @@ function createDomain<P extends string>(
 }
 
 function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
-  const resource = rbac.resources.find(candidate =>
-    candidate.policies.some(candidatePolicy => candidatePolicy.name === policy),
-  )
+  const resource = rbac.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
       `[rbac] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,

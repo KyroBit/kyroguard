@@ -214,37 +214,80 @@ describe('filterFor() decision procedure', () => {
   })
 })
 
-describe('filterForResource() — the wrapper entry', () => {
-  test('resource without list → all, no policy consulted (works even for a null subject)', async () => {
-    const { engine } = makeEngine()
-    expect(await engine.filterForResource(subject, saleResource)).toEqual({ kind: 'all' })
-    expect(await engine.filterForResource(null, saleResource)).toEqual({ kind: 'all' })
-  })
-
-  test('list declared, unscoped grant → all (policy qualified with the subject domain)', async () => {
+describe('storeFilterFor() — the guard-path entry', () => {
+  test('activates the computed filter under the resource type and returns it', async () => {
     const { adapter, engine } = makeEngine()
     await grant(adapter, 'admin.sales.view')
-    expect(
-      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
-    ).toEqual({ kind: 'all' })
+
+    await engine.runWithRequestContext(async () => {
+      const filter = await engine.storeFilterFor(subject, 'admin.sales.view', saleResource)
+      expect(filter).toEqual({ kind: 'all' })
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'all' })
+    })
   })
 
-  test('list declared, no grant → none/no-policy', async () => {
-    const { engine } = makeEngine()
-    expect(
-      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
-    ).toEqual({ kind: 'none', reason: 'no-policy' })
-  })
-
-  test('list declared, fragment scope → where', async () => {
+  test('the stored plan follows the policy the request exercises — same table, per request', async () => {
     const scopes = new Map([
       ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
     ])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, 'admin.sales.view', 'mine')
-    expect(
-      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
-    ).toEqual({ kind: 'where', where: 'mine-rows' })
+    const adapter = multiGrantAdapter([
+      { name: 'admin.sales.view', scope: null },
+      { name: 'admin.sales.void', scope: 'mine' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+
+    await engine.runWithRequestContext(async () => {
+      await engine.storeFilterFor(subject, 'admin.sales.view', saleResource)
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'all' })
+    })
+    await engine.runWithRequestContext(async () => {
+      await engine.storeFilterFor(subject, 'admin.sales.void', saleResource)
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'where', where: 'mine-rows' })
+    })
+  })
+
+  test('a later guard in the same request replaces the stored plan for the type', async () => {
+    const scopes = new Map([
+      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
+    ])
+    const adapter = multiGrantAdapter([
+      { name: 'admin.sales.view', scope: null },
+      { name: 'admin.sales.void', scope: 'mine' },
+    ])
+    const { engine } = makeEngine({ scopes, adapter })
+
+    await engine.runWithRequestContext(async () => {
+      await engine.storeFilterFor(subject, 'admin.sales.view', saleResource)
+      await engine.storeFilterFor(subject, 'admin.sales.void', saleResource)
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'where', where: 'mine-rows' })
+    })
+  })
+
+  test('no grant stores none/no-policy — the wrapper fails closed, never open', async () => {
+    const { engine } = makeEngine()
+    await engine.runWithRequestContext(async () => {
+      await engine.storeFilterFor(subject, 'admin.sales.view', saleResource)
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'none', reason: 'no-policy' })
+    })
+  })
+
+  test('outside a request context it still computes and returns, storing nowhere', async () => {
+    const { adapter, engine } = makeEngine()
+    await grant(adapter, 'admin.sales.view')
+    expect(await engine.storeFilterFor(subject, 'admin.sales.view', saleResource)).toEqual({
+      kind: 'all',
+    })
+    expect(engine.store.getActiveFilter('sale')).toBeUndefined()
+  })
+
+  test('no subject → UnauthenticatedError, nothing stored', async () => {
+    const { engine } = makeEngine()
+    await engine.runWithRequestContext(async () => {
+      await expect(
+        engine.storeFilterFor(null, 'admin.sales.view', saleResource),
+      ).rejects.toBeInstanceOf(UnauthenticatedError)
+      expect(engine.store.getActiveFilter('sale')).toBeUndefined()
+    })
   })
 
   test('a domainless subject resolves the unqualified policy name', async () => {
@@ -254,16 +297,10 @@ describe('filterForResource() — the wrapper entry', () => {
       { name: 'sales.view', domain: '', label: 'View', scopeOptions: [], dependsOn: [] },
     ])
     await adapter.assignPolicy(bareRef, 'sales.view', null)
-    expect(
-      await engine.filterForResource({ id: 'u2' }, { ...saleResource, list: 'sales.view' }),
-    ).toEqual({ kind: 'all' })
-  })
-
-  test('list declared and no subject → UnauthenticatedError', async () => {
-    const { engine } = makeEngine()
-    expect(
-      engine.filterForResource(null, { ...saleResource, list: 'sales.view' }),
-    ).rejects.toBeInstanceOf(UnauthenticatedError)
+    await engine.runWithRequestContext(async () => {
+      await engine.storeFilterFor({ id: 'u2' }, 'sales.view', saleResource)
+      expect(engine.store.getActiveFilter('sale')).toEqual({ kind: 'all' })
+    })
   })
 })
 

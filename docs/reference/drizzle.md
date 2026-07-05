@@ -55,12 +55,12 @@ import { trackedDb } from '@kyrobit/rbac/drizzle'
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
 
-Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user; selects on resources that declare `list` come back filtered by the user's grant. `db.untracked` is the raw handle.
+Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user; selects on registered tables come back filtered by the grant of the route's guard. `db.untracked` is the raw handle.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `rbac` | `Rbac` | required | Your `createRbac` instance. |
-| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked; only those also declaring `list` are filtered. Other tables pass through. |
+| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked and filtered. Other tables pass through. |
 | `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 
 ```ts
@@ -85,9 +85,9 @@ An insert without ids in `values()` and without `.returning()` cannot be attribu
 
 ### How selects are filtered
 
-A resource that declares `list` opts its table into [automatic filtering](/guide/scopes#automatic-filtering). `db.select()` and `db.selectDistinct()` with `.from()` on that table resolve the user's decision through [`filterForResource`](/reference/core-api#filterforresource) and apply it: `all` leaves the query untouched, `none` compiles to an impossible `WHERE`, `where` is `AND`ed with your own `.where()`.
+[Automatic filtering](/guide/scopes#automatic-filtering) is guard-driven: when the route's `requirePolicy` allows, it activates the exercised policy's decision for that policy's resource ([`storeFilterFor`](/reference/core-api#storefilterfor)). `db.select()` and `db.selectDistinct()` with `.from()` on a registered table apply the active decision: `all` leaves the query untouched, `none` compiles to an impossible `WHERE`, `where` is `AND`ed with your own `.where()`.
 
-Selects run unfiltered with no request subject (seeders, jobs), through `db.untracked`, and while the engine itself is deciding — scope checks, filter halves and resource resolvers see the whole table. Updates, deletes and raw SQL are never intercepted.
+Selects run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — through `db.untracked`, and while the engine itself is deciding: scope checks, filter halves and resource resolvers see the whole table. Updates, deletes and raw SQL are never intercepted.
 
 ## Schema subpaths
 

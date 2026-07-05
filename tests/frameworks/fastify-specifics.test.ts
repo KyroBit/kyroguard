@@ -282,8 +282,11 @@ describe('fastify integration specifics', () => {
         const res = await app.inject({ method: 'GET', url: '/both' })
         expect(res.statusCode).toBe(200)
 
-        expect(events).toHaveLength(2)
-        const [first, second] = events
+        // Each guard emits its 'guard' decision plus a 'list' decision for
+        // the filter it stores — the memoization proof rides the guard ones.
+        const guardEvents = events.filter(event => event.mode === 'guard')
+        expect(guardEvents).toHaveLength(2)
+        const [first, second] = guardEvents
         expect(first!.decision).toBe('allow')
         expect(first!.subjectId).toBe('ua')
         expect(first!.domain).toBe('a')

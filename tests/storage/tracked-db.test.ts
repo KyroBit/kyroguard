@@ -4,8 +4,9 @@
  * (bun:sqlite) semantics: ownership auto-tracking on insert (values-ids and
  * .returning() paths), transactional atomicity, the v0 "ownership failure
  * hangs the caller" regression, strictTracking modes, db.untracked bypass,
- * and grant-driven automatic read filtering on select (filterForResource:
- * all / none / where trichotomy, inAuthz suppression).
+ * and guard-driven automatic read filtering on select (the request's
+ * activeFilters plan: all / none / where trichotomy, per-policy keying,
+ * inAuthz suppression).
  */
 
 import { afterAll, describe, expect, spyOn, test } from 'bun:test'
@@ -320,11 +321,28 @@ describe('trackedDb — ownership tracking on insert', () => {
   })
 })
 
-// ── (h) automatic read filtering on select ────────────────────────────────────
+// ── (h) guard-driven automatic read filtering on select ──────────────────────
 
 const cashier: Subject = { id: 'cashier' }
 const manager: Subject = { id: 'manager' }
-const outsider: Subject = { id: 'outsider' }
+
+/** The framework guard's flow: enter context, resolve subject, authorize, store the plan. */
+const runGuarded = <T>(
+  engine: RbacEngine,
+  subject: Subject,
+  policy: string,
+  resource: ResourceDefinition,
+  fn: () => Promise<T>,
+  target?: { type: string; id: string },
+): Promise<T> =>
+  engine.store.run(async () => {
+    engine.store.setSubject(subject)
+    await engine.authorize(subject, policy, target ? { resource: () => target } : undefined)
+    await engine.storeFilterFor(subject, policy, resource)
+    // `return await`, not `return`: under Bun, resolving the context callback
+    // WITH a bare thenable subscribes to it outside the ALS frame.
+    return await fn()
+  })
 
 async function makeFilterSetup() {
   const pg = await makePgDb(USER_DDL)
@@ -338,28 +356,30 @@ async function makeFilterSetup() {
     rowsSeenDuringCheck = seen.length
     return true
   })
+  // Guard passes (check true), list folds closed (filter false) — the none arm.
+  const windowScope = new Scope('in-window', 'In window', () => true, () => false)
 
-  const resources: ResourceDefinition[] = [
-    {
-      type: 'sale',
-      policies: [
-        new Policy('sales.view', { scopeOptions: [Scope.owned()] }),
-        new Policy('sales.audit', { scopeOptions: [auditScope] }),
-      ],
-      table: sales,
-      list: 'sales.view',
-    },
-    // Registered for tracking but no `list` — auto mode off.
-    { type: 'post', policies: [], table: posts },
-  ]
+  const saleResource: ResourceDefinition = {
+    type: 'sale',
+    policies: [
+      new Policy('sales.view', { scopeOptions: [Scope.owned()] }),
+      new Policy('sales.void', { scopeOptions: [Scope.owned()] }),
+      new Policy('sales.audit', { scopeOptions: [auditScope] }),
+      new Policy('sales.flag', { scopeOptions: [windowScope] }),
+    ],
+    table: sales,
+  }
+  const resources: ResourceDefinition[] = [saleResource, { type: 'post', policies: [], table: posts }]
   const rbac = createRbac({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(pg.db, { rbac: { engine: rbac.engine, adapter }, resources })
 
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view', 'owned')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.void', 'owned')
   await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.audit', 'audit-window')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.flag', 'in-window')
   await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
 
   await pg.db.insert(sales).values([
@@ -371,70 +391,140 @@ async function makeFilterSetup() {
   await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
   await rbac.ownership.record('u9', { type: 'sale', id: 's3' })
 
-  return { pg, engine: rbac.engine, db, rowsSeenDuringCheck: () => rowsSeenDuringCheck }
+  return { pg, engine: rbac.engine, db, saleResource, rowsSeenDuringCheck: () => rowsSeenDuringCheck }
 }
 
-describe('trackedDb — automatic read filtering on select (pg)', () => {
-  test("h: an 'owned'-scoped grant filters plain db.select() to the subject's rows", async () => {
-    const { engine, db } = await makeFilterSetup()
+const s1 = { type: 'sale', id: 's1' }
 
-    const rows = await runAs(engine, cashier, () => db.select().from(sales))
+describe('trackedDb — guard-driven read filtering on select (pg)', () => {
+  test("h: a route guarded by the 'owned'-scoped void grant filters plain db.select() to the subject's rows", async () => {
+    const { engine, db, saleResource } = await makeFilterSetup()
+
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(sales),
+      s1,
+    )
     expect(rows.map(row => row.id).sort()).toEqual(['s1', 's2'])
   })
 
-  test('h: a user .where() is ANDed with the grant filter', async () => {
-    const { engine, db } = await makeFilterSetup()
+  test('h: the SAME subject on a route guarded by the null view grant reads every row — the filter follows the exercised policy', async () => {
+    const { engine, db, saleResource } = await makeFilterSetup()
 
-    const open = await runAs(engine, cashier, () =>
-      db.select().from(sales).where(eq(sales.status, 'open')),
+    const viewRows = await runGuarded(engine, cashier, 'sales.view', saleResource, () =>
+      db.select().from(sales),
+    )
+    expect(viewRows).toHaveLength(3)
+
+    const voidRows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(sales),
+      s1,
+    )
+    expect(voidRows.map(row => row.id).sort()).toEqual(['s1', 's2'])
+  })
+
+  test('h: a user .where() is ANDed with the guard filter', async () => {
+    const { engine, db, saleResource } = await makeFilterSetup()
+
+    const open = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(sales).where(eq(sales.status, 'open')),
+      s1,
     )
     expect(open.map(row => row.id)).toEqual(['s1'])
 
     // s3 matches the user filter but not the grant — the filter must win.
-    const foreign = await runAs(engine, cashier, () =>
-      db.select().from(sales).where(eq(sales.id, 's3')),
+    const foreign = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(sales).where(eq(sales.id, 's3')),
+      s1,
     )
     expect(foreign).toEqual([])
   })
 
   test('h: chained builder methods after from() keep the filter', async () => {
-    const { engine, db } = await makeFilterSetup()
+    const { engine, db, saleResource } = await makeFilterSetup()
 
-    const rows = await runAs(engine, cashier, () =>
-      db.select().from(sales).orderBy(asc(sales.id)).limit(10),
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(sales).orderBy(asc(sales.id)).limit(10),
+      s1,
     )
     expect(rows.map(row => row.id)).toEqual(['s1', 's2'])
   })
 
-  test('h: an unscoped grant sees every row (all — query untouched)', async () => {
-    const { engine, db } = await makeFilterSetup()
+  test('h: an unscoped grant stores all — the query runs untouched', async () => {
+    const { engine, db, saleResource } = await makeFilterSetup()
 
-    const rows = await runAs(engine, manager, () => db.select().from(sales))
+    const rows = await runGuarded(engine, manager, 'sales.view', saleResource, () =>
+      db.select().from(sales),
+    )
     expect(rows).toHaveLength(3)
   })
 
-  test('h: no grant yields an empty list, not an error (none)', async () => {
-    const { engine, db } = await makeFilterSetup()
+  test('h: a guard-allowed grant whose filter folds closed yields an empty list, not an error (none)', async () => {
+    const { engine, db, saleResource } = await makeFilterSetup()
 
-    const rows = await runAs(engine, outsider, () => db.select().from(sales))
+    const rows = await runGuarded(engine, cashier, 'sales.flag', saleResource, () =>
+      db.select().from(sales),
+    )
     expect(rows).toEqual([])
   })
 
-  test('h: a scope check querying the table during authorize sees it UNFILTERED (inAuthz suppression)', async () => {
-    const { engine, db, rowsSeenDuringCheck } = await makeFilterSetup()
+  test('h: a subject WITHOUT a guard reads unfiltered — no static fallback exists', async () => {
+    const { engine, db } = await makeFilterSetup()
 
-    await runAs(engine, cashier, () => engine.authorize(cashier, 'sales.audit'))
-    expect(rowsSeenDuringCheck()).toBe(3)
+    const rows = await runAs(engine, cashier, () => db.select().from(sales))
+    expect(rows).toHaveLength(3)
+  })
 
-    // The suppression does not leak past authorize.
-    const after = await runAs(engine, cashier, () => db.select().from(sales))
-    expect(after.map(row => row.id).sort()).toEqual(['s1', 's2'])
+  test('h: a scope check querying the table during authorize sees it UNFILTERED while the guard filter is active (inAuthz suppression)', async () => {
+    const { engine, db, saleResource, rowsSeenDuringCheck } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      async () => {
+        await engine.authorize(cashier, 'sales.audit')
+        expect(rowsSeenDuringCheck()).toBe(3)
+
+        // The suppression does not leak past authorize.
+        const after = await db.select().from(sales)
+        expect(after.map(row => row.id).sort()).toEqual(['s1', 's2'])
+      },
+      s1,
+    )
   })
 
   test('h: db.untracked selects are never filtered', async () => {
-    const { engine, db } = await makeFilterSetup()
+    const { engine, db, saleResource } = await makeFilterSetup()
 
-    const rows = await runAs(engine, cashier, () => db.untracked.select().from(sales))
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.untracked.select().from(sales),
+      s1,
+    )
     expect(rows).toHaveLength(3)
   })
 
@@ -444,21 +534,35 @@ describe('trackedDb — automatic read filtering on select (pg)', () => {
     expect(await db.select().from(sales)).toHaveLength(3)
   })
 
-  test('h: a registered resource WITHOUT `list` is never filtered', async () => {
-    const { pg, engine, db } = await makeFilterSetup()
+  test('h: the guard filter keys on its own resource type — other registered tables stay unfiltered', async () => {
+    const { pg, engine, db, saleResource } = await makeFilterSetup()
     await pg.db.insert(posts).values({ id: 'p1', title: 'P1' })
 
-    const rows = await runAs(engine, cashier, () => db.select().from(posts))
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(posts),
+      s1,
+    )
     expect(rows).toHaveLength(1)
   })
 
   test('h: selects on unregistered tables are never filtered', async () => {
-    const { pg, engine, db } = await makeFilterSetup()
+    const { pg, engine, db, saleResource } = await makeFilterSetup()
     const strangers = pgTable('strangers', { id: text('id').primaryKey() })
     await pg.client.exec('CREATE TABLE "strangers" ("id" text PRIMARY KEY)')
     await pg.db.insert(strangers).values({ id: 'x1' })
 
-    const rows = await runAs(engine, cashier, () => db.select().from(strangers))
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(strangers),
+      s1,
+    )
     expect(rows).toHaveLength(1)
   })
 })
@@ -479,21 +583,23 @@ async function makeSqliteFilterSetup() {
   cleanups.push(async () => sqlite.close())
 
   const adapter = drizzleAdapter(raw, { schema: sqliteSchema })
-  const resources: ResourceDefinition[] = [
-    {
-      type: 'sale',
-      policies: [new Policy('sales.view', { scopeOptions: [Scope.owned()] })],
-      table: salesLite,
-      list: 'sales.view',
-    },
-  ]
+  const saleResource: ResourceDefinition = {
+    type: 'sale',
+    policies: [
+      new Policy('sales.view', { scopeOptions: [Scope.owned()] }),
+      new Policy('sales.void', { scopeOptions: [Scope.owned()] }),
+    ],
+    table: salesLite,
+  }
+  const resources: ResourceDefinition[] = [saleResource]
   const rbac = createRbac({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(raw, { rbac: { engine: rbac.engine, adapter }, resources })
 
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view', 'owned')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.void', 'owned')
   await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
 
   await raw.insert(salesLite).values([
@@ -505,44 +611,65 @@ async function makeSqliteFilterSetup() {
   await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
   await rbac.ownership.record('u9', { type: 'sale', id: 's3' })
 
-  return { engine: rbac.engine, db }
+  return { engine: rbac.engine, db, saleResource }
 }
 
-describe('trackedDb — automatic read filtering on select (sqlite)', () => {
-  test("i: an 'owned'-scoped grant filters plain db.select() to the subject's rows", async () => {
-    const { engine, db } = await makeSqliteFilterSetup()
+describe('trackedDb — guard-driven read filtering on select (sqlite)', () => {
+  test("i: a route guarded by the 'owned'-scoped void grant filters plain db.select() to the subject's rows", async () => {
+    const { engine, db, saleResource } = await makeSqliteFilterSetup()
 
-    const rows = await runAs(engine, cashier, () => db.select().from(salesLite))
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(salesLite),
+      s1,
+    )
     expect(rows.map(row => row.id).sort()).toEqual(['s1', 's2'])
   })
 
-  test('i: a user .where() is ANDed with the grant filter, including through .all()', async () => {
-    const { engine, db } = await makeSqliteFilterSetup()
+  test('i: a user .where() is ANDed with the guard filter, including through .all()', async () => {
+    const { engine, db, saleResource } = await makeSqliteFilterSetup()
 
-    const open = await runAs(engine, cashier, async () =>
-      db.select().from(salesLite).where(eq(salesLite.status, 'open')).all(),
+    const open = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      async () => db.select().from(salesLite).where(eq(salesLite.status, 'open')).all(),
+      s1,
     )
     expect(open.map(row => row.id)).toEqual(['s1'])
   })
 
-  test('i: an unscoped grant sees every row', async () => {
-    const { engine, db } = await makeSqliteFilterSetup()
+  test('i: the same subject guarded by the null view grant sees every row', async () => {
+    const { engine, db, saleResource } = await makeSqliteFilterSetup()
 
-    const rows = await runAs(engine, manager, () => db.select().from(salesLite))
+    const rows = await runGuarded(engine, cashier, 'sales.view', saleResource, () =>
+      db.select().from(salesLite),
+    )
     expect(rows).toHaveLength(3)
   })
 
-  test('i: no grant yields an empty list, not an error', async () => {
+  test('i: a subject without a guard reads unfiltered', async () => {
     const { engine, db } = await makeSqliteFilterSetup()
 
-    const rows = await runAs(engine, outsider, () => db.select().from(salesLite))
-    expect(rows).toEqual([])
+    const rows = await runAs(engine, cashier, () => db.select().from(salesLite))
+    expect(rows).toHaveLength(3)
   })
 
   test('i: db.untracked selects are never filtered', async () => {
-    const { engine, db } = await makeSqliteFilterSetup()
+    const { engine, db, saleResource } = await makeSqliteFilterSetup()
 
-    const rows = await runAs(engine, cashier, () => db.untracked.select().from(salesLite))
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.untracked.select().from(salesLite),
+      s1,
+    )
     expect(rows).toHaveLength(3)
   })
 })

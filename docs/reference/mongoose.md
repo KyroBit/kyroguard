@@ -76,13 +76,12 @@ import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void
 ```
 
-Schema plugin for your own models. It records ownership on save, and filters reads when its resource declares `list`. Apply it before compiling the model.
+Schema plugin for your own models. It records ownership on save, and filters reads by the grant of the route's guard. Apply it before compiling the model.
 
 | Option | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | Your `createRbac` instance. |
 | `type` | `string` | Resource type in the ownership store, for example `'sale'`. |
-| `resource` | `ResourceDefinition` | The registered definition for this type. Required for read filtering: with `list` declared on it, `find` queries come back scoped. |
 
 ```ts
 import { Schema, model } from 'mongoose'
@@ -100,9 +99,9 @@ export const Sale = model('Sale', saleSchema)
 
 - `save` and `insertMany` record ownership for the current user. No user means no ownership row and no error.
 - Document `deleteOne` and `findOneAndDelete` remove the document's ownership rows.
-- With `resource` declaring `list`, `find`-family queries and `countDocuments` gain [automatic filtering](/guide/scopes#automatic-filtering) through [`filterForResource`](/reference/core-api#filterforresource): `all` runs untouched, `none` matches nothing (`{ _id: { $in: [] } }`), `where` is `$and`ed with your filter.
+- `find`-family queries and `countDocuments` gain [automatic filtering](/guide/scopes#automatic-filtering) when the route's guard activated a decision for `type` ([`storeFilterFor`](/reference/core-api#storefilterfor)): `all` runs untouched, `none` matches nothing (`{ _id: { $in: [] } }`), `where` is `$and`ed with your filter.
 
-Reads run unfiltered with no request subject and while the engine itself is deciding (scope checks and filter halves). `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
+Reads run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
 
 ::: warning
 `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `rbac.ownership.record()` and `rbac.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).

@@ -23,6 +23,7 @@ const makeResources = (): ResourceDefinition[] => [
         Scope.owned(),
         new Scope('closed-hours', 'Always closed', () => false),
       ]),
+      new Policy('sales.void', undefined, [], [Scope.owned()]),
     ],
   },
 ]
@@ -31,18 +32,21 @@ const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
 async function seed(rbac: Rbac): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
-  const grant = (subjectId: string, scope: string | null): Promise<void> =>
+  const grant = (subjectId: string, scope: string | null, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
       { subjectId, domain: 'staff' },
-      qualifyPolicyName('staff', 'sales.view'),
+      qualifyPolicyName('staff', policy),
       scope,
     )
   await grant('cashier', 'owned')
   await grant('manager', null)
   await grant('nightowl', 'closed-hours')
+  await grant('supervisor', null)
+  await grant('supervisor', 'owned', 'sales.void')
   await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
   await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
   await rbac.ownership.record('someone-else', { type: 'sale', id: 's3' })
+  await rbac.ownership.record('supervisor', { type: 'sale', id: 's1' })
 }
 
 function render(filter: FilterResult): unknown {
@@ -78,6 +82,23 @@ async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
       staff.filterFor!(req, 'sales.missing').then(filter => {
         res.json(render(filter))
       }, next)
+    })
+    const renderActive = (): unknown => {
+      const filter = rbac.engine.store.getActiveFilter('sale')
+      return filter ? render(filter) : { kind: 'unset' }
+    }
+    app.get('/guarded-view', staff.requirePolicy('sales.view'), (_req, res) => {
+      res.json(renderActive())
+    })
+    app.get(
+      '/guarded-void',
+      staff.requirePolicy('sales.void', { resource: () => ({ type: 'sale', id: 's1' }) }),
+      (_req, res) => {
+        res.json(renderActive())
+      },
+    )
+    app.get('/hooked', staff.subjectHook(), (_req, res) => {
+      res.json(renderActive())
     })
     app.use(integration.errorHandler())
 
@@ -144,5 +165,23 @@ describe('express domain.filterFor', () => {
       const res = await h.get('/orphan', 'cashier')
       expect(res.status).toBe(500)
       expect(res.body.code).toBe('RBAC_MISCONFIGURED')
+    }))
+
+  test("requirePolicy stores the exercised policy's plan — same subject, same table, per-route filters", () =>
+    withApp(async h => {
+      const view = await h.get('/guarded-view', 'supervisor')
+      expect(view.status).toBe(200)
+      expect(view.body).toEqual({ kind: 'all' })
+
+      const voided = await h.get('/guarded-void', 'supervisor')
+      expect(voided.status).toBe(200)
+      expect(voided.body).toEqual({ kind: 'where', ids: ['s1'] })
+    }))
+
+  test('subjectHook stores NO filter — only guards activate one', () =>
+    withApp(async h => {
+      const res = await h.get('/hooked', 'supervisor')
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ kind: 'unset' })
     }))
 })

@@ -7,7 +7,7 @@ import {
 } from './errors.js'
 import { policyCacheKey } from '../cache/key.js'
 import { SubjectStore } from './subject-store.js'
-import { normalizeSentinel, qualifyPolicyName, toSubjectRef } from './types.js'
+import { qualifyPolicyName, toSubjectRef } from './types.js'
 import type {
   Awaitable,
   DecisionEvent,
@@ -276,14 +276,21 @@ export class RbacEngine {
     return { kind: 'where', where: support.or(fragments) }
   }
 
-  /** Wrapper entry for automatic read filtering: resources without `list` opt out with 'all'. */
-  async filterForResource(
+  /**
+   * Guard-path entry: computes the exercised policy's filter and activates it
+   * for the current request under the resource type. Storage wrappers key
+   * automatic read filtering EXCLUSIVELY on this per-request state — never on
+   * static resource config — so the filter always follows the policy the
+   * request is exercising.
+   */
+  async storeFilterFor(
     subject: Subject | null | undefined,
+    policy: QualifiedPolicyName,
     resource: ResourceDefinition,
   ): Promise<FilterResult> {
-    if (!resource.list) return { kind: 'all' }
-    const policy = qualifyPolicyName(normalizeSentinel(subject?.domain), resource.list)
-    return this.filterFor(subject, policy, resource)
+    const filter = await this.filterFor(subject, policy, resource)
+    this.store.setActiveFilter(resource.type, filter)
+    return filter
   }
 
   // ── Mutations (invalidate + publish, always) ────────────────────────────────

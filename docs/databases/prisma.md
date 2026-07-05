@@ -107,13 +107,9 @@ await rbac.ownership.remove({ type: 'sale', id: sale.id })
 
 ## Filtering lists
 
-Declare `list` on the resource in `createRbac` and the extension filters reads for you — `findMany`, `findFirst`, `findUnique` and `count` on the registered model come back scoped to each user's grant ([Automatic filtering](/guide/scopes#automatic-filtering)):
+Reads follow the route's guard. Behind `requirePolicy('sales.view')`, the extension filters `findMany`, `findFirst`, `findUnique` and `count` on the registered model by that policy's grant — a cashier's `db.sale.findMany()` returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)). Unguarded reads are not auto-filtered.
 
-```ts
-resources: [{ type: 'sale', list: 'sales.view', policies: [/* ... */] }]
-```
-
-For raw SQL, aggregations, or a query the extension does not see, ask the grant yourself with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
+For raw SQL, aggregations, an unguarded read, or a query the extension does not see, ask the grant yourself with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
 
 ```ts
 const f = await staff.filterFor(req, 'sales.view')

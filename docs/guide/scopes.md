@@ -121,26 +121,53 @@ A guard answers "may this user touch **this** row." A list endpoint asks the sam
 
 ### Automatic filtering
 
-Name the policy that governs reads, on the resource:
+A guard that allows also answers *which rows*. When `requirePolicy` passes, it computes the filter for the policy it just exercised and activates it for the rest of the request. The ORM integrations apply that filter to every read of the policy's resource:
 
-```ts
-{ type: 'sale', table: sales, list: 'sales.view', policies: [/* ... */] }
+::: code-group
+
+```ts [Fastify]
+app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => {
+  return db.select().from(sales).orderBy(desc(sales.createdAt)).limit(20)
+})
 ```
 
-Plain queries now come back scoped to the logged-in user:
-
-```ts
-const rows = await db.select().from(sales).orderBy(desc(sales.createdAt)).limit(20)
-// cashier: twenty of their own sales · manager: twenty of anyone's · no grant: empty
+```ts [Express]
+app.get('/sales', staff.requirePolicy('sales.view'), async (req, res) => {
+  res.json(await db.select().from(sales).orderBy(desc(sales.createdAt)).limit(20))
+})
 ```
 
-The ORM integrations do the asking for you: `trackedDb` filters Drizzle selects, the Prisma extension filters `findMany`, `findFirst`, `findUnique` and `count`, the Mongoose plugin filters `find` queries. Every read of a `list` resource gets the user's `sales.view` decision `AND`ed in — your own `where` still applies on top. A list route that forgets to filter can no longer leak rows.
+:::
 
-Two doors stay open on purpose. Reads through `db.untracked` — or any handle the integration does not wrap — are never filtered. And queries the engine itself runs while deciding — scope checks, filter halves, resource resolvers — always see the unfiltered table. Reads with no logged-in user (seeders, jobs) also run plainly, like [ownership tracking](/guide/ownership#background-jobs).
+The cashier's grant is `'sales.view': 'owned'`: twenty of their own sales — and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's. The manager's grant is `'sales.view': null`: twenty of anyone's. No grant never reaches the query — the guard already answered 403.
+
+The filter follows the guard's policy, not the table. Put the same table behind a different guard and the reads change with it:
+
+::: code-group
+
+```ts [Fastify]
+app.get('/sales/voidable', { preHandler: staff.requirePolicy('sales.void') }, async () => {
+  return db.select().from(sales).where(eq(sales.status, 'open'))
+})
+```
+
+```ts [Express]
+app.get('/sales/voidable', staff.requirePolicy('sales.void'), async (req, res) => {
+  res.json(await db.select().from(sales).where(eq(sales.status, 'open')))
+})
+```
+
+:::
+
+A manager voids any sale, so their voidable list is every open sale. The cashier's `'sales.void': 'owned'` reads the same table through the *void* grant — their own open sales, whatever their view grant sees elsewhere. One table, two routes, each filtered by the policy its own guard checked.
+
+The integrations do the applying: `trackedDb` filters Drizzle selects, the Prisma extension filters `findMany`, `findFirst`, `findUnique` and `count`, the Mongoose plugin filters `find` queries — your own `where` still applies on top. The guard finds the resource through the policy: `sales.void` sits in the `sale` resource's `policies`, so reads of the sale table are what it filters. A policy no registered resource defines activates nothing.
+
+No guard, no filter. A read outside a guarded route — a seeder, a job, a handler without `requirePolicy` — is never auto-filtered; ask with `filterFor` instead (next section). Two more doors stay open on purpose. Reads through `db.untracked` — or any handle the integration does not wrap — run plainly. And queries the engine itself runs while deciding — scope checks, filter halves, resource resolvers — always see the unfiltered table.
 
 ### When you want the filter in hand
 
-Automatic filtering applies the decision for you. `filterFor` hands it to you instead — for raw SQL, aggregations, a resource without `list`, or a query you build yourself:
+Automatic filtering applies the guard's decision for you. `filterFor` hands a decision to you instead — for raw SQL, aggregations, an unguarded route, or a read under a different policy than the guard's:
 
 ::: code-group
 

@@ -1,15 +1,12 @@
 import { normalizeSentinel } from '../../core/types.js'
 import type { FilterQuery, Query, Schema } from 'mongoose'
 import type { RbacEngine } from '../../core/engine.js'
-import type { ResourceDefinition } from '../../core/policy.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
 export interface RbacMongoosePluginOptions {
   rbac: { engine: RbacEngine; adapter: StorageAdapter }
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
-  /** Registered resource definition; when it declares `list`, reads are auto-filtered. */
-  resource?: ResourceDefinition
 }
 
 function documentId(doc: unknown): string | null {
@@ -20,10 +17,10 @@ function documentId(doc: unknown): string | null {
 }
 
 /**
- * Mongoose schema plugin: automatic ownership tracking + plan-driven read
- * filtering (pre find/countDocuments, via engine.filterForResource) when the
- * registered resource declares `list`. updateMany/deleteMany/bulkWrite and
- * raw collection ops fire NO document middleware, so they are neither tracked
+ * Mongoose schema plugin: automatic ownership tracking + read filtering
+ * (pre find/countDocuments) driven by the request's guard-activated filter
+ * (the store's activeFilters plan). updateMany/deleteMany/bulkWrite and raw
+ * collection ops fire NO document middleware, so they are neither tracked
  * nor filtered — see docs/reference/mongoose.md.
  */
 export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void {
@@ -71,29 +68,24 @@ export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOp
     if (doc) await removeOwnershipFor(doc)
   })
 
-  const resource = options.resource
-  if (resource?.list) {
-    const applyReadFilter = async function (this: Query<unknown, unknown>): Promise<void> {
-      const subject = engine.store.getSubject()
-      if (!subject) return
-      // Scope checks/filters and resource resolvers must see the unfiltered
-      // collection — the engine marks those queries via isInAuthz.
-      if (engine.store.isInAuthz()) return
-      const plan = await engine.filterForResource(subject, resource)
-      if (plan.kind === 'all') return
-      if (plan.kind === 'none') {
-        this.where({ _id: { $in: [] } })
-        return
-      }
-      const where = plan.where as FilterQuery<unknown>
-      const current = this.getFilter()
-      this.setQuery(
-        Object.keys(current).length === 0
-          ? where
-          : ({ $and: [current, where] } as FilterQuery<unknown>),
-      )
+  const applyReadFilter = async function (this: Query<unknown, unknown>): Promise<void> {
+    // Scope checks/filters and resource resolvers must see the unfiltered
+    // collection — the engine marks those queries via isInAuthz.
+    if (engine.store.isInAuthz()) return
+    const plan = engine.store.getActiveFilter(options.type)
+    if (!plan || plan.kind === 'all') return
+    if (plan.kind === 'none') {
+      this.where({ _id: { $in: [] } })
+      return
     }
-    schema.pre(/^find/, applyReadFilter)
-    schema.pre('countDocuments', applyReadFilter)
+    const where = plan.where as FilterQuery<unknown>
+    const current = this.getFilter()
+    this.setQuery(
+      Object.keys(current).length === 0
+        ? where
+        : ({ $and: [current, where] } as FilterQuery<unknown>),
+    )
   }
+  schema.pre(/^find/, applyReadFilter)
+  schema.pre('countDocuments', applyReadFilter)
 }

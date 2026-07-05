@@ -51,6 +51,8 @@ export interface Rbac {
   readonly engine: RbacEngine
   readonly adapter: StorageAdapter
   readonly resources: ResourceDefinition[]
+  /** UNQUALIFIED policy name → owning resource; guards resolve the filter target through this. */
+  readonly resourceForPolicy: ReadonlyMap<string, ResourceDefinition>
 
   /** Programmatic `npx rbac sync`. The explicit resources form does not touch groups. */
   sync(): Promise<void>
@@ -109,6 +111,13 @@ export function createRbac(options: CreateRbacOptions): Rbac {
   }
   const scopes = collectScopes(resources)
 
+  const resourceForPolicy = new Map<string, ResourceDefinition>()
+  for (const resource of resources) {
+    for (const policy of resource.policies) {
+      if (!resourceForPolicy.has(policy.name)) resourceForPolicy.set(policy.name, resource)
+    }
+  }
+
   const cache =
     options.cache === false
       ? null
@@ -141,6 +150,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
     engine,
     adapter: options.adapter,
     resources,
+    resourceForPolicy,
 
     sync: async (resourcesOrDomain?: ResourceDefinition[] | string, domain?: string) => {
       const explicit = Array.isArray(resourcesOrDomain)
@@ -235,7 +245,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
 // ── Re-exports (the whole public core surface) ────────────────────────────────
 
 export { Policy } from './core/policy.js'
-export type { ResourceDefinition, PolicyScopeMap } from './core/policy.js'
+export type { ResourceDefinition } from './core/policy.js'
 export { Scope, collectScopes } from './core/scope.js'
 export type {
   ScopeCheckFn,

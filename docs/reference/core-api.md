@@ -54,6 +54,7 @@ The instance returned by `createRbac()`.
 | `engine` | The authorization engine (`RbacEngine`). |
 | `adapter` | The adapter passed to `createRbac()`. |
 | `resources` | The resource definitions, including the `policies` shorthand. |
+| `resourceForPolicy` | Unqualified policy name → the resource that defines it. Guards resolve their filter target through it — see [`storeFilterFor`](#storefilterfor). |
 | `sync()` | Load the `createRbac` policies and seed its groups. Same as [`rbac sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
@@ -117,11 +118,10 @@ interface ResourceDefinition {
   policies: Policy[]
   table?: unknown                  // Drizzle table or Mongoose model — read by trackedDb / the plugin
   fields?: Record<string, unknown> // abstract field name → native column, for resource-generic filters
-  list?: string                    // policy whose grant filters reads — turns on automatic filtering
 }
 ```
 
-`list` is an unqualified policy name, like the names in `requirePolicy` — the request's domain qualifies it. Declaring it turns on [automatic filtering](/guide/scopes#automatic-filtering): the ORM integrations pass every read of this resource through [`filterForResource`](#filterforresource). Absent, reads run unfiltered and lists go through [`filterFor`](#filterfor) by hand.
+The registration ties policies to rows. A guard whose policy appears in `policies` activates [automatic filtering](/guide/scopes#automatic-filtering) for this resource — reads of it apply that guard's grant for the rest of the request. Reads of an unregistered resource, or on a request no guard filtered, run plainly; lists outside a guard go through [`filterFor`](#filterfor) by hand.
 
 ## Scope
 
@@ -181,13 +181,13 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 
 `filterFor` throws `UnauthenticatedError` for a missing subject — nothing else. A grant with several scopes ORs their fragments, and any scope answering `true` short-circuits to `all`. Worked examples in [Scopes](/guide/scopes#filtering-lists).
 
-## filterForResource()
+## storeFilterFor()
 
 ```ts
-rbac.engine.filterForResource(subject, resource: ResourceDefinition): Promise<FilterResult>
+rbac.engine.storeFilterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
 ```
 
-The entry behind [automatic filtering](/guide/scopes#automatic-filtering) — `trackedDb`, the Prisma extension and the Mongoose plugin call it on every read of a registered resource. A resource without `list` answers `{ kind: 'all' }`; one with it qualifies `resource.list` with the subject's domain and delegates to `filterFor`.
+The guard-path entry behind [automatic filtering](/guide/scopes#automatic-filtering). After `requirePolicy` allows, the framework guard calls it with the policy it just checked and that policy's resource (from [`resourceForPolicy`](#rbac)): it runs [`filterFor`](#filterfor) and activates the result for the rest of the request, keyed by `resource.type`. `trackedDb`, the Prisma extension and the Mongoose plugin key their read filtering on that per-request state alone — a resource with no active filter is read unfiltered.
 
 ## GroupDefinition
 
@@ -254,7 +254,7 @@ Classes:
 Types:
 
 - Subjects: `Subject`, `SubjectInput`, `SubjectRef`.
-- Policies: `ResourceDefinition`, `PolicyScopeMap`, `PolicyMap`, `ResourceRef`.
+- Policies: `ResourceDefinition`, `PolicyMap`, `ResourceRef`.
 - Groups: `GroupsDefinition`, `GroupDefinition`, `GroupPoliciesInput`.
 - Names: `RbacTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
 - Storage contract: `StorageAdapter`, `AdapterCapabilities`, `ListFilters`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`, `OwnershipEntry`. See [Custom adapters](/guide/custom-adapters).

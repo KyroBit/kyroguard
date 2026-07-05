@@ -59,8 +59,9 @@ const admin = app.rbac.domain('admin', { getSubject }) // multi-area app
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
-| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. |
-| `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. Register per scope, never app-wide. |
+| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
+| `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
+| `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Register per scope, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one store, like `branch-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
 | `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |

@@ -87,16 +87,7 @@ await rbac.ownership.remove({ type: 'sale', id: saleId })
 ```
 :::
 
-The plugin also filters reads. Hand it the resource definition from `policies.ts`, and when that definition declares `list: 'sales.view'`, `find` queries come back scoped to each user's grant:
-
-```ts
-import { resources } from '../rbac/policies.js'
-
-const saleResource = resources.find(resource => resource.type === 'sale')
-saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale', resource: saleResource })
-```
-
-See [Automatic filtering](/guide/scopes#automatic-filtering) and the [Mongoose reference](/reference/mongoose).
+The plugin also filters reads. On a route guarded by `requirePolicy`, `find` queries on the model come back scoped to that policy's grant — behind `requirePolicy('sales.view')`, a cashier's `Sale.find()` returns only their own sales. Unguarded reads run unfiltered. See [Automatic filtering](/guide/scopes#automatic-filtering) and the [Mongoose reference](/reference/mongoose).
 
 ## Next steps
 

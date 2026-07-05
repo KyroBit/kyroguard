@@ -2,6 +2,8 @@
  * domain.filterFor round-trip on Fastify against memoryAdapter listFilters:
  * the handler applies the returned trichotomy to seeded rows, so every kind
  * ('all' / 'none' / 'where' with a row predicate) is observed end to end.
+ * Also the guard side: requirePolicy stores the exercised policy's plan in
+ * the request's activeFilters after allowing; subjectHook stores nothing.
  */
 
 import { describe, expect, test } from 'bun:test'
@@ -21,6 +23,7 @@ const makeResources = (): ResourceDefinition[] => [
         Scope.owned(),
         new Scope('closed-hours', 'Always closed', () => false),
       ]),
+      new Policy('sales.void', undefined, [], [Scope.owned()]),
     ],
   },
 ]
@@ -29,18 +32,21 @@ const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
 async function seed(rbac: Rbac): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
-  const grant = (subjectId: string, scope: string | null): Promise<void> =>
+  const grant = (subjectId: string, scope: string | null, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
       { subjectId, domain: 'staff' },
-      qualifyPolicyName('staff', 'sales.view'),
+      qualifyPolicyName('staff', policy),
       scope,
     )
   await grant('cashier', 'owned')
   await grant('manager', null)
   await grant('nightowl', 'closed-hours')
+  await grant('supervisor', null)
+  await grant('supervisor', 'owned', 'sales.void')
   await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
   await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
   await rbac.ownership.record('someone-else', { type: 'sale', id: 's3' })
+  await rbac.ownership.record('supervisor', { type: 'sale', id: 's1' })
 }
 
 function render(filter: FilterResult): unknown {
@@ -63,6 +69,23 @@ async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<voi
       },
     })
     app.get('/sales', async req => render(await staff.filterFor!(req, 'sales.view')))
+    const renderActive = (): unknown => {
+      const filter = rbac.engine.store.getActiveFilter('sale')
+      return filter ? render(filter) : { kind: 'unset' }
+    }
+    app.get('/guarded-view', { preHandler: staff.requirePolicy('sales.view') }, async () =>
+      renderActive(),
+    )
+    app.get(
+      '/guarded-void',
+      {
+        preHandler: staff.requirePolicy('sales.void', {
+          resource: () => ({ type: 'sale', id: 's1' }),
+        }),
+      },
+      async () => renderActive(),
+    )
+    app.get('/hooked', { preHandler: staff.subjectHook() }, async () => renderActive())
     await app.ready()
     try {
       await fn(app)
@@ -74,10 +97,10 @@ async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<voi
   }
 }
 
-const list = (app: FastifyInstance, subjectId?: string) =>
+const list = (app: FastifyInstance, subjectId?: string, url = '/sales') =>
   app.inject({
     method: 'GET',
-    url: '/sales',
+    url,
     headers: subjectId ? { 'x-subject-id': subjectId } : {},
   })
 
@@ -115,6 +138,24 @@ describe('fastify domain.filterFor', () => {
       const res = await list(app)
       expect(res.statusCode).toBe(401)
       expect(JSON.parse(res.body).code).toBe('RBAC_UNAUTHENTICATED')
+    }))
+
+  test('requirePolicy stores the exercised policy\'s plan — same subject, same table, per-route filters', () =>
+    withApp(async app => {
+      const view = await list(app, 'supervisor', '/guarded-view')
+      expect(view.statusCode).toBe(200)
+      expect(JSON.parse(view.body)).toEqual({ kind: 'all' })
+
+      const voided = await list(app, 'supervisor', '/guarded-void')
+      expect(voided.statusCode).toBe(200)
+      expect(JSON.parse(voided.body)).toEqual({ kind: 'where', ids: ['s1'] })
+    }))
+
+  test('subjectHook stores NO filter — only guards activate one', () =>
+    withApp(async app => {
+      const res = await list(app, 'supervisor', '/hooked')
+      expect(res.statusCode).toBe(200)
+      expect(JSON.parse(res.body)).toEqual({ kind: 'unset' })
     }))
 
   test('policy on no registered resource → 500 RBAC_MISCONFIGURED', async () => {

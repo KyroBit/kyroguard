@@ -167,38 +167,16 @@ function wrapInsertBuilder(builder: any, t: InsertTracking): any {
 }
 
 interface FilterChain {
-  resolve: () => Promise<SQL | null>
+  scope: SQL
   userWhere: SQL | undefined
 }
 
-function makeFilterChain(engine: RbacEngine, subject: Subject, resource: ResourceDefinition): FilterChain {
-  let memo: Promise<SQL | null> | undefined
-  return {
-    resolve: () =>
-      (memo ??= engine.filterForResource(subject, resource).then(result => {
-        if (result.kind === 'all') return null
-        // 'none' must not run unfiltered — fail closed.
-        if (result.kind === 'none') return sql`false`
-        return result.where as SQL
-      })),
-    userWhere: undefined,
-  }
-}
-
 function wrapFilteredFrom(builder: any, chain: FilterChain): any {
-  const applied = (): Promise<{ target: any }> =>
-    chain.resolve().then(scope => {
-      const where =
-        scope === null
-          ? chain.userWhere
-          : chain.userWhere === undefined
-            ? scope
-            : and(chain.userWhere, scope)
-      return { target: where === undefined ? builder : builder.where(where) }
-    })
+  const applied = () =>
+    builder.where(chain.userWhere === undefined ? chain.scope : and(chain.userWhere, chain.scope))
 
   let memoized: Promise<unknown> | undefined
-  const executeFiltered = () => (memoized ??= applied().then(({ target }) => target))
+  const executeFiltered = () => (memoized ??= Promise.resolve(applied()))
 
   return new Proxy(builder, {
     get(target, prop) {
@@ -217,7 +195,7 @@ function wrapFilteredFrom(builder: any, chain: FilterChain): any {
       if (typeof prop === 'string' && EXEC_METHODS.has(prop)) {
         const fn = target[prop]
         if (typeof fn !== 'function') return fn
-        return (...args: unknown[]) => applied().then(({ target: scoped }) => scoped[prop](...args))
+        return (...args: unknown[]) => applied()[prop](...args)
       }
       const value = target[prop]
       if (typeof value !== 'function') return value
@@ -236,12 +214,14 @@ function wrapSelectBuilder(builder: any, ctx: Ctx): any {
         return (table: unknown, ...rest: unknown[]) => {
           const fromBuilder = target.from(table, ...rest)
           const resource = ctx.tableMap.get(table)
-          if (!resource?.list) return fromBuilder
+          if (!resource) return fromBuilder
           // Scope checks and filter halves must see the unfiltered table.
           if (ctx.engine.store.isInAuthz()) return fromBuilder
-          const subject = ctx.engine.store.getSubject()
-          if (!subject?.id) return fromBuilder
-          return wrapFilteredFrom(fromBuilder, makeFilterChain(ctx.engine, subject, resource))
+          const filter = ctx.engine.store.getActiveFilter(resource.type)
+          if (!filter || filter.kind === 'all') return fromBuilder
+          // 'none' must not run unfiltered — fail closed.
+          const scope = filter.kind === 'none' ? sql`false` : (filter.where as SQL)
+          return wrapFilteredFrom(fromBuilder, { scope, userWhere: undefined })
         }
       }
       const value = target[prop]
@@ -298,9 +278,9 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
 
 /**
  * Wraps a drizzle db: inserts on registered tables record ownership, selects
- * on resources declaring `list` get the request subject's filterForResource
- * decision ANDed in, `db.untracked` is the raw handle. update/delete are not
- * intercepted — see docs/reference/drizzle.md.
+ * on registered tables get the request's guard-activated filter (the store's
+ * activeFilters plan) ANDed in, `db.untracked` is the raw handle. update and
+ * delete are not intercepted — see docs/reference/drizzle.md.
  */
 export function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T } {
   const tableMap = new Map<unknown, ResourceDefinition>()

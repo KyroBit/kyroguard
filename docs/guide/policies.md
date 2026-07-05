@@ -88,8 +88,7 @@ export const resources: ResourceDefinition[] = [
   {
     type: 'sale',
     // table: sales,        // your Drizzle table or Mongoose model (optional):
-    //                      // enables ownership tracking
-    // list: 'sales.view',  // filter reads by this policy's grant (optional)
+    //                      // enables ownership tracking and read filtering
     policies: [
       new Policy('sales.view'),
       new Policy('sales.create', { dependsOn: ['sales.view'] }),
@@ -110,7 +109,7 @@ Export the array as `resources`. Point [`rbac.config.ts`](/reference/configurati
 
 `type` names the resource for scoped checks and ownership. `table` is optional. Set it on `sale` to record who rang up each sale ([Ownership](/guide/ownership)). That record is what lets a cashier void only their own sales.
 
-`list` is optional too. It names the policy — unqualified, like everywhere else — whose grant filters reads of this resource: with `list: 'sales.view'`, a cashier's plain list query returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)).
+Reads need no declaration. A route's guard filters them by the policy it checked: behind `requirePolicy('sales.view')`, a cashier's plain list query returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)).
 
 ## Next steps
 

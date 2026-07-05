@@ -48,10 +48,4 @@ export interface ResourceDefinition {
   table?: unknown
   /** Abstract field name → native column / path / field name, read by resource-generic scope filters. */
   fields?: Record<string, unknown>
-  /** UNQUALIFIED policy name whose grant governs automatic read filtering; absent = auto mode off. */
-  list?: string
-  /** @deprecated Query-scoping config — replaced by filterFor. Removed next major. */
-  domains?: Record<string, PolicyScopeMap>
 }
-
-export type PolicyScopeMap = Record<string, string[]>

@@ -148,7 +148,7 @@ Three more things to know:
 
 - Writes with no logged-in user (seeders, jobs, scripts) record nothing.
 - `db.untracked` is the raw handle when you want a plain insert.
-- Declare `list: 'sales.view'` on the resource and selects on `sales` come back filtered by each user's grant — see [Automatic filtering](/guide/scopes#automatic-filtering) and the [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
+- On a route guarded by `requirePolicy`, selects on `sales` come back filtered by that policy's grant — see [Automatic filtering](/guide/scopes#automatic-filtering) and the [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
 
 ## Next steps
 

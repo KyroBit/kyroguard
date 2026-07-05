@@ -68,7 +68,7 @@ const Sale = mongoose.model('Sale', saleSchema)
 
 `save` and `insertMany` record ownership. Deleting a document through `deleteOne` or `findOneAndDelete` removes its ownership records too.
 
-Tracking is half of what these hooks do. On a resource that declares `list`, the same tracked db, extension and plugin also filter reads by the user's grant — see [Automatic filtering](/guide/scopes#automatic-filtering).
+Tracking is half of what these hooks do. The same tracked db, extension and plugin also filter reads — by the grant of whichever policy guards the route — see [Automatic filtering](/guide/scopes#automatic-filtering).
 
 ::: warning What is not tracked
 Automatic tracking hooks into the ORM. Writes that bypass those hooks record nothing:
