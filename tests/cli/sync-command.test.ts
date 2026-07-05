@@ -164,7 +164,7 @@ describe('rbac sync (full fixture project)', () => {
     const byName = new Map(records.map(record => [record.name, record]))
 
     expect([...byName.keys()].toSorted()).toEqual(['admin.docs.read', 'admin.docs.write'])
-    // PolicyRecord exposes id/name/domain/dependsOn — label is write-only here.
+    // PolicyRecord exposes id/name/domain/scopeOptions/dependsOn — label is write-only here.
     expect(byName.get('admin.docs.read')?.domain).toBe('admin')
     expect(byName.get('admin.docs.write')?.domain).toBe('admin')
     // dependsOn is qualified alongside the names themselves.

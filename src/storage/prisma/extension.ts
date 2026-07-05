@@ -1,5 +1,6 @@
 import { normalizeSentinel } from '../../core/types.js'
 import type { RbacEngine } from '../../core/engine.js'
+import type { ResourceDefinition } from '../../core/policy.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -12,12 +13,18 @@ export interface RbacPrismaResourceRegistration {
 }
 
 export interface RbacPrismaExtensionOptions {
-  rbac: { engine: RbacEngine; adapter: StorageAdapter }
+  rbac: {
+    engine: RbacEngine
+    adapter: StorageAdapter
+    /** Resource definitions — a registration whose definition carries `list` gets read filtering. */
+    resources?: ResourceDefinition[]
+  }
   resources: RbacPrismaResourceRegistration[]
 }
 
 /** The params Prisma passes to a `query` extension hook (structural subset). */
 interface QueryHookParams {
+  model: string
   args: any
   query: (args: any) => Promise<any>
 }
@@ -30,10 +37,35 @@ export interface RbacPrismaExtension {
   query: Record<string, Record<string, QueryHook>>
 }
 
+type ReadOperation = 'findMany' | 'findFirst' | 'findUnique' | 'count'
+
+const READ_OPERATIONS: ReadOperation[] = ['findMany', 'findFirst', 'findUnique', 'count']
+
+// Prisma hands query hooks the schema model name ('BlogPost') while
+// registrations carry the delegate key ('blogPost') — normalize both.
+function delegateKey(model: string): string {
+  return model.charAt(0).toLowerCase() + model.slice(1)
+}
+
+// findUnique's WhereUniqueInput requires the unique selector at the TOP level,
+// so the rbac fragment may only ride AND — never wrap the whole where.
+function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Record<string, unknown> {
+  const existing = where['AND']
+  const conditions =
+    existing === undefined
+      ? [fragment]
+      : Array.isArray(existing)
+        ? [...existing, fragment]
+        : [existing, fragment]
+  return { ...where, AND: conditions }
+}
+
 /**
- * Prisma client extension: automatic ownership tracking for registered models.
- * Interception gaps (raw SQL, nested writes, db-generated createMany ids, …)
- * are documented in docs/reference/prisma.md.
+ * Prisma client extension: automatic ownership tracking for registered models,
+ * plus automatic read filtering (findMany/findFirst/findUnique/count) for
+ * registrations whose resource definition carries `list`. Interception gaps
+ * (raw SQL, nested writes, db-generated createMany ids, …) are documented in
+ * docs/reference/prisma.md.
  */
 export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPrismaExtension {
   const { engine, adapter } = options.rbac
@@ -83,6 +115,45 @@ export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPr
         return result
       },
     }
+  }
+
+  const listed = new Map<string, ResourceDefinition>()
+  for (const registration of options.resources) {
+    const definition = options.rbac.resources?.find(entry => entry.type === registration.type)
+    if (definition?.list !== undefined) listed.set(delegateKey(registration.model), definition)
+  }
+
+  if (listed.size > 0) {
+    const readHook =
+      (operation: ReadOperation): QueryHook =>
+      async ({ model, args, query: run }: QueryHookParams): Promise<any> => {
+        const definition = listed.get(delegateKey(model))
+        if (!definition) return run(args)
+        // Scope checks and filter builders must see the unfiltered table —
+        // the isInAuthz contract (core/engine.ts).
+        if (engine.store.isInAuthz()) return run(args)
+        const subject = engine.store.getSubject()
+        if (!subject) return run(args)
+
+        const filter = await engine.filterForResource(subject, definition)
+        if (filter.kind === 'all') return run(args)
+        if (filter.kind === 'none') {
+          return operation === 'findMany' ? [] : operation === 'count' ? 0 : null
+        }
+
+        const where: unknown = (args as { where?: unknown } | null | undefined)?.where
+        const merged =
+          operation === 'findUnique'
+            ? mergeUniqueWhere((where ?? {}) as Record<string, unknown>, filter.where)
+            : where === undefined
+              ? filter.where
+              : { AND: [where, filter.where] }
+        return run({ ...args, where: merged })
+      }
+
+    query['$allModels'] = Object.fromEntries(
+      READ_OPERATIONS.map(operation => [operation, readHook(operation)]),
+    )
   }
 
   return { name: '@kyrobit/rbac', query }

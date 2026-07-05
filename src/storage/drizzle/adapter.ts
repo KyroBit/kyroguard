@@ -233,6 +233,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
           id: t.policies.id,
           name: t.policies.name,
           domain: t.policies.domain,
+          scopeOptions: t.policies.scopeOptions,
           dependsOn: t.policies.dependsOn,
         })
         .from(t.policies)
@@ -241,6 +242,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
         id: String(r.id),
         name: String(r.name),
         domain: String(r.domain ?? ''),
+        scopeOptions: toStringArray(r.scopeOptions),
         dependsOn: toStringArray(r.dependsOn),
       }))
     },

@@ -75,6 +75,8 @@ new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned
 
 `scopeOptions` lists the conditions this policy may be granted with. A condition can be about the row — `Scope.owned()` lets a cashier void only their own sales — or about anything else: only during opening hours, only under an amount. A grant without a scope has no condition: a manager voids any sale ([Scopes](/guide/scopes)).
 
+The list is also enforced. Granting the policy with a scope it does not declare fails: `seedGroups` rejects the group at sync, and `assignPolicy` throws `UnknownScopeError` ([Errors](/reference/errors#unknownscopeerror)).
+
 ## A complete policies.ts
 
 ```ts
@@ -85,8 +87,9 @@ import type { ResourceDefinition } from '@kyrobit/rbac'
 export const resources: ResourceDefinition[] = [
   {
     type: 'sale',
-    // table: sales,  // your Drizzle table or Mongoose model (optional):
-    //                // enables ownership tracking
+    // table: sales,        // your Drizzle table or Mongoose model (optional):
+    //                      // enables ownership tracking
+    // list: 'sales.view',  // filter reads by this policy's grant (optional)
     policies: [
       new Policy('sales.view'),
       new Policy('sales.create', { dependsOn: ['sales.view'] }),
@@ -106,6 +109,8 @@ export const resources: ResourceDefinition[] = [
 Export the array as `resources`. Point [`rbac.config.ts`](/reference/configuration) at this file. Run `npx rbac sync` to push it to the database.
 
 `type` names the resource for scoped checks and ownership. `table` is optional. Set it on `sale` to record who rang up each sale ([Ownership](/guide/ownership)). That record is what lets a cashier void only their own sales.
+
+`list` is optional too. It names the policy — unqualified, like everywhere else — whose grant filters reads of this resource: with `list: 'sales.view'`, a cashier's plain list query returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)).
 
 ## Next steps
 

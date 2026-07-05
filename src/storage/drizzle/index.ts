@@ -7,4 +7,4 @@ export type {
   DrizzleStorageAdapter,
 } from './adapter.js'
 export { trackedDb } from './tracked-db.js'
-export type { QueryScopeFn, TrackedDbOptions } from './tracked-db.js'
+export type { TrackedDbOptions } from './tracked-db.js'

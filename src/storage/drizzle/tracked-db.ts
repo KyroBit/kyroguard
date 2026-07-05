@@ -1,4 +1,4 @@
-import { and, or } from 'drizzle-orm'
+import { and, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { MisconfiguredError } from '../../core/errors.js'
 import type { RbacEngine } from '../../core/engine.js'
@@ -7,21 +7,12 @@ import type { Subject } from '../../core/types.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 import type { DrizzleStorageAdapter } from './adapter.js'
 
-/** Builds a per-request drizzle condition; return undefined to skip scoping. */
-export type QueryScopeFn = (subject: Subject, db: unknown) => unknown
-
 export interface TrackedDbOptions {
   rbac: {
     engine: RbacEngine
     adapter: StorageAdapter
   }
   resources: ResourceDefinition[]
-  /**
-   * scope name → condition builder, activated via the resource's `domains`
-   * config (keyed by the SUBJECT'S domain). Matching conditions are
-   * OR-combined, then AND-ed into the caller's where().
-   */
-  queryScopes?: Record<string, QueryScopeFn>
   /** Behavior when an insert yields no trackable ids: 'warn' (default) | 'error' | 'off'. */
   strictTracking?: 'warn' | 'error' | 'off'
 }
@@ -30,7 +21,6 @@ interface Ctx {
   engine: RbacEngine
   adapter: StorageAdapter
   tableMap: Map<unknown, ResourceDefinition>
-  queryScopes: Record<string, QueryScopeFn> | undefined
   strictTracking: 'warn' | 'error' | 'off'
   warned: Set<string>
 }
@@ -176,71 +166,82 @@ function wrapInsertBuilder(builder: any, t: InsertTracking): any {
   })
 }
 
-function wrapScopedFrom(builder: any, scope: SQL): any {
+interface FilterChain {
+  resolve: () => Promise<SQL | null>
+  userWhere: SQL | undefined
+}
+
+function makeFilterChain(engine: RbacEngine, subject: Subject, resource: ResourceDefinition): FilterChain {
+  let memo: Promise<SQL | null> | undefined
+  return {
+    resolve: () =>
+      (memo ??= engine.filterForResource(subject, resource).then(result => {
+        if (result.kind === 'all') return null
+        // 'none' must not run unfiltered — fail closed.
+        if (result.kind === 'none') return sql`false`
+        return result.where as SQL
+      })),
+    userWhere: undefined,
+  }
+}
+
+function wrapFilteredFrom(builder: any, chain: FilterChain): any {
+  const applied = (): Promise<{ target: any }> =>
+    chain.resolve().then(scope => {
+      const where =
+        scope === null
+          ? chain.userWhere
+          : chain.userWhere === undefined
+            ? scope
+            : and(chain.userWhere, scope)
+      return { target: where === undefined ? builder : builder.where(where) }
+    })
+
   let memoized: Promise<unknown> | undefined
-  const executeScoped = () => (memoized ??= Promise.resolve(builder.where(scope)))
+  const executeFiltered = () => (memoized ??= applied().then(({ target }) => target))
 
   return new Proxy(builder, {
     get(target, prop) {
       if (prop === 'where') {
-        return (condition?: unknown) =>
-          target.where(condition === undefined ? scope : and(condition as SQL, scope))
+        return (condition?: unknown) => {
+          chain.userWhere = condition as SQL | undefined
+          return wrapFilteredFrom(target, chain)
+        }
       }
       if (prop === 'then') {
         return (onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
-          executeScoped().then(onFulfilled, onRejected)
+          executeFiltered().then(onFulfilled, onRejected)
       }
-      if (prop === 'catch') return (onRejected?: (e: unknown) => unknown) => executeScoped().catch(onRejected)
-      if (prop === 'finally') return (onFinally?: () => void) => executeScoped().finally(onFinally)
+      if (prop === 'catch') return (onRejected?: (e: unknown) => unknown) => executeFiltered().catch(onRejected)
+      if (prop === 'finally') return (onFinally?: () => void) => executeFiltered().finally(onFinally)
       if (typeof prop === 'string' && EXEC_METHODS.has(prop)) {
         const fn = target[prop]
         if (typeof fn !== 'function') return fn
-        return (...args: unknown[]) => {
-          const scoped = target.where(scope)
-          return scoped[prop](...args)
-        }
+        return (...args: unknown[]) => applied().then(({ target: scoped }) => scoped[prop](...args))
       }
       const value = target[prop]
       if (typeof value !== 'function') return value
       return (...args: unknown[]) => {
         const result = value.apply(target, args)
-        // Chained builder methods (limit/orderBy/joins/...) must keep the scope.
-        return isQueryBuilder(result) ? wrapScopedFrom(result, scope) : result
+        return isQueryBuilder(result) ? wrapFilteredFrom(result, chain) : result
       }
     },
   })
 }
 
-function buildScopeSql(ctx: Ctx, raw: unknown, table: unknown): SQL | null {
-  if (!ctx.queryScopes) return null
-  const resource = ctx.tableMap.get(table)
-  if (!resource?.domains) return null
-  const subject = ctx.engine.store.getSubject()
-  if (!subject?.id) return null
-  const domainPolicies = resource.domains[subject.domain ?? '']
-  if (!domainPolicies) return null
-
-  const scopeNames = [...new Set(Object.values(domainPolicies).flat())]
-  const conditions: SQL[] = []
-  for (const name of scopeNames) {
-    const build = ctx.queryScopes[name]
-    if (!build) continue
-    const condition = build(subject, raw)
-    if (condition) conditions.push(condition as SQL)
-  }
-  if (!conditions.length) return null
-  if (conditions.length === 1) return conditions[0]!
-  return or(...conditions) ?? null
-}
-
-function wrapSelectBuilder(builder: any, ctx: Ctx, raw: unknown): any {
+function wrapSelectBuilder(builder: any, ctx: Ctx): any {
   return new Proxy(builder, {
     get(target, prop) {
       if (prop === 'from') {
         return (table: unknown, ...rest: unknown[]) => {
           const fromBuilder = target.from(table, ...rest)
-          const scope = buildScopeSql(ctx, raw, table)
-          return scope ? wrapScopedFrom(fromBuilder, scope) : fromBuilder
+          const resource = ctx.tableMap.get(table)
+          if (!resource?.list) return fromBuilder
+          // Scope checks and filter halves must see the unfiltered table.
+          if (ctx.engine.store.isInAuthz()) return fromBuilder
+          const subject = ctx.engine.store.getSubject()
+          if (!subject?.id) return fromBuilder
+          return wrapFilteredFrom(fromBuilder, makeFilterChain(ctx.engine, subject, resource))
         }
       }
       const value = target[prop]
@@ -278,7 +279,7 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
       }
 
       if (prop === 'select' || prop === 'selectDistinct') {
-        return (...args: unknown[]) => wrapSelectBuilder(target[prop](...args), ctx, target)
+        return (...args: unknown[]) => wrapSelectBuilder(target[prop](...args), ctx)
       }
 
       if (prop === 'transaction') {
@@ -297,7 +298,8 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { untracked: T } {
 
 /**
  * Wraps a drizzle db: inserts on registered tables record ownership, selects
- * get query scoping, `db.untracked` is the raw handle. update/delete are not
+ * on resources declaring `list` get the request subject's filterForResource
+ * decision ANDed in, `db.untracked` is the raw handle. update/delete are not
  * intercepted — see docs/reference/drizzle.md.
  */
 export function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T } {
@@ -309,7 +311,6 @@ export function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T
     engine: options.rbac.engine,
     adapter: options.rbac.adapter,
     tableMap,
-    queryScopes: options.queryScopes,
     strictTracking: options.strictTracking ?? 'warn',
     warned: new Set<string>(),
   })

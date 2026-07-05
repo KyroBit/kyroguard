@@ -545,9 +545,12 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
     })
 
     describe('S14 — listPolicies ids', () => {
-      it('S14: listPolicies returns stable, opaque, non-empty ids with name and dependsOn', () =>
+      it('S14: listPolicies returns stable, opaque, non-empty ids with name, scopeOptions and dependsOn', () =>
         withAdapter(async adapter => {
-          await adapter.upsertPolicies([row('p.a'), row('p.b', { dependsOn: ['p.a'] })])
+          await adapter.upsertPolicies([
+            row('p.a', { scopeOptions: ['owned', 'granted'] }),
+            row('p.b', { dependsOn: ['p.a'] }),
+          ])
           const first = await adapter.listPolicies()
           const second = await adapter.listPolicies()
           for (const record of first) {
@@ -558,6 +561,19 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
             Object.fromEntries(list.map(policy => [policy.name, policy.id]))
           expect(idsByName(second)).toEqual(idsByName(first))
           expect(first.find(policy => policy.name === 'p.b')?.dependsOn).toEqual(['p.a'])
+          expect(first.find(policy => policy.name === 'p.a')?.scopeOptions).toEqual([
+            'owned',
+            'granted',
+          ])
+          expect(first.find(policy => policy.name === 'p.b')?.scopeOptions).toEqual([])
+        }))
+
+      it('S14: listPolicies reflects a re-synced scopeOptions value (round-trip)', () =>
+        withAdapter(async adapter => {
+          await adapter.upsertPolicies([row('p.a', { scopeOptions: ['owned'] })])
+          await adapter.upsertPolicies([row('p.a', { scopeOptions: ['granted'] })])
+          const record = (await adapter.listPolicies()).find(policy => policy.name === 'p.a')
+          expect(record?.scopeOptions).toEqual(['granted'])
         }))
     })
 

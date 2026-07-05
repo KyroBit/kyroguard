@@ -12,6 +12,7 @@ import { memoryAdapter } from '../../src/testing/index.js'
 import type { EngineOptions } from '../../src/core/engine.js'
 import type { ScopeCheckContext } from '../../src/core/scope.js'
 import type { ResourceRef, Subject, SubjectRef } from '../../src/core/types.js'
+import { UnknownScopeError } from '../../src/storage/contract.js'
 import type { PolicyGrant, StorageAdapter } from '../../src/storage/contract.js'
 
 interface Harness {
@@ -446,5 +447,132 @@ describe('authorize() any-scope-passes', () => {
     const { engine } = makeEngine({ scopes, adapter })
     await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
     expect(secondRan).toBe(false)
+  })
+})
+
+describe('authorize() inAuthz suppression', () => {
+  const subject: Subject = { id: 'u1', domain: 'admin' }
+  const resource: ResourceRef = { type: 'post', id: 'p1' }
+
+  test('set while the resolver and scope checks run, restored after allow', async () => {
+    const observed: Record<string, boolean> = {}
+    let engineRef: RbacEngine
+    const scopes = new Map([
+      [
+        'probe',
+        new Scope('probe', 'Probe', () => {
+          observed.scopeCheck = engineRef.store.isInAuthz()
+          return true
+        }),
+      ],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    engineRef = engine
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'probe')
+
+    await engine.runWithRequestContext(async () => {
+      expect(engine.store.isInAuthz()).toBe(false)
+      await engine.authorize(subject, 'admin.posts.update', {
+        resource: () => {
+          observed.resolver = engine.store.isInAuthz()
+          return resource
+        },
+      })
+      expect(engine.store.isInAuthz()).toBe(false)
+    })
+
+    expect(observed).toEqual({ resolver: true, scopeCheck: true })
+  })
+
+  test('restored even when the scope check denies (throwing path)', async () => {
+    const scopes = new Map([['closed', new Scope('closed', 'Closed', () => false)]])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'closed')
+
+    await engine.runWithRequestContext(async () => {
+      const err = await engine
+        .authorize(subject, 'admin.posts.update', { resource: () => resource })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        )
+      expect(err).toBeInstanceOf(ScopeDeniedError)
+      expect(engine.store.isInAuthz()).toBe(false)
+    })
+  })
+
+  test('restored when the resource resolver finds nothing (404 path)', async () => {
+    const scopes = new Map([['closed', new Scope('closed', 'Closed', () => false)]])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'closed')
+
+    await engine.runWithRequestContext(async () => {
+      const err = await engine
+        .authorize(subject, 'admin.posts.update', { resource: () => null })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        )
+      expect(err).toBeInstanceOf(ResourceNotFoundError)
+      expect(engine.store.isInAuthz()).toBe(false)
+    })
+  })
+})
+
+describe('assignPolicy scope validation', () => {
+  const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
+
+  async function sync(adapter: StorageAdapter, scopeOptions: string[]): Promise<void> {
+    await adapter.upsertPolicies([
+      {
+        name: 'admin.posts.update',
+        domain: 'admin',
+        label: 'Update',
+        scopeOptions,
+        dependsOn: [],
+      },
+    ])
+  }
+
+  test('a scope outside the policy scopeOptions → UnknownScopeError, nothing assigned', async () => {
+    const { adapter, engine } = makeEngine()
+    await sync(adapter, ['owned'])
+    const err = await engine.assignPolicy(ref, 'admin.posts.update', 'mystery').then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(err).toBeInstanceOf(UnknownScopeError)
+    expect((err as Error).name).toBe('UnknownScopeError')
+    expect((err as Error).message).toContain('mystery')
+    expect((err as Error).message).toContain('admin.posts.update')
+    expect(await adapter.getSubjectPolicies(ref)).toEqual([])
+  })
+
+  test('a declared scope is accepted', async () => {
+    const { adapter, engine } = makeEngine()
+    await sync(adapter, ['owned'])
+    await engine.assignPolicy(ref, 'admin.posts.update', 'owned')
+    expect(await adapter.getSubjectPolicies(ref)).toEqual([
+      { name: 'admin.posts.update', scope: 'owned' },
+    ])
+  })
+
+  test('null and omitted scopes skip validation even with empty scopeOptions', async () => {
+    const { adapter, engine } = makeEngine()
+    await sync(adapter, [])
+    await engine.assignPolicy(ref, 'admin.posts.update', null)
+    await engine.assignPolicy(ref, 'admin.posts.update')
+    expect(await adapter.getSubjectPolicies(ref)).toEqual([
+      { name: 'admin.posts.update', scope: null },
+    ])
+  })
+
+  test('an unsynced policy with a scope still surfaces UnknownPolicyError from the adapter', async () => {
+    const { engine } = makeEngine()
+    const err = await engine.assignPolicy(ref, 'ghost.update', 'owned').then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect((err as Error).name).toBe('UnknownPolicyError')
   })
 })

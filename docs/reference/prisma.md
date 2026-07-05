@@ -55,7 +55,7 @@ import { rbacPrismaExtension } from '@kyrobit/rbac/prisma'
 function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPrismaExtension
 ```
 
-Client extension that records ownership when your app creates rows. Apply it with `client.$extends(...)` and use the extended client in request code.
+Client extension that records ownership when your app creates rows, and filters reads on models whose resource declares `list`. Apply it with `client.$extends(...)` and use the extended client in request code.
 
 | Option | Type | Description |
 | --- | --- | --- |
@@ -83,6 +83,12 @@ export const db = client.$extends(
 - `createMany` only records rows whose input carries an `id`. Prisma returns just a count, so database-generated ids cannot be read back.
 - No user on the request, seeders and jobs for example, means no ownership row and no error.
 - A custom `select` that omits `id` records nothing.
+
+### What gets filtered
+
+A registered model whose resource definition — the `resources` passed to `createRbac` — declares `list` gets [automatic filtering](/guide/scopes#automatic-filtering): `findMany`, `findFirst`, `findUnique` and `count` resolve the user's decision through [`filterForResource`](/reference/core-api#filterforresource). `all` runs the query untouched. `none` answers without querying: `[]` from `findMany`, `0` from `count`, `null` from the rest. `where` rides `AND` next to your own conditions — on `findUnique` the unique selector stays at the top level, as Prisma requires.
+
+Reads run unfiltered with no request subject, on models without a `list` resource, and while the engine itself is deciding (scope checks and filter halves). Raw SQL, `aggregate`, `groupBy` and relations loaded through `include` are never intercepted.
 
 ::: warning
 Raw SQL, nested writes through relations, `createManyAndReturn`, `updateMany` and deletes are not intercepted. Call `rbac.ownership.record()` on those paths, and `rbac.ownership.remove()` when deleting an owned resource. Otherwise stale ownership rows keep passing `Scope.owned()` checks for rows that no longer exist. See [Ownership](/guide/ownership).

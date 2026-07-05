@@ -112,3 +112,15 @@ try {
   }
 }
 ```
+
+## UnknownScopeError
+
+Not an HTTP error either. Thrown from `assignPolicy` before anything is written.
+
+```
+[rbac] Scope "granted" is not among the scopeOptions of policy "admin.reports.view" — declare it on the policy and re-sync.
+```
+
+**When.** The grant carries a scope the policy does not declare in its `scopeOptions`. `seedGroups` rejects the same mistake at sync time, naming the group and the declared options.
+
+**Fix.** Add the scope to the policy's `scopeOptions` and run `rbac sync`, or grant one of the declared scopes. Catch it with `instanceof UnknownScopeError` next to `UnknownPolicyError` where you expose assignment endpoints.

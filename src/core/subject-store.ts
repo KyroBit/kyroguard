@@ -9,6 +9,8 @@ export interface RequestStore {
   domainSubjects: Map<string, Subject | null>
   /** One-shot extra columns for the next tracked insert (addExtra). */
   extraOnce: Record<string, unknown> | null
+  /** True while the engine evaluates scopes/filters — wrappers must not auto-filter these queries. */
+  inAuthz: boolean
 }
 
 /**
@@ -49,6 +51,15 @@ export class SubjectStore {
     store.extraOnce = { ...(store.extraOnce ?? {}), ...extra }
   }
 
+  setInAuthz(value: boolean): void {
+    const store = this.als.getStore()
+    if (store) store.inAuthz = value
+  }
+
+  isInAuthz(): boolean {
+    return this.als.getStore()?.inAuthz ?? false
+  }
+
   consumeExtra(): Record<string, unknown> | null {
     const store = this.als.getStore()
     if (!store?.extraOnce) return null
@@ -59,5 +70,5 @@ export class SubjectStore {
 }
 
 function createStore(): RequestStore {
-  return { subject: null, domainSubjects: new Map(), extraOnce: null }
+  return { subject: null, domainSubjects: new Map(), extraOnce: null, inAuthz: false }
 }

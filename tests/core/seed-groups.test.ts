@@ -1,5 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import { seedGroups } from '../../src/core/seed-groups.js'
+import { Policy } from '../../src/core/policy.js'
+import { Scope } from '../../src/core/scope.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { StorageAdapter } from '../../src/storage/contract.js'
 
@@ -64,6 +66,76 @@ describe('seedGroups formats', () => {
     expect(
       seedGroups(adapter, { admins: { label: 'Admins', policies: 'all' } }),
     ).rejects.toThrow(/group "admins" uses policies: 'all'/)
+  })
+})
+
+describe('seedGroups scope validation', () => {
+  const owned = Scope.owned()
+
+  test('record-form scope not in the policy scopeOptions throws naming group, policy and scope', async () => {
+    const adapter = memoryAdapter()
+    const allPolicies = [new Policy('posts.update', { scopeOptions: [owned] })]
+    await expect(
+      seedGroups(
+        adapter,
+        { authors: { label: 'Authors', policies: { 'posts.update': 'mystery' } } },
+        allPolicies,
+        'admin',
+      ),
+    ).rejects.toThrow(/group "authors".*policy "posts\.update".*scope "mystery"/)
+    expect(await adapter.listGroups()).toEqual([])
+  })
+
+  test('a declared scope passes and is stored', async () => {
+    const adapter = memoryAdapter()
+    const allPolicies = [new Policy('posts.update', { scopeOptions: [owned] })]
+    await seedGroups(
+      adapter,
+      { authors: { label: 'Authors', policies: { 'posts.update': 'owned' } } },
+      allPolicies,
+      'admin',
+    )
+    expect(await entriesOf(adapter, 'authors')).toEqual([
+      { policyName: 'admin.posts.update', scope: 'owned' },
+    ])
+  })
+
+  test('a policy declaring no scopeOptions rejects any named scope', async () => {
+    const adapter = memoryAdapter()
+    await expect(
+      seedGroups(
+        adapter,
+        { authors: { label: 'Authors', policies: { 'posts.update': 'owned' } } },
+        [new Policy('posts.update')],
+        'admin',
+      ),
+    ).rejects.toThrow(/\(none\)/)
+  })
+
+  test('name-only allPolicies entries carry no scopeOptions — validation is skipped', async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(
+      adapter,
+      { authors: { label: 'Authors', policies: { 'posts.update': 'anything' } } },
+      [{ name: 'posts.update' }],
+      'admin',
+    )
+    expect(await entriesOf(adapter, 'authors')).toEqual([
+      { policyName: 'admin.posts.update', scope: 'anything' },
+    ])
+  })
+
+  test('null scopes are never validated', async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(
+      adapter,
+      { viewers: { label: 'Viewers', policies: { 'posts.read': null } } },
+      [new Policy('posts.read')],
+      'admin',
+    )
+    expect(await entriesOf(adapter, 'viewers')).toEqual([
+      { policyName: 'admin.posts.read', scope: null },
+    ])
   })
 })
 

@@ -115,6 +115,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
         id: doc._id.toString(),
         name: doc.name,
         domain: doc.domain ?? '',
+        scopeOptions: doc.scopeOptions ?? [],
         dependsOn: doc.dependsOn ?? [],
       }))
     },

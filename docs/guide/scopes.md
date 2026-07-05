@@ -117,7 +117,30 @@ A failed check → 403 with `RBAC_SCOPE_DENIED`. A resolver that finds no row �
 
 ## Filtering lists
 
-A guard answers "may this user touch **this** row." A list endpoint asks the same grant the other question — *which rows?* Ask with `filterFor`:
+A guard answers "may this user touch **this** row." A list endpoint asks the same grant the other question — *which rows?*
+
+### Automatic filtering
+
+Name the policy that governs reads, on the resource:
+
+```ts
+{ type: 'sale', table: sales, list: 'sales.view', policies: [/* ... */] }
+```
+
+Plain queries now come back scoped to the logged-in user:
+
+```ts
+const rows = await db.select().from(sales).orderBy(desc(sales.createdAt)).limit(20)
+// cashier: twenty of their own sales · manager: twenty of anyone's · no grant: empty
+```
+
+The ORM integrations do the asking for you: `trackedDb` filters Drizzle selects, the Prisma extension filters `findMany`, `findFirst`, `findUnique` and `count`, the Mongoose plugin filters `find` queries. Every read of a `list` resource gets the user's `sales.view` decision `AND`ed in — your own `where` still applies on top. A list route that forgets to filter can no longer leak rows.
+
+Two doors stay open on purpose. Reads through `db.untracked` — or any handle the integration does not wrap — are never filtered. And queries the engine itself runs while deciding — scope checks, filter halves, resource resolvers — always see the unfiltered table. Reads with no logged-in user (seeders, jobs) also run plainly, like [ownership tracking](/guide/ownership#background-jobs).
+
+### When you want the filter in hand
+
+Automatic filtering applies the decision for you. `filterFor` hands it to you instead — for raw SQL, aggregations, a resource without `list`, or a query you build yourself:
 
 ::: code-group
 

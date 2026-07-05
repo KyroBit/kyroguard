@@ -47,8 +47,9 @@
  *     leaves one row (upsert key: S22). isOwner returns true only for an
  *     exact (ownerId, type, id) match (relation restriction: S22).
  *     removeOwnership removes every entry for the resource, all relations.
- * S14 listPolicies returns id, name and dependsOn for every policy; ids are
- *     opaque non-empty strings, stable across calls.
+ * S14 listPolicies returns id, name, scopeOptions and dependsOn for every
+ *     policy; ids are opaque non-empty strings, stable across calls;
+ *     scopeOptions round-trips the value last synced via upsertPolicies.
  * S15 After upsertPolicies changes dependsOn, listPolicies reflects the new
  *     dependsOn (regression: a self-referential SQL upsert that sets columns
  *     to themselves violates S5/S15 and must fail the suite).
@@ -94,6 +95,7 @@ export interface PolicyRecord {
   id: string
   name: string
   domain: string
+  scopeOptions: string[]
   dependsOn: string[]
 }
 
@@ -158,6 +160,15 @@ export class UnknownPolicyError extends Error {
   constructor(policyName: string) {
     super(`[rbac] Policy "${policyName}" not found — run \`rbac sync\` first.`)
     this.name = 'UnknownPolicyError'
+  }
+}
+
+export class UnknownScopeError extends Error {
+  constructor(policyName: string, scope: string) {
+    super(
+      `[rbac] Scope "${scope}" is not among the scopeOptions of policy "${policyName}" — declare it on the policy and re-sync.`,
+    )
+    this.name = 'UnknownScopeError'
   }
 }
 

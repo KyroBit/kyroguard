@@ -128,6 +128,7 @@ export function memoryAdapter(): StorageAdapter {
         id: policy.id,
         name: policy.name,
         domain: policy.domain,
+        scopeOptions: [...policy.scopeOptions],
         dependsOn: [...policy.dependsOn],
       }))
     },

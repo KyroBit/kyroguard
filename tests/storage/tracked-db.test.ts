@@ -1,22 +1,25 @@
 /// <reference types="bun-types" />
 /**
- * trackedDb (Drizzle) behavior against real PostgreSQL semantics (pglite):
- * ownership auto-tracking on insert (values-ids and .returning() paths),
- * transactional atomicity, the v0 "ownership failure hangs the caller"
- * regression, strictTracking modes, db.untracked bypass, and domain-keyed
- * query scoping with OR-combined scope conditions (the v0 conditions[0]
- * regression).
+ * trackedDb (Drizzle) behavior against real PostgreSQL (pglite) and SQLite
+ * (bun:sqlite) semantics: ownership auto-tracking on insert (values-ids and
+ * .returning() paths), transactional atomicity, the v0 "ownership failure
+ * hangs the caller" regression, strictTracking modes, db.untracked bypass,
+ * and grant-driven automatic read filtering on select (filterForResource:
+ * all / none / where trichotomy, inAuthz suppression).
  */
 
 import { afterAll, describe, expect, spyOn, test } from 'bun:test'
-import { eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { pgTable, serial, text } from 'drizzle-orm/pg-core'
+import { sqliteTable, text as sqliteText } from 'drizzle-orm/sqlite-core'
 
-import { createRbac, MisconfiguredError } from '../../src/index.js'
+import { createRbac, MisconfiguredError, Policy, Scope } from '../../src/index.js'
 import type { RbacEngine, ResourceDefinition, Subject } from '../../src/index.js'
 import { drizzleAdapter, trackedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
+import * as sqliteSchema from '../../src/storage/drizzle/schema/sqlite.js'
 import { makePgDb } from './helpers/pg.js'
+import { makeSqliteDb } from './helpers/sqlite.js'
 
 // ── User tables ───────────────────────────────────────────────────────────────
 
@@ -32,23 +35,16 @@ const events = pgTable('events', {
   title: text('title').notNull(),
 })
 
-/** Scoping target: two independent scope dimensions (owner, branch). */
-const docs = pgTable('docs', {
+/** Auto-filter target: `list` declared, Scope.owned() on the grant. */
+const sales = pgTable('sales', {
   id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  ownerId: text('owner_id').notNull(),
-  branch: text('branch').notNull(),
+  status: text('status').notNull(),
 })
 
 const USER_DDL = `
 CREATE TABLE "posts" ("id" text PRIMARY KEY, "title" text NOT NULL);
 CREATE TABLE "events" ("id" serial PRIMARY KEY, "title" text NOT NULL);
-CREATE TABLE "docs" (
-  "id" text PRIMARY KEY,
-  "title" text NOT NULL,
-  "owner_id" text NOT NULL,
-  "branch" text NOT NULL
-);
+CREATE TABLE "sales" ("id" text PRIMARY KEY, "status" text NOT NULL);
 `
 
 // ── Harness ───────────────────────────────────────────────────────────────────
@@ -68,14 +64,6 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
   const resources: ResourceDefinition[] = [
     { type: 'post', policies: [], table: posts },
     { type: 'event', policies: [], table: events },
-    {
-      type: 'doc',
-      policies: [],
-      table: docs,
-      // Keyed by the SUBJECT'S DOMAIN; both policies' scope name lists are
-      // flattened, deduped, and OR-combined.
-      domains: { admin: { 'docs.read': ['own', 'branch'] } },
-    },
   ]
   const rbac = createRbac({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
@@ -83,10 +71,6 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
   const db = trackedDb(pg.db, {
     rbac: { engine: rbac.engine, adapter },
     resources,
-    queryScopes: {
-      own: subject => eq(docs.ownerId, subject.id),
-      branch: subject => eq(docs.branch, (subject['tenant_id'] as string | undefined) ?? ''),
-    },
     ...(options?.strictTracking ? { strictTracking: options.strictTracking } : {}),
   })
 
@@ -143,9 +127,6 @@ describe('trackedDb — ownership tracking on insert', () => {
 
   test('a: inserts into unregistered tables are untouched (no ownership rows)', async () => {
     const { pg, engine, db } = await makeSetup()
-    // docs is registered; use raw SQL through an unregistered path instead:
-    // a table object NOT in resources — reuse posts' shape via untracked-free
-    // proxy by inserting into a table the map does not know.
     const strangers = pgTable('strangers', { id: text('id').primaryKey() })
     await pg.client.exec('CREATE TABLE "strangers" ("id" text PRIMARY KEY)')
 
@@ -339,71 +320,229 @@ describe('trackedDb — ownership tracking on insert', () => {
   })
 })
 
-// ── (h) select scoping ────────────────────────────────────────────────────────
+// ── (h) automatic read filtering on select ────────────────────────────────────
 
-describe('trackedDb — domain-keyed query scoping on select', () => {
-  /** d1 matches only the 'own' scope, d2 only 'branch', d3 neither. */
-  const seedDocs = (pg: Awaited<ReturnType<typeof makePgDb>>) =>
-    pg.db.insert(docs).values([
-      { id: 'd1', title: 'D1', ownerId: 'u1', branch: 'b2' },
-      { id: 'd2', title: 'D2', ownerId: 'u2', branch: 'b1' },
-      { id: 'd3', title: 'D3', ownerId: 'u2', branch: 'b2' },
-    ])
+const cashier: Subject = { id: 'cashier' }
+const manager: Subject = { id: 'manager' }
+const outsider: Subject = { id: 'outsider' }
 
-  const scopedSubject: Subject = { id: 'u1', domain: 'admin', tenant_id: 'b1' }
+async function makeFilterSetup() {
+  const pg = await makePgDb(USER_DDL)
+  cleanups.push(pg.close)
 
-  test('h: TWO scope names are OR-combined — rows matching EITHER condition return, others are excluded (v0 conditions[0] regression)', async () => {
-    const { pg, engine, db } = await makeSetup()
-    await seedDocs(pg)
+  const adapter = drizzleAdapter(pg.db, { schema: pgSchema })
 
-    const rows = await runAs(engine, scopedSubject, () => db.select().from(docs))
-
-    // d1 only via 'own', d2 only via 'branch' — conditions[0]-only would drop one.
-    expect(rows.map(row => row.id).sort()).toEqual(['d1', 'd2'])
+  let rowsSeenDuringCheck = -1
+  const auditScope = new Scope('audit-window', 'Audit window', async () => {
+    const seen = await db.select().from(sales)
+    rowsSeenDuringCheck = seen.length
+    return true
   })
 
-  test('h: a user .where() is ANDed with the OR-combined scope', async () => {
-    const { pg, engine, db } = await makeSetup()
-    await seedDocs(pg)
+  const resources: ResourceDefinition[] = [
+    {
+      type: 'sale',
+      policies: [
+        new Policy('sales.view', { scopeOptions: [Scope.owned()] }),
+        new Policy('sales.audit', { scopeOptions: [auditScope] }),
+      ],
+      table: sales,
+      list: 'sales.view',
+    },
+    // Registered for tracking but no `list` — auto mode off.
+    { type: 'post', policies: [], table: posts },
+  ]
+  const rbac = createRbac({ adapter, resources, cache: false })
+  cleanups.push(async () => rbac.dispose())
 
-    const onlyD2 = await runAs(engine, scopedSubject, () =>
-      db.select().from(docs).where(eq(docs.title, 'D2')),
-    )
-    expect(onlyD2.map(row => row.id)).toEqual(['d2'])
+  const db = trackedDb(pg.db, { rbac: { engine: rbac.engine, adapter }, resources })
 
-    // d3 matches the user filter but neither scope — the scope must win.
-    const none = await runAs(engine, scopedSubject, () =>
-      db.select().from(docs).where(eq(docs.title, 'D3')),
-    )
-    expect(none).toEqual([])
+  await rbac.sync()
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view', 'owned')
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.audit', 'audit-window')
+  await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
+
+  await pg.db.insert(sales).values([
+    { id: 's1', status: 'open' },
+    { id: 's2', status: 'void' },
+    { id: 's3', status: 'open' },
+  ])
+  await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
+  await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
+  await rbac.ownership.record('u9', { type: 'sale', id: 's3' })
+
+  return { pg, engine: rbac.engine, db, rowsSeenDuringCheck: () => rowsSeenDuringCheck }
+}
+
+describe('trackedDb — automatic read filtering on select (pg)', () => {
+  test("h: an 'owned'-scoped grant filters plain db.select() to the subject's rows", async () => {
+    const { engine, db } = await makeFilterSetup()
+
+    const rows = await runAs(engine, cashier, () => db.select().from(sales))
+    expect(rows.map(row => row.id).sort()).toEqual(['s1', 's2'])
   })
 
-  test('h: chained builder methods after from() keep the scope', async () => {
-    const { pg, engine, db } = await makeSetup()
-    await seedDocs(pg)
+  test('h: a user .where() is ANDed with the grant filter', async () => {
+    const { engine, db } = await makeFilterSetup()
 
-    const rows = await runAs(engine, scopedSubject, () =>
-      db.select().from(docs).orderBy(docs.id).limit(10),
+    const open = await runAs(engine, cashier, () =>
+      db.select().from(sales).where(eq(sales.status, 'open')),
     )
-    expect(rows.map(row => row.id)).toEqual(['d1', 'd2'])
+    expect(open.map(row => row.id)).toEqual(['s1'])
+
+    // s3 matches the user filter but not the grant — the filter must win.
+    const foreign = await runAs(engine, cashier, () =>
+      db.select().from(sales).where(eq(sales.id, 's3')),
+    )
+    expect(foreign).toEqual([])
   })
 
-  test("h: a subject on a domain WITHOUT domains config for the resource is not scoped", async () => {
-    const { pg, engine, db } = await makeSetup()
-    await seedDocs(pg)
+  test('h: chained builder methods after from() keep the filter', async () => {
+    const { engine, db } = await makeFilterSetup()
 
-    const rows = await runAs(engine, { id: 'u1', domain: 'branch', tenant_id: 'b1' }, () =>
-      db.select().from(docs),
+    const rows = await runAs(engine, cashier, () =>
+      db.select().from(sales).orderBy(asc(sales.id)).limit(10),
     )
+    expect(rows.map(row => row.id)).toEqual(['s1', 's2'])
+  })
+
+  test('h: an unscoped grant sees every row (all — query untouched)', async () => {
+    const { engine, db } = await makeFilterSetup()
+
+    const rows = await runAs(engine, manager, () => db.select().from(sales))
     expect(rows).toHaveLength(3)
   })
 
-  test('h: selects on unregistered tables are never scoped', async () => {
-    const { pg, engine, db } = await makeSetup()
-    const id = crypto.randomUUID()
-    await pg.db.insert(posts).values({ id, title: 'p' })
+  test('h: no grant yields an empty list, not an error (none)', async () => {
+    const { engine, db } = await makeFilterSetup()
 
-    const rows = await runAs(engine, scopedSubject, () => db.select().from(posts))
+    const rows = await runAs(engine, outsider, () => db.select().from(sales))
+    expect(rows).toEqual([])
+  })
+
+  test('h: a scope check querying the table during authorize sees it UNFILTERED (inAuthz suppression)', async () => {
+    const { engine, db, rowsSeenDuringCheck } = await makeFilterSetup()
+
+    await runAs(engine, cashier, () => engine.authorize(cashier, 'sales.audit'))
+    expect(rowsSeenDuringCheck()).toBe(3)
+
+    // The suppression does not leak past authorize.
+    const after = await runAs(engine, cashier, () => db.select().from(sales))
+    expect(after.map(row => row.id).sort()).toEqual(['s1', 's2'])
+  })
+
+  test('h: db.untracked selects are never filtered', async () => {
+    const { engine, db } = await makeFilterSetup()
+
+    const rows = await runAs(engine, cashier, () => db.untracked.select().from(sales))
+    expect(rows).toHaveLength(3)
+  })
+
+  test('h: with no request subject (seeders/CLI/jobs) selects are unfiltered', async () => {
+    const { db } = await makeFilterSetup()
+
+    expect(await db.select().from(sales)).toHaveLength(3)
+  })
+
+  test('h: a registered resource WITHOUT `list` is never filtered', async () => {
+    const { pg, engine, db } = await makeFilterSetup()
+    await pg.db.insert(posts).values({ id: 'p1', title: 'P1' })
+
+    const rows = await runAs(engine, cashier, () => db.select().from(posts))
     expect(rows).toHaveLength(1)
+  })
+
+  test('h: selects on unregistered tables are never filtered', async () => {
+    const { pg, engine, db } = await makeFilterSetup()
+    const strangers = pgTable('strangers', { id: text('id').primaryKey() })
+    await pg.client.exec('CREATE TABLE "strangers" ("id" text PRIMARY KEY)')
+    await pg.db.insert(strangers).values({ id: 'x1' })
+
+    const rows = await runAs(engine, cashier, () => db.select().from(strangers))
+    expect(rows).toHaveLength(1)
+  })
+})
+
+// ── (i) sqlite leg ────────────────────────────────────────────────────────────
+
+const salesLite = sqliteTable('sales', {
+  id: sqliteText('id').primaryKey(),
+  status: sqliteText('status').notNull(),
+})
+
+const SQLITE_USER_DDL = `
+CREATE TABLE sales (id text PRIMARY KEY, status text NOT NULL);
+`
+
+async function makeSqliteFilterSetup() {
+  const { db: raw, sqlite } = makeSqliteDb(SQLITE_USER_DDL)
+  cleanups.push(async () => sqlite.close())
+
+  const adapter = drizzleAdapter(raw, { schema: sqliteSchema })
+  const resources: ResourceDefinition[] = [
+    {
+      type: 'sale',
+      policies: [new Policy('sales.view', { scopeOptions: [Scope.owned()] })],
+      table: salesLite,
+      list: 'sales.view',
+    },
+  ]
+  const rbac = createRbac({ adapter, resources, cache: false })
+  cleanups.push(async () => rbac.dispose())
+
+  const db = trackedDb(raw, { rbac: { engine: rbac.engine, adapter }, resources })
+
+  await rbac.sync()
+  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view', 'owned')
+  await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
+
+  await raw.insert(salesLite).values([
+    { id: 's1', status: 'open' },
+    { id: 's2', status: 'void' },
+    { id: 's3', status: 'open' },
+  ])
+  await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
+  await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
+  await rbac.ownership.record('u9', { type: 'sale', id: 's3' })
+
+  return { engine: rbac.engine, db }
+}
+
+describe('trackedDb — automatic read filtering on select (sqlite)', () => {
+  test("i: an 'owned'-scoped grant filters plain db.select() to the subject's rows", async () => {
+    const { engine, db } = await makeSqliteFilterSetup()
+
+    const rows = await runAs(engine, cashier, () => db.select().from(salesLite))
+    expect(rows.map(row => row.id).sort()).toEqual(['s1', 's2'])
+  })
+
+  test('i: a user .where() is ANDed with the grant filter, including through .all()', async () => {
+    const { engine, db } = await makeSqliteFilterSetup()
+
+    const open = await runAs(engine, cashier, async () =>
+      db.select().from(salesLite).where(eq(salesLite.status, 'open')).all(),
+    )
+    expect(open.map(row => row.id)).toEqual(['s1'])
+  })
+
+  test('i: an unscoped grant sees every row', async () => {
+    const { engine, db } = await makeSqliteFilterSetup()
+
+    const rows = await runAs(engine, manager, () => db.select().from(salesLite))
+    expect(rows).toHaveLength(3)
+  })
+
+  test('i: no grant yields an empty list, not an error', async () => {
+    const { engine, db } = await makeSqliteFilterSetup()
+
+    const rows = await runAs(engine, outsider, () => db.select().from(salesLite))
+    expect(rows).toEqual([])
+  })
+
+  test('i: db.untracked selects are never filtered', async () => {
+    const { engine, db } = await makeSqliteFilterSetup()
+
+    const rows = await runAs(engine, cashier, () => db.untracked.select().from(salesLite))
+    expect(rows).toHaveLength(3)
   })
 })

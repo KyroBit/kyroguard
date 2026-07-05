@@ -193,15 +193,21 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async listPolicies(): Promise<PolicyRecord[]> {
-      const rows: Array<{ id: unknown; name: unknown; domain: unknown; dependsOn: unknown }> =
-        await client.rbacPolicy.findMany({
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, domain: true, dependsOn: true },
-        })
+      const rows: Array<{
+        id: unknown
+        name: unknown
+        domain: unknown
+        scopeOptions: unknown
+        dependsOn: unknown
+      }> = await client.rbacPolicy.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, domain: true, scopeOptions: true, dependsOn: true },
+      })
       return rows.map(row => ({
         id: String(row.id),
         name: String(row.name),
         domain: String(row.domain ?? ''),
+        scopeOptions: toStringArray(row.scopeOptions),
         dependsOn: toStringArray(row.dependsOn),
       }))
     },

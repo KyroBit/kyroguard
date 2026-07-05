@@ -281,7 +281,7 @@ export type {
 } from './core/types.js'
 // Re-exported so CLI-generated schema files don't need a direct cuid2 dependency.
 export { createId } from '@paralleldrive/cuid2'
-export { UnknownPolicyError } from './storage/contract.js'
+export { UnknownPolicyError, UnknownScopeError } from './storage/contract.js'
 export type {
   AdapterCapabilities,
   GroupPolicyEntry,

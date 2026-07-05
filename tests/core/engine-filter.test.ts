@@ -214,6 +214,118 @@ describe('filterFor() decision procedure', () => {
   })
 })
 
+describe('filterForResource() — the wrapper entry', () => {
+  test('resource without list → all, no policy consulted (works even for a null subject)', async () => {
+    const { engine } = makeEngine()
+    expect(await engine.filterForResource(subject, saleResource)).toEqual({ kind: 'all' })
+    expect(await engine.filterForResource(null, saleResource)).toEqual({ kind: 'all' })
+  })
+
+  test('list declared, unscoped grant → all (policy qualified with the subject domain)', async () => {
+    const { adapter, engine } = makeEngine()
+    await grant(adapter, 'admin.sales.view')
+    expect(
+      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
+    ).toEqual({ kind: 'all' })
+  })
+
+  test('list declared, no grant → none/no-policy', async () => {
+    const { engine } = makeEngine()
+    expect(
+      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
+    ).toEqual({ kind: 'none', reason: 'no-policy' })
+  })
+
+  test('list declared, fragment scope → where', async () => {
+    const scopes = new Map([
+      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, 'admin.sales.view', 'mine')
+    expect(
+      await engine.filterForResource(subject, { ...saleResource, list: 'sales.view' }),
+    ).toEqual({ kind: 'where', where: 'mine-rows' })
+  })
+
+  test('a domainless subject resolves the unqualified policy name', async () => {
+    const bareRef: SubjectRef = { subjectId: 'u2', domain: '', tenantId: '' }
+    const { adapter, engine } = makeEngine()
+    await adapter.upsertPolicies([
+      { name: 'sales.view', domain: '', label: 'View', scopeOptions: [], dependsOn: [] },
+    ])
+    await adapter.assignPolicy(bareRef, 'sales.view', null)
+    expect(
+      await engine.filterForResource({ id: 'u2' }, { ...saleResource, list: 'sales.view' }),
+    ).toEqual({ kind: 'all' })
+  })
+
+  test('list declared and no subject → UnauthenticatedError', async () => {
+    const { engine } = makeEngine()
+    expect(
+      engine.filterForResource(null, { ...saleResource, list: 'sales.view' }),
+    ).rejects.toBeInstanceOf(UnauthenticatedError)
+  })
+})
+
+describe('inAuthz suppression flag', () => {
+  test('set while filterFor builds filters, restored after (both outcomes observed in-context)', async () => {
+    const observed: boolean[] = []
+    let engineRef: RbacEngine
+    const scopes = new Map([
+      [
+        'mine',
+        new Scope('mine', 'Mine', () => false, () => {
+          observed.push(engineRef.store.isInAuthz())
+          return { where: 'w' }
+        }),
+      ],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    engineRef = engine
+    await grant(adapter, 'admin.sales.view', 'mine')
+
+    await engine.runWithRequestContext(async () => {
+      expect(engine.store.isInAuthz()).toBe(false)
+      await engine.filterFor(subject, 'admin.sales.view', saleResource)
+      expect(engine.store.isInAuthz()).toBe(false)
+    })
+
+    expect(observed).toEqual([true])
+  })
+
+  test('condition scopes folded through check() on the list path also run suppressed', async () => {
+    const observed: boolean[] = []
+    let engineRef: RbacEngine
+    const scopes = new Map([
+      [
+        'open',
+        new Scope('open', 'Open', () => {
+          observed.push(engineRef.store.isInAuthz())
+          return true
+        }),
+      ],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    engineRef = engine
+    await grant(adapter, 'admin.sales.view', 'open')
+
+    await engine.runWithRequestContext(async () => {
+      await engine.filterFor(subject, 'admin.sales.view', saleResource)
+      expect(engine.store.isInAuthz()).toBe(false)
+    })
+
+    expect(observed).toEqual([true])
+  })
+
+  test('outside any request context isInAuthz() is false and filterFor still works', async () => {
+    const { adapter, engine } = makeEngine()
+    await grant(adapter, 'admin.sales.view')
+    expect(engine.store.isInAuthz()).toBe(false)
+    expect(await engine.filterFor(subject, 'admin.sales.view', saleResource)).toEqual({ kind: 'all' })
+    expect(engine.store.isInAuthz()).toBe(false)
+  })
+})
+
 describe('filterFor() one-time warnings', () => {
   let warn: ReturnType<typeof spyOn> | null = null
 

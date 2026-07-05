@@ -55,13 +55,12 @@ import { trackedDb } from '@kyrobit/rbac/drizzle'
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
 
-Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user. `db.untracked` is the raw handle.
+Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user; selects on resources that declare `list` come back filtered by the user's grant. `db.untracked` is the raw handle.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `rbac` | `Rbac` | required | Your `createRbac` instance. |
-| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked. Other tables pass through. |
-| `queryScopes` | `Record<string, QueryScopeFn>` | none | Deprecated select scoping. Use [`filterFor`](/reference/core-api#filterfor) instead. |
+| `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked; only those also declaring `list` are filtered. Other tables pass through. |
 | `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 
 ```ts
@@ -84,13 +83,11 @@ Updates and deletes are not intercepted. Call `rbac.ownership.remove()` when you
 An insert without ids in `values()` and without `.returning()` cannot be attributed. Set `strictTracking: 'error'` in development to catch these paths. Use `db.untracked` where skipping tracking is intentional.
 :::
 
-### How selects are scoped (deprecated)
+### How selects are filtered
 
-::: warning Deprecated
-`queryScopes` and `ResourceDefinition.domains` are superseded by [`filterFor`](/reference/core-api#filterfor) and will be removed in the next major. They keyed off the subject's *domain*, not the subject's *grants* — `filterFor` reads the grant itself. Move each condition builder into the scope's `filter` half; see [Filtering lists](/guide/scopes#filtering-lists). Ownership tracking is unaffected: `trackedDb` stays.
-:::
+A resource that declares `list` opts its table into [automatic filtering](/guide/scopes#automatic-filtering). `db.select()` and `db.selectDistinct()` with `.from()` on that table resolve the user's decision through [`filterForResource`](/reference/core-api#filterforresource) and apply it: `all` leaves the query untouched, `none` compiles to an impossible `WHERE`, `where` is `AND`ed with your own `.where()`.
 
-With `queryScopes` set, a select on a registered resource still works as before: the wrapper looks up the resource's `domains` entry for the user's domain, collects the scope names that also exist in `queryScopes`, OR-combines their conditions, and AND-s the result into your `where()`. No user, no matching domain, or no matching scopes: the select runs unscoped.
+Selects run unfiltered with no request subject (seeders, jobs), through `db.untracked`, and while the engine itself is deciding — scope checks, filter halves and resource resolvers see the whole table. Updates, deletes and raw SQL are never intercepted.
 
 ## Schema subpaths
 

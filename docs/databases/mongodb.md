@@ -87,7 +87,16 @@ await rbac.ownership.remove({ type: 'sale', id: saleId })
 ```
 :::
 
-The plugin's `queryScopes`/`domains` find-filtering is deprecated — filter list queries with `filterFor` instead. See [Filtering lists](/guide/scopes#filtering-lists) and the [Mongoose reference](/reference/mongoose).
+The plugin also filters reads. Hand it the resource definition from `policies.ts`, and when that definition declares `list: 'sales.view'`, `find` queries come back scoped to each user's grant:
+
+```ts
+import { resources } from '../rbac/policies.js'
+
+const saleResource = resources.find(resource => resource.type === 'sale')
+saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale', resource: saleResource })
+```
+
+See [Automatic filtering](/guide/scopes#automatic-filtering) and the [Mongoose reference](/reference/mongoose).
 
 ## Next steps
 

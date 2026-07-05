@@ -7,7 +7,7 @@ import {
 } from './errors.js'
 import { policyCacheKey } from '../cache/key.js'
 import { SubjectStore } from './subject-store.js'
-import { qualifyPolicyName, toSubjectRef } from './types.js'
+import { normalizeSentinel, qualifyPolicyName, toSubjectRef } from './types.js'
 import type {
   Awaitable,
   DecisionEvent,
@@ -21,6 +21,7 @@ import type {
 } from './types.js'
 import type { ResourceDefinition } from './policy.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from '../cache/types.js'
+import { UnknownScopeError } from '../storage/contract.js'
 import type { PolicyGrant, StorageAdapter } from '../storage/contract.js'
 import type { Scope } from './scope.js'
 
@@ -146,27 +147,35 @@ export class RbacEngine {
       return
     }
 
-    // No resolver: the scopes decide on null (row-based scopes fail closed).
-    // A resolver that finds nothing is a 404.
-    let resource: ResourceRef | null = null
-    if (options?.resource) {
-      resource = (await options.resource()) ?? null
-      if (!resource) {
-        this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeNames[0] ?? null, cacheHit, startedAt)
-        throw new ResourceNotFoundError()
+    // Resolver and scope checks run with inAuthz set: their queries must see
+    // the unfiltered table, so filtering wrappers stand down (isInAuthz).
+    const prevInAuthz = this.store.isInAuthz()
+    this.store.setInAuthz(true)
+    try {
+      // No resolver: the scopes decide on null (row-based scopes fail closed).
+      // A resolver that finds nothing is a 404.
+      let resource: ResourceRef | null = null
+      if (options?.resource) {
+        resource = (await options.resource()) ?? null
+        if (!resource) {
+          this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeNames[0] ?? null, cacheHit, startedAt)
+          throw new ResourceNotFoundError()
+        }
       }
-    }
 
-    // Scopes OR together: the first passing scope allows. An unknown scope
-    // name contributes a deny, never a bypass.
-    const ctx = { db: this.db, adapter: this.adapter }
-    for (const scopeName of scopeNames) {
-      const scope = this.scopes.get(scopeName)
-      if (!scope) continue
-      if (await scope.check(subject, resource, ctx)) {
-        this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt)
-        return
+      // Scopes OR together: the first passing scope allows. An unknown scope
+      // name contributes a deny, never a bypass.
+      const ctx = { db: this.db, adapter: this.adapter }
+      for (const scopeName of scopeNames) {
+        const scope = this.scopes.get(scopeName)
+        if (!scope) continue
+        if (await scope.check(subject, resource, ctx)) {
+          this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt)
+          return
+        }
       }
+    } finally {
+      this.store.setInAuthz(prevInAuthz)
     }
 
     const deniedScope = scopeNames[0] ?? ''
@@ -212,27 +221,35 @@ export class RbacEngine {
     const ctx = { db: this.db, adapter: this.adapter }
     const fragments: unknown[] = []
     const fragmentScopes: string[] = []
-    for (const scopeName of scopeNames) {
-      const scope = this.scopes.get(scopeName)
-      if (!scope) {
-        this.warnOnce(
-          `unknown-scope:${scopeName}`,
-          `[rbac] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
-        )
-        continue
+    // Filter building runs with inAuthz set for the same reason as authorize:
+    // a filter half querying the db must not be auto-filtered itself.
+    const prevInAuthz = this.store.isInAuthz()
+    this.store.setInAuthz(true)
+    try {
+      for (const scopeName of scopeNames) {
+        const scope = this.scopes.get(scopeName)
+        if (!scope) {
+          this.warnOnce(
+            `unknown-scope:${scopeName}`,
+            `[rbac] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
+          )
+          continue
+        }
+        // A scope without a filter half folds through check(subject, null, ctx):
+        // condition scopes decide once per request, row scopes fail closed.
+        const result = scope.filter
+          ? await scope.filter(subject, { ...ctx, resource })
+          : await scope.check(subject, null, ctx)
+        if (result === true) {
+          this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt, 'list')
+          return { kind: 'all' }
+        }
+        if (result === false) continue
+        fragments.push(result.where)
+        fragmentScopes.push(scopeName)
       }
-      // A scope without a filter half folds through check(subject, null, ctx):
-      // condition scopes decide once per request, row scopes fail closed.
-      const result = scope.filter
-        ? await scope.filter(subject, { ...ctx, resource })
-        : await scope.check(subject, null, ctx)
-      if (result === true) {
-        this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt, 'list')
-        return { kind: 'all' }
-      }
-      if (result === false) continue
-      fragments.push(result.where)
-      fragmentScopes.push(scopeName)
+    } finally {
+      this.store.setInAuthz(prevInAuthz)
     }
 
     if (fragments.length === 0) {
@@ -259,6 +276,16 @@ export class RbacEngine {
     return { kind: 'where', where: support.or(fragments) }
   }
 
+  /** Wrapper entry for automatic read filtering: resources without `list` opt out with 'all'. */
+  async filterForResource(
+    subject: Subject | null | undefined,
+    resource: ResourceDefinition,
+  ): Promise<FilterResult> {
+    if (!resource.list) return { kind: 'all' }
+    const policy = qualifyPolicyName(normalizeSentinel(subject?.domain), resource.list)
+    return this.filterFor(subject, policy, resource)
+  }
+
   // ── Mutations (invalidate + publish, always) ────────────────────────────────
 
   async assignGroup(ref: SubjectRef, groupName: string): Promise<void> {
@@ -272,6 +299,12 @@ export class RbacEngine {
   }
 
   async assignPolicy(ref: SubjectRef, policyName: QualifiedPolicyName, scope?: string | null): Promise<void> {
+    if (typeof scope === 'string') {
+      const record = (await this.adapter.listPolicies()).find(policy => policy.name === policyName)
+      if (record && !record.scopeOptions.includes(scope)) {
+        throw new UnknownScopeError(policyName, scope)
+      }
+    }
     await this.adapter.assignPolicy(ref, policyName, scope)
     await this.invalidateSubject(ref.subjectId)
   }

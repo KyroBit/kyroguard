@@ -12,10 +12,16 @@ export interface GroupDefinition {
 
 export type GroupsDefinition = Record<string, GroupDefinition>
 
+/** Structurally matches core Policy — scopeOptions members only need a name. */
+export interface SeedPolicyInfo {
+  name: string
+  scopeOptions?: readonly { name: string }[]
+}
+
 export async function seedGroups(
   adapter: StorageAdapter,
   groups: GroupsDefinition,
-  allPolicies?: { name: string }[],
+  allPolicies?: SeedPolicyInfo[],
   domain?: string,
 ): Promise<void> {
   const domainSentinel = domain ?? ''
@@ -27,9 +33,9 @@ export async function seedGroups(
       )
     }
 
-    const entries: GroupPolicyEntry[] = Object.entries(
-      normalize(def.policies, allPolicies ?? []),
-    ).map(([policyName, scope]) => ({
+    const normalized = normalize(def.policies, allPolicies ?? [])
+    validateScopes(name, normalized, allPolicies)
+    const entries: GroupPolicyEntry[] = Object.entries(normalized).map(([policyName, scope]) => ({
       policyName: qualifyPolicyName(domainSentinel, policyName),
       scope,
     }))
@@ -40,6 +46,26 @@ export async function seedGroups(
       description: def.description,
     })
     await adapter.setGroupPolicies(name, entries)
+  }
+}
+
+function validateScopes(
+  group: string,
+  policies: Record<string, string | null>,
+  allPolicies?: SeedPolicyInfo[],
+): void {
+  if (!allPolicies) return
+  const byName = new Map(allPolicies.map(policy => [policy.name, policy]))
+  for (const [policyName, scope] of Object.entries(policies)) {
+    if (scope === null) continue
+    const declared = byName.get(policyName)?.scopeOptions
+    if (!Array.isArray(declared)) continue
+    if (!declared.some(option => option.name === scope)) {
+      const known = declared.map(option => option.name).join(', ') || '(none)'
+      throw new Error(
+        `[rbac] seedGroups: group "${group}" grants policy "${policyName}" with unknown scope "${scope}" — declared scopeOptions: ${known}.`,
+      )
+    }
   }
 }
 

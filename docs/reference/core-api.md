@@ -87,7 +87,7 @@ await rbac.admin.assignPolicy({ subjectId: 'amina', domain: 'admin' }, 'admin.re
 
 Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
 
-**Throws** `UnknownPolicyError` from `assignPolicy` when the policy was never synced.
+**Throws** from `assignPolicy`: `UnknownPolicyError` when the policy was never synced, `UnknownScopeError` when the scope is not among the policy's `scopeOptions`.
 
 ## Policy
 
@@ -107,7 +107,21 @@ class Policy {
 const voidSale = new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
-See [Policies](/guide/policies).
+`scopeOptions` is enforced at grant time: `seedGroups` rejects a group entry whose scope the policy does not declare, and `assignPolicy` throws [`UnknownScopeError`](#error-classes). See [Policies](/guide/policies).
+
+## ResourceDefinition
+
+```ts
+interface ResourceDefinition {
+  type: string                     // resource name in scoped checks and the ownership store
+  policies: Policy[]
+  table?: unknown                  // Drizzle table or Mongoose model — read by trackedDb / the plugin
+  fields?: Record<string, unknown> // abstract field name → native column, for resource-generic filters
+  list?: string                    // policy whose grant filters reads — turns on automatic filtering
+}
+```
+
+`list` is an unqualified policy name, like the names in `requirePolicy` — the request's domain qualifies it. Declaring it turns on [automatic filtering](/guide/scopes#automatic-filtering): the ORM integrations pass every read of this resource through [`filterForResource`](#filterforresource). Absent, reads run unfiltered and lists go through [`filterFor`](#filterfor) by hand.
 
 ## Scope
 
@@ -167,6 +181,14 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 
 `filterFor` throws `UnauthenticatedError` for a missing subject — nothing else. A grant with several scopes ORs their fragments, and any scope answering `true` short-circuits to `all`. Worked examples in [Scopes](/guide/scopes#filtering-lists).
 
+## filterForResource()
+
+```ts
+rbac.engine.filterForResource(subject, resource: ResourceDefinition): Promise<FilterResult>
+```
+
+The entry behind [automatic filtering](/guide/scopes#automatic-filtering) — `trackedDb`, the Prisma extension and the Mongoose plugin call it on every read of a registered resource. A resource without `list` answers `{ kind: 'all' }`; one with it qualifies `resource.list` with the subject's domain and delegates to `filterFor`.
+
 ## GroupDefinition
 
 ```ts
@@ -207,7 +229,7 @@ All guards throw subclasses of `RbacError`. Each carries `statusCode` and a stab
 | `ResourceNotFoundError` | 404 | `RBAC_RESOURCE_NOT_FOUND` |
 | `MisconfiguredError` | 500 | `RBAC_MISCONFIGURED` |
 
-`UnknownPolicyError` is not an `RbacError`. Adapters throw it when `assignPolicy` targets an unsynced policy. It signals a setup problem, not a request denial.
+`UnknownPolicyError` and `UnknownScopeError` are not `RbacError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
 
 ## Other exports
 

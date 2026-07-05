@@ -107,7 +107,13 @@ await rbac.ownership.remove({ type: 'sale', id: sale.id })
 
 ## Filtering lists
 
-`findMany` is never filtered for you — ask the grant which rows qualify with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
+Declare `list` on the resource in `createRbac` and the extension filters reads for you — `findMany`, `findFirst`, `findUnique` and `count` on the registered model come back scoped to each user's grant ([Automatic filtering](/guide/scopes#automatic-filtering)):
+
+```ts
+resources: [{ type: 'sale', list: 'sales.view', policies: [/* ... */] }]
+```
+
+For raw SQL, aggregations, or a query the extension does not see, ask the grant yourself with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
 
 ```ts
 const f = await staff.filterFor(req, 'sales.view')
