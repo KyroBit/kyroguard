@@ -1,6 +1,6 @@
 # Groups
 
-Groups are job titles. Define them in one file:
+Groups are job titles — what other systems call roles. Define them in one file:
 
 ```ts
 // src/rbac/groups.ts

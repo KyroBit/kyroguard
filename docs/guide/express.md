@@ -40,9 +40,7 @@ app.listen(3000)
 Register `context()` before any guard and `errorHandler()` after your routes. In the wrong order, guards fail with a 500 instead of denying properly.
 :::
 
-`resources` holds your policy definitions. See [Policies](/guide/policies). `getSubject` returns the logged-in user, or `null`. See [Protecting routes](/guide/protecting-routes).
-
-`staff` is a domain with no name — the single-app form. Named domains like `admin` and `branch` are covered in [Multi-tenancy](/guide/multi-tenancy).
+`resources` holds your policy definitions ([Policies](/guide/policies)). `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `staff` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -55,7 +53,7 @@ A denied guard never writes the response itself. It passes the error to `errorHa
 }
 ```
 
-That is the 403 for a missing policy. No logged-in user gets a 401 with code `RBAC_UNAUTHENTICATED`. Every code is listed in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
+That is the 403 for a missing policy. The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
 
 To change the response shape, pass `formatError`:
 
@@ -78,3 +76,14 @@ app.use('/sales', sales)
 ```
 
 Guards are plain middleware, so they mount on any router. Keep `context()` and `errorHandler()` at the app level.
+
+## subjectHook
+
+```ts
+const sales = express.Router()
+sales.use(staff.subjectHook())
+sales.post('/', createSale)
+app.use('/sales', sales)
+```
+
+`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which cashier created the row. See [Ownership](/guide/ownership). Mount it on specific routers, not app-wide.

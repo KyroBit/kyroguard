@@ -6,79 +6,20 @@
 await rbac.ownership.isOwner(user.id, { type: 'sale', id: '42' })
 ```
 
-Each record says: this user created this row. When a cashier records a sale, the sale is theirs. That is what `Scope.owned()` checks. The ORM integrations write these records for you on insert. This page shows how to turn that on, and what to do when it cannot see a write.
+Each record says: this user created this row. When a cashier records a sale, the sale is theirs.
 
 ## Automatic tracking
 
-### Drizzle
+The ORM integrations write ownership records on insert, attributed to the logged-in user. Wiring lives in your database page:
 
-Wrap your database with `trackedDb`. Set `table` on each resource so the tracker knows which tables to watch:
+- [Drizzle](/databases/drizzle#_5-track-ownership-optional) — wrap your db with `trackedDb`.
+- [Prisma](/databases/prisma#track-ownership-with-rbacprismaextension) — extend your client with `rbacPrismaExtension`.
+- [MongoDB](/databases/mongodb#track-ownership-with-rbacmongooseplugin) — add `rbacMongoosePlugin` to each schema.
 
-```ts
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { trackedDb } from '@kyrobit/rbac/drizzle'
-import { rbac } from './rbac/instance.js' // your createRbac() instance
-import { resources } from './rbac/policies.js' // the same list createRbac got
-
-const raw = drizzle(process.env.DATABASE_URL!)
-export const db = trackedDb(raw, { rbac, resources })
-```
-
-In `policies.ts`, the `sale` resource carries its table:
-
-```ts
-{ type: 'sale', table: sales, policies: [/* ... */] }
-```
-
-Inserts into a resource table now record the logged-in user as owner. The logged-in user is whoever your domain's `getSubject` returned. Add `.returning()` so the tracker can see generated ids:
-
-```ts
-await db.insert(sales).values({ total: 19.99 }).returning()
-```
-
-Use `db.untracked` for writes you do not want attributed.
-
-### Prisma
-
-Extend your client. `model` is the client property name, so `model StoreSale` becomes `'storeSale'`:
-
-```ts
-import { rbacPrismaExtension } from '@kyrobit/rbac/prisma'
-
-export const db = prisma.$extends(
-  rbacPrismaExtension({
-    rbac,
-    resources: [{ type: 'sale', model: 'sale' }],
-  }),
-)
-```
-
-`create`, `createMany` and `upsert` on registered models record ownership.
-
-### Mongoose
-
-Add the plugin to each resource schema, before compiling the model:
-
-```ts
-import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
-
-saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale' })
-const Sale = mongoose.model('Sale', saleSchema)
-```
-
-`save` and `insertMany` record ownership. Deleting a document through `deleteOne` or `findOneAndDelete` removes its ownership records too.
-
-Tracking is half of what these hooks do. The same tracked db, extension and plugin also filter reads — by the grant of whichever policy guards the route — see [Automatic filtering](/guide/scopes#automatic-filtering).
+The same integrations also filter reads on guarded routes — see [Automatic filtering](/guide/scopes#automatic-filtering).
 
 ::: warning What is not tracked
-Automatic tracking hooks into the ORM. Writes that bypass those hooks record nothing:
-
-- Raw SQL and raw collection operations, on every backend.
-- Drizzle: inserts with no ids in `values()` and no `.returning()`.
-- Prisma: `createMany` rows with database-generated ids, nested writes through relations, `updateMany`.
-- Mongoose: `updateMany`, `deleteMany`, `bulkWrite`.
-
-For those paths, call `rbac.ownership.record()` yourself.
+Tracking hooks into the ORM. Raw SQL, bulk operations and other writes that bypass the hooks record nothing — each database page lists its exact gaps. On those paths, call `rbac.ownership.record()` yourself.
 :::
 
 ## The manual API
@@ -102,6 +43,8 @@ Every record carries a relation. `rbac.ownership.record()` writes relation `'own
 
 ## The access API
 
+Ownership covers rows a user created. For rows someone *picks* — share this report, assign this ticket — grant access directly:
+
 ```ts
 // Share a report with Amina:
 await rbac.access.grant(amina.id, { type: 'report', id: '7' })
@@ -113,9 +56,18 @@ await rbac.access.revoke(amina.id, { type: 'report', id: '7' })
 const entries = await rbac.access.list({ type: 'report', id: '7' })
 ```
 
-`grant` takes options: `relation` for a custom relation name, `domain` and `tenantId` to place the entry. `revoke` without a relation removes that user's entries under every relation; pass one to remove just it. Granting twice is safe, like recording.
+`Scope.granted()` is the built-in scope that turns these grants into access:
 
-[Chosen records](/guide/scopes#chosen-records) shows the scope that turns these grants into access.
+```ts
+new Policy('reports.view', { scopeOptions: [Scope.granted()] })
+
+// groups.ts
+analyst: { policies: { 'reports.view': 'granted' } },
+```
+
+Amina now sees report 7 — at the guard and in her lists — until you revoke.
+
+`grant` takes options: `relation` for a custom relation name, `domain` and `tenantId` to place the entry. `revoke` without a relation removes that user's entries under every relation; pass one to remove just it. Granting twice is safe, like recording.
 
 ## Background jobs
 

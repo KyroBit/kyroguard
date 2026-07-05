@@ -34,9 +34,7 @@ await app.listen({ port: 3000 })
 
 Three steps. Register `rbacFastify(rbac)` once. Create a domain with `app.rbac.domain()`. Guard routes with `requirePolicy` in `preHandler`.
 
-`resources` holds your policy definitions. See [Policies](/guide/policies). The adapter connects your database. Swap in [Prisma](/databases/prisma) or [MongoDB](/databases/mongodb) the same way. `getSubject` returns the logged-in user, or `null`. See [Protecting routes](/guide/protecting-routes).
-
-`staff` is a domain with no name — the single-app form. Named domains like `admin` and `branch` are covered in [Multi-tenancy](/guide/multi-tenancy).
+`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `staff` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -51,7 +49,7 @@ Guards throw. Fastify turns the thrown error into a JSON response. Your error ha
 }
 ```
 
-No logged-in user gets a 401 with code `RBAC_UNAUTHENTICATED`. Every code is listed in [Errors](/reference/errors).
+The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors).
 
 Because guards throw, `setErrorHandler` sees the error like any other. `error instanceof PolicyDeniedError` works there. Import `PolicyDeniedError` from `@kyrobit/rbac`.
 

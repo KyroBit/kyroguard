@@ -52,13 +52,7 @@ Six words cover everything this library does.
 - **Scope** — a condition on a permission: a cashier voids only their own sales, only under 5,000, only during opening hours. See [Scopes](/guide/scopes).
 - **Subject** — the logged-in staff member, as this library sees it. See [Protecting routes](/guide/protecting-routes).
 
-## How a request flows
-
-1. A request hits a guarded route.
-2. The guard calls your `getSubject` to resolve the staff member. No one means 401.
-3. The engine looks up their policies. Missing policy means 403.
-4. If the policy is scoped, the scope checks the target row. A failed check means 403.
-5. Your handler runs.
+Every guarded request either runs your handler or is denied — [Protecting routes](/guide/protecting-routes) walks through each outcome.
 
 ## Next
 

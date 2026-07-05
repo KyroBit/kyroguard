@@ -66,18 +66,4 @@ await staff.assignPolicy('u1', 'sales.void', { scope: 'owned' })
 
 ## Testing your own adapter
 
-If you wrote a storage adapter, do not write your own tests for it. Run the contract suite. It runs dozens of cases against your adapter. It passes exactly when the adapter behaves like the built-in ones:
-
-```ts
-import { describe, expect, it } from 'vitest'
-import { runStorageAdapterContractSuite } from '@kyrobit/rbac/testing'
-import { makeMyAdapter } from './my-adapter'
-
-runStorageAdapterContractSuite({
-  name: 'my-adapter',
-  makeAdapter: async () => ({ adapter: await makeMyAdapter() }),
-  test: { describe, it, expect },
-})
-```
-
-See [Custom adapters](/guide/custom-adapters) for the interface itself.
+If you wrote a storage adapter, run the contract suite instead of writing your own tests — see [Custom adapters](/guide/custom-adapters#implement-it-then-prove-it).

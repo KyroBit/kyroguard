@@ -73,4 +73,4 @@ policies:     7
 groups:       2
 ```
 
-Zero policies after a deploy means `rbac sync` has not run. See [Syncing policies](/guide/sync).
+Zero policies after a deploy means `rbac sync` has not run. See [Sync](/guide/sync).

@@ -27,7 +27,7 @@ app.post('/sales', staff.requirePolicy('sales.create'), createSale)
 
 The user must hold the named policy. Otherwise the request is denied. Viewing sales and ringing them up are separate policies.
 
-`staff` here is a domain with no name — the single-app form. Policies stay unprefixed. Named domains add their prefix. See [Multi-tenancy](/guide/multi-tenancy).
+`staff` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Multi-tenancy](/guide/multi-tenancy).
 
 ## getSubject
 
@@ -61,7 +61,7 @@ The exact response bodies are shown in [Fastify](/guide/fastify) and [Express](/
 
 ## Scoped grants need a resource resolver
 
-A grant is one policy given to one user. A grant can carry a scope. A cashier holds `sales.void` scoped to `owned`. A manager holds it unscoped. A cashier can void their own sale. A manager can void any sale. The guard then needs to know which sale the request targets:
+A grant can carry a scope: a cashier holds `sales.void` scoped to `owned`; a manager holds it unscoped ([Scopes](/guide/scopes)). A scoped grant checks the target row, so the guard needs to know which sale the request targets:
 
 ::: code-group
 
@@ -87,4 +87,4 @@ app.post(
 
 The resolver returns the target's `type` and `id`. Return `null` when the sale does not exist. The guard then responds 404.
 
-The manager's unscoped grant skips the check. The cashier's scoped grant is denied if the route has no resolver. So add a resolver to every route where a scoped grant can land. See [Scopes](/guide/scopes) and [Assigning access](/guide/assigning-access).
+The manager's unscoped grant skips the check. The cashier's scoped grant is denied if the route has no resolver. So add a resolver to every route where a scoped grant can land.

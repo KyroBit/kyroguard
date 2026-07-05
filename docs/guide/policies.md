@@ -73,9 +73,9 @@ import { Scope } from '@kyrobit/rbac'
 new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
 ```
 
-`scopeOptions` lists the conditions this policy may be granted with. A condition can be about the row — `Scope.owned()` lets a cashier void only their own sales — or about anything else: only during opening hours, only under an amount. A grant without a scope has no condition: a manager voids any sale ([Scopes](/guide/scopes)).
+`scopeOptions` lists the conditions this policy may be granted with. `Scope.owned()` lets a cashier void only their own sales ([Scopes](/guide/scopes)).
 
-The list is also enforced. Granting the policy with a scope it does not declare fails: `seedGroups` rejects the group at sync, and `assignPolicy` throws `UnknownScopeError` ([Errors](/reference/errors#unknownscopeerror)).
+The list is enforced. Granting a scope the policy does not declare fails, at sync and at assignment ([Errors](/reference/errors#unknownscopeerror)).
 
 ## A complete policies.ts
 
@@ -107,9 +107,7 @@ export const resources: ResourceDefinition[] = [
 
 Export the array as `resources`. Point [`rbac.config.ts`](/reference/configuration) at this file. Run `npx rbac sync` to push it to the database.
 
-`type` names the resource for scoped checks and ownership. `table` is optional. Set it on `sale` to record who rang up each sale ([Ownership](/guide/ownership)). That record is what lets a cashier void only their own sales.
-
-Reads need no declaration. A route's guard filters them by the policy it checked: behind `requirePolicy('sales.view')`, a cashier's plain list query returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)).
+`type` names the resource for scoped checks and ownership. `table` is optional — set it to record who created each row ([Ownership](/guide/ownership)). Reads on guarded routes are then filtered automatically ([Scopes](/guide/scopes#automatic-filtering)).
 
 ## Next steps
 

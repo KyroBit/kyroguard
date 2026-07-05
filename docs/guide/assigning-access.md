@@ -6,7 +6,7 @@ Hiring a cashier for branch-1 is one call:
 await branch.assignGroup(user.id, 'cashier', { tenantId: 'branch-1' })
 ```
 
-Groups are job titles. This makes the user a cashier in branch-1, on the `branch` domain. Most apps only need `assignGroup` and `assignPolicy` on a domain.
+This makes the user a cashier in branch-1, on the `branch` domain. Most apps only need `assignGroup` and `assignPolicy` on a domain.
 
 ```ts
 // a single policy instead of a job title
@@ -19,7 +19,7 @@ await branch.assignPolicy(user.id, 'sales.void', { scope: 'owned' })
 await branch.assignGroup(user.id, 'manager', { tenantId: 'branch-1' })
 ```
 
-Policy names stay short. The domain adds its own prefix. Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Syncing policies](/guide/sync).
+Policy names stay short — the domain adds its prefix ([Multi-tenancy](/guide/multi-tenancy)). Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Sync](/guide/sync).
 
 Removal mirrors assignment. Someone leaves, you take the job title back:
 

@@ -107,19 +107,7 @@ await rbac.ownership.remove({ type: 'sale', id: sale.id })
 
 ## Filtering lists
 
-Reads follow the route's guard. Behind `requirePolicy('sales.view')`, the extension filters `findMany`, `findFirst`, `findUnique` and `count` on the registered model by that policy's grant — a cashier's `db.sale.findMany()` returns only their own sales ([Automatic filtering](/guide/scopes#automatic-filtering)). Unguarded reads are not auto-filtered.
-
-For raw SQL, aggregations, an unguarded read, or a query the extension does not see, ask the grant yourself with [`filterFor`](/reference/core-api#filterfor) and `AND` the answer into your own query:
-
-```ts
-const f = await staff.filterFor(req, 'sales.view')
-if (f.kind === 'none') return [] // nothing qualifies — skip the query
-const sales = await db.sale.findMany({
-  where: f.kind === 'all' ? undefined : (f.where as Prisma.SaleWhereInput),
-})
-```
-
-Built-in scopes answer with an ID-list fragment (`{ id: { in: [...] } }`) — see [List filters](/reference/prisma#list-filters) for the cap and the `idField` registration, and [Filtering lists](/guide/scopes#filtering-lists) for the three answer kinds.
+The extension also filters reads. On a guarded route, a cashier's `db.sale.findMany()` returns only their own sales; unguarded reads are not auto-filtered. Behavior and the manual `filterFor` path: [Filtering lists](/guide/scopes#filtering-lists). Prisma specifics — filtered calls, the ID-list fragment and its cap: [Prisma reference](/reference/prisma#what-gets-filtered).
 
 ## Next steps
 

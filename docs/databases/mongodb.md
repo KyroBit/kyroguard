@@ -87,7 +87,7 @@ await rbac.ownership.remove({ type: 'sale', id: saleId })
 ```
 :::
 
-The plugin also filters reads. On a route guarded by `requirePolicy`, `find` queries on the model come back scoped to that policy's grant — behind `requirePolicy('sales.view')`, a cashier's `Sale.find()` returns only their own sales. Unguarded reads run unfiltered. See [Automatic filtering](/guide/scopes#automatic-filtering) and the [Mongoose reference](/reference/mongoose).
+The plugin also filters reads: on a guarded route, a cashier's `Sale.find()` returns only their own sales. Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Mongoose specifics: [reference](/reference/mongoose).
 
 ## Next steps
 

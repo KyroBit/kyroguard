@@ -29,47 +29,19 @@ On MySQL and SQLite the detected dialect reads `mysql` or `sqlite`. The file lis
 
 ## 2. Migrate
 
-Add the rbac schema file to your drizzle-kit config:
+Add the rbac schema file to your drizzle-kit config. Your dialect and credentials stay as they are:
 
-::: code-group
-
-```ts [PostgreSQL]
+```ts
 // drizzle.config.ts
 import { defineConfig } from 'drizzle-kit'
 
 export default defineConfig({
-  dialect: 'postgresql',
+  dialect: 'postgresql', // or 'mysql' / 'sqlite'
   schema: ['./src/db/schema.ts', './src/db/rbac-schema.ts'],
   out: './drizzle',
   dbCredentials: { url: process.env.DATABASE_URL! },
 })
 ```
-
-```ts [MySQL]
-// drizzle.config.ts
-import { defineConfig } from 'drizzle-kit'
-
-export default defineConfig({
-  dialect: 'mysql',
-  schema: ['./src/db/schema.ts', './src/db/rbac-schema.ts'],
-  out: './drizzle',
-  dbCredentials: { url: process.env.DATABASE_URL! },
-})
-```
-
-```ts [SQLite]
-// drizzle.config.ts
-import { defineConfig } from 'drizzle-kit'
-
-export default defineConfig({
-  dialect: 'sqlite',
-  schema: ['./src/db/schema.ts', './src/db/rbac-schema.ts'],
-  out: './drizzle',
-  dbCredentials: { url: './app.db' },
-})
-```
-
-:::
 
 Then generate and run the migration:
 
@@ -148,7 +120,7 @@ Three more things to know:
 
 - Writes with no logged-in user (seeders, jobs, scripts) record nothing.
 - `db.untracked` is the raw handle when you want a plain insert.
-- On a route guarded by `requirePolicy`, selects on `sales` come back filtered by that policy's grant — see [Automatic filtering](/guide/scopes#automatic-filtering) and the [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
+- On a guarded route, selects on `sales` come back filtered by the guard's grant — [Automatic filtering](/guide/scopes#automatic-filtering), [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
 
 ## Next steps
 

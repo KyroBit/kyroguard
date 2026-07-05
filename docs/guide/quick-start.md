@@ -62,7 +62,7 @@ await app.listen({ port: 3000 })
 console.log('listening on http://localhost:3000')
 ```
 
-In a real project the policies and groups live in files. You write `src/rbac/policies.ts` and `src/rbac/groups.ts`, and `npx rbac sync` loads both. This file does the same thing in code.
+In a real project the definitions live in files and `npx rbac sync` loads them ([Sync](/guide/sync)).
 
 Run it. `npx` downloads `tsx` on first use:
 

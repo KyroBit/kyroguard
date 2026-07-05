@@ -16,17 +16,13 @@ One run does five things:
 
 1. Creates your policies and updates the ones that changed.
 2. Deletes policies you removed from code.
-3. Adds declared dependencies to every group that needs them.
+3. Adds declared dependencies to every group that needs them ([how scopes carry over](/guide/groups#dependencies-are-filled-in)).
 4. Seeds your groups from `groups.ts`.
 5. Writes `rbac.d.ts` so policy names autocomplete.
 
 Your code is the source of truth. The database follows it. Every domain in [`rbac.config.ts`](/reference/configuration) is synced in one run.
 
 No files? `createRbac({ policies, groups })` plus `await rbac.sync()` runs the same pipeline.
-
-## Dependencies and scopes
-
-Step 3 fills missing dependencies, like `sales.view` for `sales.void`. A filled-in dependency inherits the scope of the grant that pulled it in. Grant `sales.void` restricted to `'owned'` and `sales.view` arrives restricted to `'owned'` too — never wider. An unrestricted grant that needs the same dependency widens it to unrestricted. Two different named scopes fall back to unrestricted with a sync warning — define the entry explicitly to control it. See [Groups](/guide/groups#dependencies-are-filled-in).
 
 ## When to run it
 
