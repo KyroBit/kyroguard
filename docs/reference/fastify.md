@@ -25,14 +25,14 @@ import { rbac } from './rbac.js'
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-const staff = app.rbac.domain({
+const teachers = app.rbac.domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
-    return user ? { id: user.id, tenant_id: user.branchId } : null
+    return user ? { id: user.id, tenant_id: user.schoolId } : null
   },
 })
 
-app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => {
+app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async () => {
   return { ok: true }
 })
 ```
@@ -41,7 +41,7 @@ app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () =>
 
 | Member | Description |
 | --- | --- |
-| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `branch`. |
+| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `teachers`. |
 | `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `setSubject(subject)` | Set the active user directly (custom auth outside a domain). |
 | `addExtra(extra)` | Override the next tracked insert's ownership row. Applies once. See [ownership](/reference/core-api#rbac). |
@@ -50,7 +50,7 @@ app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () =>
 ## Domain instance
 
 ```ts
-const staff = app.rbac.domain({ getSubject })          // single-area app
+const teachers = app.rbac.domain({ getSubject })       // single-area app
 const admin = app.rbac.domain('admin', { getSubject }) // multi-area app
 ```
 
@@ -59,10 +59,10 @@ const admin = app.rbac.domain('admin', { getSubject }) // multi-area app
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
-| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
+| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). `options.resource(req)` resolves the target row for scoped grants; when omitted, the guard defaults to the policy's resource type plus the route's `:id` param when both exist. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Register per scope, never app-wide. |
-| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one store, like `branch-1`. |
+| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
 | `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |

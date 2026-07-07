@@ -2,7 +2,7 @@
 
 A guarded API in five minutes. No database needed. The in-memory adapter holds everything.
 
-The example: the staff API of a hardware store.
+The example: the grades API of a school.
 
 ## 1. Install
 
@@ -22,12 +22,12 @@ import { createRbac, Policy } from '@kyrobit/rbac'
 import { rbacFastify } from '@kyrobit/rbac/fastify'
 import { memoryAdapter } from '@kyrobit/rbac/testing'
 
-// What staff can do
-const policies = [new Policy('sales.view'), new Policy('sales.create')]
+// What teachers can do
+const policies = [new Policy('grades.view'), new Policy('grades.enter')]
 
 // One job title
 const groups = {
-  cashier: { label: 'Cashier', policies: ['sales.view', 'sales.create'] },
+  teacher: { label: 'Teacher', policies: ['grades.view', 'grades.enter'] },
 }
 
 const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
@@ -38,24 +38,24 @@ await rbac.sync()
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-// Demo auth: the staff id comes from a header
-const staff = app.rbac.domain({
+// Demo auth: the user id comes from a header
+const teachers = app.rbac.domain({
   getSubject: async req => {
     const id = req.headers['x-user-id']
     return typeof id === 'string' ? { id } : null
   },
 })
 
-// The register screen: staff need sales.view
-app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => [
-  { id: 'sale-1', item: 'claw hammer', total: 12.5 },
+// The gradebook screen: teachers need grades.view
+app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async () => [
+  { id: 'grade-1', student: 'Sara', subject: 'Math', score: 87 },
 ])
 
 // Hiring endpoint (unguarded, for the demo)
 app.post('/hire/:userId', async req => {
   const { userId } = req.params as { userId: string }
-  await staff.assignGroup(userId, 'cashier')
-  return { userId, group: 'cashier' }
+  await teachers.assignGroup(userId, 'teacher')
+  return { userId, group: 'teacher' }
 })
 
 await app.listen({ port: 3000 })
@@ -72,10 +72,10 @@ npx tsx server.ts
 
 ## 3. Get denied
 
-No staff member on the request:
+No user on the request:
 
 ```sh
-curl -i localhost:3000/sales
+curl -i localhost:3000/grades
 ```
 
 ```
@@ -86,7 +86,7 @@ HTTP/1.1 401 Unauthorized
 Someone not hired yet:
 
 ```sh
-curl -i localhost:3000/sales -H 'x-user-id: u1'
+curl -i localhost:3000/grades -H 'x-user-id: u1'
 ```
 
 ```
@@ -101,20 +101,20 @@ curl -X POST localhost:3000/hire/u1
 ```
 
 ```
-{"userId":"u1","group":"cashier"}
+{"userId":"u1","group":"teacher"}
 ```
 
 ## 5. Get allowed
 
 ```sh
-curl localhost:3000/sales -H 'x-user-id: u1'
+curl localhost:3000/grades -H 'x-user-id: u1'
 ```
 
 ```
-[{"id":"sale-1","item":"claw hammer","total":12.5}]
+[{"id":"grade-1","student":"Sara","subject":"Math","score":87}]
 ```
 
-That is the whole loop. Define policies, guard routes, hire staff into groups. The grant took effect on the next request. No restart, no token refresh.
+That is the whole loop. Define policies, guard routes, hire teachers into groups. The grant took effect on the next request. No restart, no token refresh.
 
 ## Next
 

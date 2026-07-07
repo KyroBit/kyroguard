@@ -7,8 +7,26 @@ import type { RbacError } from '../core/errors.js'
 import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInput } from '../core/types.js'
 
 export interface GuardOptions<TReq> {
-  /** Resolves the row-level target; required when the resolved grant is scoped. */
+  /** Resolves the row-level target for scoped grants; when omitted, defaults to the policy's owning resource type + the route's `params.id` when both exist. */
   resource?: (req: TReq) => Awaitable<ResourceRef | null | undefined>
+}
+
+/**
+ * Must return undefined — never a resolver that yields null — when the target
+ * or id is missing: a resolver resolving null is a 404, while no resolver
+ * lets the scopes decide on null (row scopes fail closed).
+ */
+export function defaultResourceResolver(
+  target: { type: string } | undefined,
+  params: unknown,
+): (() => ResourceRef) | undefined {
+  if (!target) return undefined
+  const id =
+    typeof params === 'object' && params !== null
+      ? (params as Record<string, unknown>).id
+      : undefined
+  if (typeof id !== 'string' || id === '') return undefined
+  return () => ({ type: target.type, id })
 }
 
 export interface DomainOptions<TReq> {

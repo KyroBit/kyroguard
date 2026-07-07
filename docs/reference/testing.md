@@ -18,7 +18,7 @@ import { memoryAdapter } from '@kyrobit/rbac/testing'
 
 const rbac = createRbac({
   adapter: memoryAdapter(),
-  policies: [new Policy('sales.view')],
+  policies: [new Policy('grades.view')],
 })
 await rbac.sync()
 ```

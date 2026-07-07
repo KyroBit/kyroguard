@@ -4,6 +4,7 @@ import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Rbac } from '../../index.js'
+import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
 
 export interface ExpressRbacOptions extends ErrorFormatter<Request> {}
@@ -99,11 +100,11 @@ function createDomain<P extends string>(
       const filterTarget = rbac.resourceForPolicy.get(policy)
       return guard(async req => {
         const subject = await resolveSubject(req)
-        await rbac.engine.authorize(
-          subject,
-          qualified,
-          resource ? { resource: () => resource(req) } : undefined,
-        )
+        await rbac.engine.authorize(subject, qualified, {
+          resource: resource
+            ? () => resource(req)
+            : defaultResourceResolver(filterTarget, req.params),
+        })
         if (filterTarget) await rbac.engine.storeFilterFor(subject, qualified, filterTarget)
       })
     },

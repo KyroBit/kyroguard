@@ -39,8 +39,8 @@ The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filte
 
 ```sql
 EXISTS (SELECT 1 FROM rbac_resource_owners ro
-        WHERE ro.resource_type = 'sale'
-          AND ro.resource_id = CAST(sales.id AS text)
+        WHERE ro.resource_type = 'grade'
+          AND ro.resource_id = CAST(grades.id AS text)
           AND ro.owner_id = 'user-id'
           AND ro.relation = 'owner')
 ```

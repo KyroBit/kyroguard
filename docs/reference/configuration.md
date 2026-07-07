@@ -18,7 +18,7 @@ export default defineConfig({
   // One entry per domain. Single-app setups use one entry with no name.
   domains: [
     {
-      name: 'branch', // the in-store staff app
+      name: 'teachers', // the teacher portal
       policies: './src/rbac/policies.ts',
       groups: './src/rbac/groups.ts',
     },
@@ -59,11 +59,12 @@ import type { ResourceDefinition } from '@kyrobit/rbac'
 
 export const resources: ResourceDefinition[] = [
   {
-    type: 'sale',
+    type: 'grade',
     policies: [
-      new Policy('sales.view'),
-      new Policy('sales.create', { dependsOn: ['sales.view'] }),
-      new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
+      new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+      new Policy('grades.enter', { dependsOn: ['grades.view'] }),
+      new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned(), Scope.inTenant()] }),
+      new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [Scope.inTenant()] }),
     ],
   },
 ]
@@ -74,15 +75,18 @@ export const resources: ResourceDefinition[] = [
 import type { GroupsDefinition } from '@kyrobit/rbac'
 
 export const groups: GroupsDefinition = {
-  cashier: {
-    label: 'Cashier',
-    policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
+  teacher: {
+    label: 'Teacher',
+    policies: { 'grades.view': 'in-tenant', 'grades.enter': 'all', 'grades.update': 'owned' },
   },
-  manager: { label: 'Manager', policies: 'all' },
+  coordinator: {
+    label: 'Coordinator',
+    policies: { 'grades.view': 'in-tenant', 'grades.update': 'in-tenant', 'grades.delete': 'in-tenant' },
+  },
 }
 ```
 
-Groups are job titles. A cashier voids only their own sales. A manager voids any sale. See [Policies](/guide/policies) and [Groups](/guide/groups) for what goes in these files.
+Groups are job titles. A teacher updates only the grades they entered. The coordinator updates any grade in the school. See [Policies](/guide/policies) and [Groups](/guide/groups) for what goes in these files.
 
 ## Keep driver imports inside the factory
 

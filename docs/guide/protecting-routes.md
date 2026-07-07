@@ -6,45 +6,45 @@
 
 ```ts [Fastify]
 app.get(
-  '/sales',
-  { preHandler: staff.requirePolicy('sales.view') },
-  listSales,
+  '/grades',
+  { preHandler: teachers.requirePolicy('grades.view') },
+  listGrades,
 )
 
 app.post(
-  '/sales',
-  { preHandler: staff.requirePolicy('sales.create') },
-  createSale,
+  '/grades',
+  { preHandler: teachers.requirePolicy('grades.enter') },
+  enterGrade,
 )
 ```
 
 ```ts [Express]
-app.get('/sales', staff.requirePolicy('sales.view'), listSales)
-app.post('/sales', staff.requirePolicy('sales.create'), createSale)
+app.get('/grades', teachers.requirePolicy('grades.view'), listGrades)
+app.post('/grades', teachers.requirePolicy('grades.enter'), enterGrade)
 ```
 
 :::
 
-The user must hold the named policy. Otherwise the request is denied. Viewing sales and ringing them up are separate policies.
+The user must hold the named policy. Otherwise the request is denied. Viewing grades and entering them are separate policies.
 
-`staff` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Multi-tenancy](/guide/multi-tenancy).
+`teachers` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Multi-tenancy](/guide/multi-tenancy).
 
 ## getSubject
 
-Return the logged-in staff member, or `null`:
+Return the logged-in user, or `null`:
 
 ```ts
-const staff = app.rbac.domain({
+const teachers = app.rbac.domain({
   getSubject: async req => {
     const token = req.headers.authorization?.slice('Bearer '.length)
     if (!token) return null
     const payload = await verifyJwt(token)
-    return payload ? { id: payload.sub, tenant_id: payload.storeId } : null
+    return payload ? { id: payload.sub, tenant_id: payload.schoolId } : null
   },
 })
 ```
 
-`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the store. See [Multi-tenancy](/guide/multi-tenancy).
+`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the school. See [Multi-tenancy](/guide/multi-tenancy).
 
 ## The four outcomes
 
@@ -59,32 +59,39 @@ Every guarded request ends one of four ways:
 
 The exact response bodies are shown in [Fastify](/guide/fastify) and [Express](/guide/express).
 
-## Scoped grants need a resource resolver
+## Scoped grants check the target row
 
-A grant can carry a scope: a cashier holds `sales.void` scoped to `owned`; a manager holds it unscoped ([Scopes](/guide/scopes)). A scoped grant checks the target row, so the guard needs to know which sale the request targets:
+A grant can carry a scope: a teacher holds `grades.update` scoped to `owned`; the coordinator holds it scoped to `in-tenant` ([Scopes](/guide/scopes)). A scoped grant checks the row the request targets. On a route with an `:id` param, the guard finds that row by itself:
 
 ::: code-group
 
 ```ts [Fastify]
-app.post('/sales/:id/void', {
-  preHandler: staff.requirePolicy('sales.void', {
-    resource: req => ({ type: 'sale', id: (req.params as { id: string }).id }),
-  }),
-}, voidSale)
+app.patch('/grades/:id', {
+  preHandler: teachers.requirePolicy('grades.update'),
+}, updateGrade)
+
+app.delete('/grades/:id', {
+  preHandler: teachers.requirePolicy('grades.delete'),
+}, deleteGrade)
 ```
 
 ```ts [Express]
-app.post(
-  '/sales/:id/void',
-  staff.requirePolicy('sales.void', {
-    resource: req => ({ type: 'sale', id: req.params.id }),
-  }),
-  voidSale,
-)
+app.patch('/grades/:id', teachers.requirePolicy('grades.update'), updateGrade)
+app.delete('/grades/:id', teachers.requirePolicy('grades.delete'), deleteGrade)
 ```
 
 :::
 
-The resolver returns the target's `type` and `id`. Return `null` when the sale does not exist. The guard then responds 404.
+The guard pairs the policy's resource type — `grade` — with `req.params.id`. Nothing to configure. A teacher updates only the grades they entered. The coordinator updates any grade in the school. An `'all'` grant skips the row check entirely.
 
-The manager's unscoped grant skips the check. The cashier's scoped grant is denied if the route has no resolver. So add a resolver to every route where a scoped grant can land.
+A route whose param is not `:id` needs a custom resolver:
+
+```ts
+teachers.requirePolicy('grades.update', {
+  resource: req => ({ type: 'grade', id: (req.params as { gradeId: string }).gradeId }),
+})
+```
+
+Return `null` when the grade does not exist — the guard responds 404. Details in the [Fastify](/reference/fastify#domain-instance) and [Express](/reference/express#domain-instance) references.
+
+On a route with no `:id` and no resolver, row scopes fail closed. The scoped grant is denied; condition scopes like `'grading-window'` still work ([Scopes](/guide/scopes)).

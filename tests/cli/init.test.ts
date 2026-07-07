@@ -96,9 +96,9 @@ describe('rbac init --yes', () => {
     expect(policies).toContain('resources')
     expect(policies).toContain('new Policy(')
     expect(groups).toContain('GroupsDefinition')
-    // Hardware-store starter groups: cashier (scoped) + manager (unrestricted).
-    expect(groups).toContain('cashier:')
-    expect(groups).toContain("'sales.void': 'owned'")
+    // School starter groups: teacher (updates own grades) + coordinator (school-wide).
+    expect(groups).toContain('teacher:')
+    expect(groups).toContain("'grades.update': 'owned'")
 
     // Fastify wiring variant.
     expect(wiring).toContain('rbacFastify')

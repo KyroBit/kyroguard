@@ -63,7 +63,7 @@ Returns the six rbac models for direct queries. Safe to call repeatedly on one c
 
 ```ts
 const models = rbacModels(connection)
-const cashiers = await models.userPolicyGroup.find({ domain: 'branch' })
+const teachers = await models.userPolicyGroup.find({ domain: 'teachers' })
 ```
 
 The document types (`RbacPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
@@ -81,18 +81,18 @@ Schema plugin for your own models. It records ownership on save, and filters rea
 | Option | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | Your `createRbac` instance. |
-| `type` | `string` | Resource type in the ownership store, for example `'sale'`. |
+| `type` | `string` | Resource type in the ownership store, for example `'grade'`. |
 
 ```ts
 import { Schema, model } from 'mongoose'
 import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 import { rbac } from './rbac.js'
 
-const saleSchema = new Schema({ total: Number, cashierId: String, branchId: String })
+const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale' })
+gradeSchema.plugin(rbacMongoosePlugin, { rbac, type: 'grade' })
 
-export const Sale = model('Sale', saleSchema)
+export const Grade = model('Grade', gradeSchema)
 ```
 
 ### What the plugin does

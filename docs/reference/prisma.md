@@ -60,7 +60,7 @@ Client extension that records ownership when your app creates rows, and filters 
 | Option | Type | Description |
 | --- | --- | --- |
 | `rbac` | `Rbac` | Your `createRbac` instance. |
-| `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model SaleItem` is `'saleItem'`. |
+| `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model StudentGrade` is `'studentGrade'`. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
@@ -72,7 +72,7 @@ const client = new PrismaClient()
 export const db = client.$extends(
   rbacPrismaExtension({
     rbac,
-    resources: [{ type: 'sale', model: 'sale' }],
+    resources: [{ type: 'grade', model: 'grade' }],
   }),
 )
 ```

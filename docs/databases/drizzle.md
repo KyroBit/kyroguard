@@ -93,25 +93,25 @@ Link each resource to its table in `src/rbac/policies.ts`:
 
 ```ts
 import { Policy, Scope } from '@kyrobit/rbac'
-import { sales } from '../db/schema.js'
+import { grades } from '../db/schema.js'
 import type { ResourceDefinition } from '@kyrobit/rbac'
 
 export const resources: ResourceDefinition[] = [
   {
-    type: 'sale',
-    table: sales,
+    type: 'grade',
+    table: grades,
     policies: [
-      new Policy('sales.view'),
-      new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
+      new Policy('grades.view'),
+      new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned()] }),
     ],
   },
 ]
 ```
 
-Now inserts into `sales` record the current user — the cashier — as the owner:
+Now inserts into `grades` record the current user — the teacher — as the owner:
 
 ```ts
-const [sale] = await db.insert(sales).values({ total }).returning()
+const [grade] = await db.insert(grades).values({ student, subject, score }).returning()
 ```
 
 Tracking needs the new row's id. On PostgreSQL and SQLite, chain `.returning()`. MySQL cannot return rows from an insert. There, pass ids in `values()` or chain `.$returningId()`. An insert that yields no id records nothing and logs a warning.
@@ -120,7 +120,7 @@ Three more things to know:
 
 - Writes with no logged-in user (seeders, jobs, scripts) record nothing.
 - `db.untracked` is the raw handle when you want a plain insert.
-- On a guarded route, selects on `sales` come back filtered by the guard's grant — [Automatic filtering](/guide/scopes#automatic-filtering), [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
+- On a guarded route, selects on `grades` come back filtered by the guard's grant — [Automatic filtering](/guide/scopes#automatic-filtering), [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
 
 ## Next steps
 

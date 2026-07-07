@@ -20,7 +20,7 @@ function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 | Member | Description |
 | --- | --- |
 | `context()` | Middleware that opens the request context. Register once, before any guard. |
-| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `branch`. |
+| `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `teachers`. |
 | `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `errorHandler()` | Error middleware that sends the denial response. Register after your routes. |
 
@@ -34,14 +34,14 @@ const { context, domain, errorHandler } = rbacExpress(rbac)
 
 app.use(context()) // before any guard
 
-const staff = domain({
+const teachers = domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
-    return user ? { id: user.id, tenant_id: user.branchId } : null
+    return user ? { id: user.id, tenant_id: user.schoolId } : null
   },
 })
 
-app.get('/sales', staff.requirePolicy('sales.view'), (req, res) => {
+app.get('/grades', teachers.requirePolicy('grades.view'), (req, res) => {
   res.json({ ok: true })
 })
 
@@ -51,7 +51,7 @@ app.use(errorHandler()) // after the routes
 ## Domain instance
 
 ```ts
-const staff = domain({ getSubject })          // single-area app
+const teachers = domain({ getSubject })       // single-area app
 const admin = domain('admin', { getSubject }) // multi-area app
 ```
 
@@ -60,10 +60,10 @@ const admin = domain('admin', { getSubject }) // multi-area app
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
-| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`sales.view`, not `branch.sales.view`). `options.resource(req)` resolves the target row; required for scoped grants. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
+| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). `options.resource(req)` resolves the target row for scoped grants; when omitted, the guard defaults to the policy's resource type plus the route's `:id` param when both exist. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Mount on specific routers, never app-wide. |
-| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one store, like `branch-1`. |
+| `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
 | `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |

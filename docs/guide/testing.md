@@ -5,16 +5,16 @@
 A full test file for a guarded route:
 
 ```ts
-// sales.test.ts
+// grades.test.ts
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
 import { createRbac, Policy } from '@kyrobit/rbac'
 import { rbacFastify } from '@kyrobit/rbac/fastify'
 import { memoryAdapter } from '@kyrobit/rbac/testing'
 
-const policies = [new Policy('sales.view')]
+const policies = [new Policy('grades.view')]
 const groups = {
-  cashier: { label: 'Cashier', policies: ['sales.view'] },
+  teacher: { label: 'Teacher', policies: ['grades.view'] },
 }
 
 async function buildApp() {
@@ -24,26 +24,26 @@ async function buildApp() {
   const app = Fastify()
   await app.register(rbacFastify(rbac))
 
-  const staff = app.rbac.domain({
+  const teachers = app.rbac.domain({
     getSubject: req =>
       req.headers['x-user'] ? { id: String(req.headers['x-user']) } : null,
   })
 
-  app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => [])
-  return { app, staff }
+  app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async () => [])
+  return { app, teachers }
 }
 
-describe('GET /sales', () => {
+describe('GET /grades', () => {
   it('denies a user without the policy', async () => {
     const { app } = await buildApp()
-    const res = await app.inject({ url: '/sales', headers: { 'x-user': 'u1' } })
+    const res = await app.inject({ url: '/grades', headers: { 'x-user': 'u1' } })
     expect(res.statusCode).toBe(403)
   })
 
-  it('allows a newly hired cashier', async () => {
-    const { app, staff } = await buildApp()
-    await staff.assignGroup('u1', 'cashier')
-    const res = await app.inject({ url: '/sales', headers: { 'x-user': 'u1' } })
+  it('allows a newly hired teacher', async () => {
+    const { app, teachers } = await buildApp()
+    await teachers.assignGroup('u1', 'teacher')
+    const res = await app.inject({ url: '/grades', headers: { 'x-user': 'u1' } })
     expect(res.statusCode).toBe(200)
   })
 })
@@ -58,8 +58,8 @@ In tests, `getSubject` reads the user from a header. Your real resolver stays in
 Assign through the domain, exactly like production code:
 
 ```ts
-await staff.assignGroup('u1', 'cashier')
-await staff.assignPolicy('u1', 'sales.void', { scope: 'owned' })
+await teachers.assignGroup('u1', 'teacher')
+await teachers.assignPolicy('u1', 'grades.update', { scope: 'owned' })
 ```
 
 `rbac.sync()` must run first. It loads the policies and seeds the groups you gave `createRbac`. See [Assigning access](/guide/assigning-access).

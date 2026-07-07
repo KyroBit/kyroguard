@@ -30,16 +30,20 @@ import { memoryAdapter } from '@kyrobit/rbac/testing'
 const rbac = createRbac({
   adapter: memoryAdapter(),
   policies: [
-    new Policy('sales.view'),
-    new Policy('sales.create', { dependsOn: ['sales.view'] }),
-    new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
+    new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+    new Policy('grades.enter', { dependsOn: ['grades.view'] }),
+    new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned(), Scope.inTenant()] }),
+    new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [Scope.inTenant()] }),
   ],
   groups: {
-    cashier: {
-      label: 'Cashier',
-      policies: { 'sales.view': 'owned', 'sales.create': 'all', 'sales.void': 'owned' },
+    teacher: {
+      label: 'Teacher',
+      policies: { 'grades.view': 'in-tenant', 'grades.enter': 'all', 'grades.update': 'owned' },
     },
-    manager: { label: 'Manager', policies: 'all' },
+    coordinator: {
+      label: 'Coordinator',
+      policies: { 'grades.view': 'in-tenant', 'grades.update': 'in-tenant', 'grades.delete': 'in-tenant' },
+    },
   },
 })
 await rbac.sync()
@@ -83,7 +87,7 @@ interface AdminSubjectRef {
   tenantId?: string
 }
 
-await rbac.admin.assignPolicy({ subjectId: 'amina', domain: 'admin' }, 'admin.reports.view')
+await rbac.admin.assignPolicy({ subjectId: 'zainab', domain: 'admin' }, 'admin.reports.view')
 ```
 
 Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
@@ -95,7 +99,7 @@ Domain instances offer the same methods with unqualified names. Prefer those in 
 ```ts
 class Policy {
   constructor(name: string, options?: {
-    label?: string         // default: the action, capitalized — 'sales.create' → "Create"
+    label?: string         // default: the action, capitalized — 'grades.enter' → "Enter"
     dependsOn?: string[]   // policies this one requires
     scopeOptions?: Scope[] // scopes a grant may be restricted to
   })
@@ -105,7 +109,7 @@ class Policy {
 ```
 
 ```ts
-const voidSale = new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] })
+const updateGrades = new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned()] })
 ```
 
 `scopeOptions` is enforced at grant time: `seedGroups` rejects a group entry whose scope the policy does not declare, and `assignPolicy` throws [`UnknownScopeError`](#error-classes). See [Policies](/guide/policies).
@@ -147,7 +151,7 @@ type ScopeFilterFn = (
 type ScopeFilterResult = boolean | { where: unknown }
 ```
 
-A scope is a named condition on a grant — about the row (`Scope.owned()`: only sales the user recorded) or about anything else (time of day, an amount, a subject attribute). One scope owns both evaluation paths:
+A scope is a named condition on a grant — about the row (`Scope.owned()`: only grades the user entered) or about anything else (a date window, a published flag, a subject attribute). One scope owns both evaluation paths:
 
 - `check` guards a single row. It receives the resource when the guard resolves one, or `null` — row scopes must fail closed on `null`.
 - `filter` compiles the same condition for list queries. It returns `true` (no row restriction), `false` (no rows — fail closed), or `{ where }` — a native fragment for the app's ORM. Optional: a scope without one is folded through `check(subject, null, ctx)` on the list path, which makes condition scopes work in lists with no extra code and keeps filterless row scopes from leaking.
@@ -158,7 +162,7 @@ The built-ins ship both halves. Default names: `owned`, `granted`, `in-tenant`. 
 
 ```ts
 // On a domain instance (Fastify, Express):
-staff.filterFor(req, policy): Promise<FilterResult>
+teachers.filterFor(req, policy): Promise<FilterResult>
 
 // On the engine:
 rbac.engine.filterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
@@ -201,7 +205,7 @@ interface GroupDefinition {
 }
 ```
 
-Groups are job titles: `cashier`, `manager`. `'all'` grants every synced policy. An array grants those policies, unrestricted. A record maps each policy to a scope; `'all'` means no restriction — every row. See [Groups](/guide/groups).
+Groups are job titles: `teacher`, `coordinator`. `'all'` grants every synced policy. An array grants those policies, unrestricted. A record maps each policy to a scope; `'all'` means no restriction — every row. See [Groups](/guide/groups).
 
 ## Subject
 

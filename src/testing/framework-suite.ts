@@ -310,5 +310,66 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           expect(revoked.body.code).toBe('RBAC_POLICY_DENIED')
         },
       ))
+
+    it('14: scoped grant + :id route + no resource option → params.id is the row target', () =>
+      withApp(
+        {
+          routes: [docRoute({ path: '/docs/:id', resource: undefined })],
+          seed: async rbac => {
+            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
+            await rbac.ownership.record('u1', { type: 'doc', id: 'd1' })
+            await rbac.ownership.record('someone-else', { type: 'doc', id: 'd2' })
+          },
+        },
+        async app => {
+          expect((await get(app, '/docs/d1', asUser('u1'))).status).toBe(200)
+
+          const foreign = await get(app, '/docs/d2', asUser('u1'))
+          expect(foreign.status).toBe(403)
+          expect(foreign.body.code).toBe('RBAC_SCOPE_DENIED')
+        },
+      ))
+
+    it('15: scoped grant + no :id and no resource option → row scope fails closed', () =>
+      withApp(
+        {
+          routes: [docRoute({ path: '/docs-inbox', resource: undefined })],
+          seed: async rbac => {
+            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
+            await rbac.ownership.record('u1', { type: 'doc', id: 'd1' })
+          },
+        },
+        async app => {
+          const res = await get(app, '/docs-inbox', asUser('u1'))
+          expect(res.status).toBe(403)
+          expect(res.body.code).toBe('RBAC_SCOPE_DENIED')
+        },
+      ))
+
+    it('16: explicit resource option wins over params.id', () =>
+      withApp(
+        {
+          routes: [docRoute({ path: '/docs/:id', resource: () => ({ type: 'doc', id: 'd9' }) })],
+          seed: async rbac => {
+            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
+            await rbac.ownership.record('u1', { type: 'doc', id: 'd9' })
+          },
+        },
+        async app => {
+          // u1 owns d9 but not d1 — a 200 proves the explicit resolver decided.
+          expect((await get(app, '/docs/d1', asUser('u1'))).status).toBe(200)
+        },
+      ))
+
+    it('17: unscoped grant on a :id route → 200 with no ownership recorded', () =>
+      withApp(
+        {
+          routes: [docRoute({ path: '/docs/:id', resource: undefined })],
+          seed: rbac => grant(rbac, 'u1', 'docs.read'),
+        },
+        async app => {
+          expect((await get(app, '/docs/d2', asUser('u1'))).status).toBe(200)
+        },
+      ))
   })
 }

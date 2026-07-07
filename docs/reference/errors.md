@@ -47,7 +47,7 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 { "message": "Forbidden", "code": "RBAC_POLICY_DENIED" }
 ```
 
-**When.** The user does not hold this policy in this domain and tenant. Grants are exact: a grant in `branch-1` never applies in `branch-2`, and a grant in one domain never applies in another.
+**When.** The user does not hold this policy in this domain and tenant. Grants are exact: a grant in `school-1` never applies in `school-2`, and a grant in one domain never applies in another.
 
 **Fix.** Grant the policy, or a group that holds it, at the same domain and tenant the request uses. The error's `policy` property carries the full policy name the engine checked. See [Assigning access](/guide/assigning-access).
 

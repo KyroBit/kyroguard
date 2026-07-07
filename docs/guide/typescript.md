@@ -12,7 +12,7 @@ With it, the typo is a compile error and your editor autocompletes real names:
 
 ```ts
 admin.requirePolicy('reprts.view')
-// error: '"reprts.view"' is not assignable to '"reports.view" | "staff.manage"'
+// error: '"reprts.view"' is not assignable to '"reports.view" | "students.manage"'
 ```
 
 ## Generating the file

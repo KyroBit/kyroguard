@@ -63,9 +63,9 @@ Pushes your policy and group files to the database, then writes `rbac.d.ts`. New
 
 ```
 $ rbac sync
-[rbac] Removed 1 orphaned policies: branch.sales.refund
-[rbac] Synced 5 policies.
-[rbac] Seeded 2 groups for domain "branch".
+[rbac] Removed 1 orphaned policies: teachers.grades.export
+[rbac] Synced 4 policies.
+[rbac] Seeded 2 groups for domain "teachers".
 [rbac] Wrote /home/you/app/rbac.d.ts
 ```
 

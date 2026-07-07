@@ -80,18 +80,18 @@ import { client, rbac } from './rbac/instance.js'
 export const db = client.$extends(
   rbacPrismaExtension({
     rbac,
-    resources: [{ type: 'sale', model: 'sale' }],
+    resources: [{ type: 'grade', model: 'grade' }],
   }),
 )
 ```
 
-`model` is the client property name, exactly as Prisma generates it. `model StoreSale` becomes `'storeSale'`.
+`model` is the client property name, exactly as Prisma generates it. `model StudentGrade` becomes `'studentGrade'`.
 
 Creating a row now records the current user as its owner:
 
 ```ts
-const sale = await db.sale.create({ data: { total } })
-// the requesting cashier now owns sale.id
+const grade = await db.grade.create({ data: { student, subject, score } })
+// the requesting teacher now owns grade.id
 ```
 
 `createMany` and `upsert` are tracked too. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
@@ -100,14 +100,14 @@ const sale = await db.sale.create({ data: { total } })
 It only sees `create`, `createMany` and `upsert` on registered models. It never sees raw SQL, nested writes through a relation, `createMany` rows without an `id` in the data, or a `create` with a custom `select` that omits `id`. Deletes leave ownership records behind. Cover those paths yourself:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'sale', id: sale.id })
-await rbac.ownership.remove({ type: 'sale', id: sale.id })
+await rbac.ownership.record(user.id, { type: 'grade', id: grade.id })
+await rbac.ownership.remove({ type: 'grade', id: grade.id })
 ```
 :::
 
 ## Filtering lists
 
-The extension also filters reads. On a guarded route, a cashier's `db.sale.findMany()` returns only their own sales; unguarded reads are not auto-filtered. Behavior and the manual `filterFor` path: [Filtering lists](/guide/scopes#filtering-lists). Prisma specifics — filtered calls, the ID-list fragment and its cap: [Prisma reference](/reference/prisma#what-gets-filtered).
+The extension also filters reads. On a guarded route, a teacher's `db.grade.findMany()` returns only the grades they entered; unguarded reads are not auto-filtered. Behavior and the manual `filterFor` path: [Filtering lists](/guide/scopes#filtering-lists). Prisma specifics — filtered calls, the ID-list fragment and its cap: [Prisma reference](/reference/prisma#what-gets-filtered).
 
 ## Next steps
 

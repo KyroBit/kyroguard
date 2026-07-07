@@ -1,13 +1,13 @@
 # Sync
 
-Your definitions live in two files. `src/rbac/policies.ts` says what staff can do. `src/rbac/groups.ts` maps job titles to policies. One command loads both:
+Your definitions live in two files. `src/rbac/policies.ts` says what users can do. `src/rbac/groups.ts` maps job titles to policies. One command loads both:
 
 ```sh
 npx rbac sync
 ```
 
 ```
-[rbac] Synced 5 policies.
+[rbac] Synced 4 policies.
 [rbac] Seeded 2 groups.
 [rbac] Wrote /home/you/app/rbac.d.ts
 ```
@@ -31,7 +31,7 @@ Run it after every edit to `policies.ts` or `groups.ts`. Run it on every deploy,
 ## Removing a policy
 
 ```
-[rbac] Removed 1 orphaned policies: sales.refund
+[rbac] Removed 1 orphaned policies: grades.finalize
 ```
 
 ::: danger Deleting a policy deletes its grants

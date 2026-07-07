@@ -19,14 +19,14 @@ const { context, domain, errorHandler } = rbacExpress(rbac)
 const app = express()
 app.use(context())
 
-const staff = domain({
+const teachers = domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
   },
 })
 
-app.get('/sales', staff.requirePolicy('sales.view'), (req, res) => {
+app.get('/grades', teachers.requirePolicy('grades.view'), (req, res) => {
   res.json([])
 })
 
@@ -40,7 +40,7 @@ app.listen(3000)
 Register `context()` before any guard and `errorHandler()` after your routes. In the wrong order, guards fail with a 500 instead of denying properly.
 :::
 
-`resources` holds your policy definitions ([Policies](/guide/policies)). `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `staff` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
+`resources` holds your policy definitions ([Policies](/guide/policies)). `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -69,10 +69,10 @@ const { context, domain, errorHandler } = rbacExpress(rbac, {
 ## Routers
 
 ```ts
-const sales = express.Router()
-sales.get('/', staff.requirePolicy('sales.view'), listSales)
-sales.post('/', staff.requirePolicy('sales.create'), createSale)
-app.use('/sales', sales)
+const grades = express.Router()
+grades.get('/', teachers.requirePolicy('grades.view'), listGrades)
+grades.post('/', teachers.requirePolicy('grades.enter'), enterGrade)
+app.use('/grades', grades)
 ```
 
 Guards are plain middleware, so they mount on any router. Keep `context()` and `errorHandler()` at the app level.
@@ -80,10 +80,10 @@ Guards are plain middleware, so they mount on any router. Keep `context()` and `
 ## subjectHook
 
 ```ts
-const sales = express.Router()
-sales.use(staff.subjectHook())
-sales.post('/', createSale)
-app.use('/sales', sales)
+const grades = express.Router()
+grades.use(teachers.subjectHook())
+grades.post('/', enterGrade)
+app.use('/grades', grades)
 ```
 
-`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which cashier created the row. See [Ownership](/guide/ownership). Mount it on specific routers, not app-wide.
+`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which teacher entered the row. See [Ownership](/guide/ownership). Mount it on specific routers, not app-wide.

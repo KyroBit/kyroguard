@@ -5,20 +5,14 @@ import type { ResourceDefinition } from '@kyrobit/rbac'
 // Policy names are UNQUALIFIED: the domain prefix is added automatically.
 export const resources: ResourceDefinition[] = [
   {
-    type: 'sale',
-    // table: sales, // link your Drizzle table / Mongoose model to enable
-    //               // ownership auto-tracking and query scoping
+    type: 'grade',
+    // table: grades, // link your Drizzle table / Mongoose model to enable
+    //                // ownership auto-tracking and query scoping
     policies: [
-      new Policy('sales.view'),
-      new Policy('sales.create', { dependsOn: ['sales.view'] }),
-      new Policy('sales.void', { dependsOn: ['sales.view'], scopeOptions: [Scope.owned()] }),
-    ],
-  },
-  {
-    type: 'product',
-    policies: [
-      new Policy('products.view'),
-      new Policy('products.update', { dependsOn: ['products.view'] }),
+      new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+      new Policy('grades.enter', { dependsOn: ['grades.view'] }),
+      new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned(), Scope.inTenant()] }),
+      new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [Scope.inTenant()] }),
     ],
   },
 ]

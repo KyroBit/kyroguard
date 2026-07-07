@@ -96,7 +96,7 @@ npx rbac sync
 ```
 
 ```
-[rbac] Synced 5 policies.
+[rbac] Synced 4 policies.
 [rbac] Seeded 2 groups.
 [rbac] Wrote /your/project/rbac.d.ts
 ```
@@ -108,7 +108,7 @@ npx rbac sync
 Start your server and hit a guarded route without logging in:
 
 ```sh
-curl -i localhost:3000/sales
+curl -i localhost:3000/grades
 ```
 
 ```

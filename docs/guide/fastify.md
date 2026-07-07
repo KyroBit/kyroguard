@@ -18,14 +18,14 @@ const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }), resources })
 const app = Fastify()
 await app.register(rbacFastify(rbac))
 
-const staff = app.rbac.domain({
+const teachers = app.rbac.domain({
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
   },
 })
 
-app.get('/sales', { preHandler: staff.requirePolicy('sales.view') }, async () => {
+app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async () => {
   return []
 })
 
@@ -34,7 +34,7 @@ await app.listen({ port: 3000 })
 
 Three steps. Register `rbacFastify(rbac)` once. Create a domain with `app.rbac.domain()`. Guard routes with `requirePolicy` in `preHandler`.
 
-`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `staff` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
+`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Errors
 
@@ -70,9 +70,9 @@ await app.register(rbacFastify(rbac, {
 
 ```ts
 app.register(async scope => {
-  scope.addHook('preHandler', staff.subjectHook())
-  scope.post('/sales', createSale)
+  scope.addHook('preHandler', teachers.subjectHook())
+  scope.post('/grades', enterGrade)
 })
 ```
 
-`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which cashier created the row. See [Ownership](/guide/ownership). Register it inside a scoped plugin, not app-wide.
+`subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which teacher entered the row. See [Ownership](/guide/ownership). Register it inside a scoped plugin, not app-wide.

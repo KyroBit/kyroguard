@@ -93,7 +93,7 @@ export class Scope {
 }
 ```
 
-**The fallback rule (this is the whole answer to the time/attribute question):** a scope with **no** `filter` is evaluated on the list path by calling its existing `check(subject, null, ctx)` exactly once per request. `true` → that grant contributes allow-all; `false` → that grant contributes nothing. Condition scopes (`business-hours`, "not on probation", subject attributes) therefore work on the list path **with zero new code** — the same partial-evaluation move as Cerbos folding `now()` and RLS constant-folding, expressed through the null-resource semantics the library already documents. Row scopes without a `filter` fail closed under the same rule (their check already returns `false` on `null`) — and the engine logs a one-time warning naming the scope (§2.5) so this is never a silent mystery.
+**The fallback rule (this is the whole answer to the time/attribute question):** a scope with **no** `filter` is evaluated on the list path by calling its existing `check(subject, null, ctx)` exactly once per request. `true` → that grant contributes allow-all; `false` → that grant contributes nothing. Condition scopes (`grading-window`, "not on probation", subject attributes) therefore work on the list path **with zero new code** — the same partial-evaluation move as Cerbos folding `now()` and RLS constant-folding, expressed through the null-resource semantics the library already documents. Row scopes without a `filter` fail closed under the same rule (their check already returns `false` on `null`) — and the engine logs a one-time warning naming the scope (§2.5) so this is never a silent mystery.
 
 ### 2.2 The return trichotomy
 
@@ -107,8 +107,8 @@ export type ListFilter<TWhere = unknown> =
 ```
 
 - `all` — an unscoped grant (or a condition scope that passed with no row restriction). Costs nothing; never enumerate IDs for admins (the SpiceDB wart).
-- `none` — grants exist but every branch folded false. `reason: 'scope-denied'` = a condition scope said no (business-hours at 23:00); `'no-filter'` = the only applicable scopes had no query form. Documented pattern: short-circuit and return `[]` **without a DB round-trip** (Cerbos adapters' behavior). `filterFor` never *throws* for this case — CASL v1 threw from `accessibleBy` and it was the package's most-complained-about behavior; an empty list is the natural REST answer, and apps that want a 403 can branch on `kind`.
-- `where` — a composable native fragment. `scopes` names the contributing scope(s) — the `filterDebug` analog, for "why does the cashier see zero sales."
+- `none` — grants exist but every branch folded false. `reason: 'scope-denied'` = a condition scope said no (the grading window after it closes); `'no-filter'` = the only applicable scopes had no query form. Documented pattern: short-circuit and return `[]` **without a DB round-trip** (Cerbos adapters' behavior). `filterFor` never *throws* for this case — CASL v1 threw from `accessibleBy` and it was the package's most-complained-about behavior; an empty list is the natural REST answer, and apps that want a 403 can branch on `kind`.
+- `where` — a composable native fragment. `scopes` names the contributing scope(s) — the `filterDebug` analog, for "why does the teacher see zero grades."
 
 No-subject and no-policy are **not** trichotomy cases — they throw the same typed `UnauthenticatedError` / `PolicyDeniedError` the guard throws (§2.4), so "may not list this collection at all" stays a 401/403, distinct from "may list it, sees nothing right now."
 
@@ -242,7 +242,7 @@ Per backend, `owned()` is:
 
 **Tier 2 — the scope author (custom row scopes).** Writes the native fragment for the ORM the app uses — which is, in practice, exactly one function, because an app runs one ORM. This is the Pundit trade: no condition DSL to learn, full ORM power (joins, subqueries, whatever), and the parity obligation is made testable (§2.7) instead of pretending a DSL removes it.
 
-**Tier 3 — resource-generic custom scopes via the field map.** Where a scope must stay generic across resources but references a resource column (`under-5000` → `sales.total` vs `refunds.value`), the mapping lives in the **resource registration**, never in the scope (the unanimous lesson: Cerbos mappers, Oso `register_class`, versus CASL's convention-only weakness):
+**Tier 3 — resource-generic custom scopes via the field map.** Where a scope must stay generic across resources but references a resource column (`unpublished` → `grades.published` vs `reports.published`), the mapping lives in the **resource registration**, never in the scope (the unanimous lesson: Cerbos mappers, Oso `register_class`, versus CASL's convention-only weakness):
 
 ```ts
 // src/core/policy.ts
@@ -283,52 +283,52 @@ For Prisma the documented pattern is the explicit switch (short-circuit `none` t
 ```ts
 // owned — library-shipped, resource-generic via the ownership store. Nothing to write.
 
-// business-hours — condition scope: NO filter half, ever.
-export const businessHours = new Scope('business-hours', 'Business hours', () => {
-  const hour = new Date().getHours()
-  return hour >= 9 && hour < 21
+// grading-window — condition scope: NO filter half, ever.
+export const gradingWindow = new Scope('grading-window', 'Grading window', () => {
+  const now = new Date()
+  return now >= term.gradingOpens && now <= term.gradingCloses
 })
 // List path: engine calls check(subject, null, ctx) once → folds to all/none. Zero new code.
 
-// under-5000 — generic row scope, per-resource mapping via fields (Drizzle app shown).
-import { lt } from 'drizzle-orm'
+// unpublished — generic row scope, per-resource mapping via fields (Drizzle app shown).
+import { eq } from 'drizzle-orm'
 import type { AnyColumn } from 'drizzle-orm'
 
-export const under5000 = new Scope(
-  'under-5000',
-  'Under 5,000',
+export const unpublished = new Scope(
+  'unpublished',
+  'Not yet published',
   async (user, resource, ctx) => {
     if (!resource) return false
-    const [sale] = await db.select().from(sales).where(eq(sales.id, resource.id))
-    return (sale?.total ?? Infinity) < 5000
+    const [grade] = await db.select().from(grades).where(eq(grades.id, resource.id))
+    return grade ? !grade.published : false
   },
   (user, ctx) => {
-    const amount = ctx.resource.fields?.amount as AnyColumn | undefined
-    if (!amount) return false                       // unmapped resource: fail closed
-    return { where: lt(amount, 5000) }
+    const published = ctx.resource.fields?.published as AnyColumn | undefined
+    if (!published) return false                    // unmapped resource: fail closed
+    return { where: eq(published, false) }
   },
 )
 
 // registration — the ONLY per-resource knowledge:
 const resources: ResourceDefinition[] = [
-  { type: 'sale',   table: sales,   policies: [...], fields: { amount: sales.total } },
-  { type: 'refund', table: refunds, policies: [...], fields: { amount: refunds.value } },
+  { type: 'grade',  table: grades,  policies: [...], fields: { published: grades.published } },
+  { type: 'report', table: reports, policies: [...], fields: { published: reports.published } },
 ]
 ```
 
-Composed scopes decompose exactly as today's `cashierVoid` example, one tier per half:
+Composed scopes — one scope calling the others, the combining pattern from [Scopes](/guide/scopes) — decompose one tier per half:
 
 ```ts
-export const cashierVoid = new Scope('cashier-void', 'Own, small, in hours',
-  async (user, resource, ctx) => { /* unchanged from docs/guide/scopes.md */ },
+export const ownEditable = new Scope('own-editable', 'Own, unpublished, in window',
+  async (user, resource, ctx) => { /* each rule's check, combined — see docs/guide/scopes.md */ },
   async (user, ctx) => {
-    if (businessHours.check(user, null, ctx) !== true) return false   // boolean gate first
+    if (gradingWindow.check(user, null, ctx) !== true) return false   // boolean gate first
     const owned = await Scope.owned().filter!(user, ctx)              // row fragments second
-    const small = await under5000.filter!(user, ctx)
-    if (owned === false || small === false) return false
-    if (owned === true) return small
-    if (small === true) return owned
-    return { where: and(owned.where as SQL, small.where as SQL) }
+    const unpub = await unpublished.filter!(user, ctx)
+    if (owned === false || unpub === false) return false
+    if (owned === true) return unpub
+    if (unpub === true) return owned
+    return { where: and(owned.where as SQL, unpub.where as SQL) }
   })
 ```
 
@@ -359,34 +359,34 @@ export async function assertScopeParity(options: {
 
 One test per (scope, resource) pair recovers RLS's by-construction guarantee. Documented as strongly recommended for every custom `filter`.
 
-Also documented (free, once `filterFor` exists): **fetch single records through the filter** — `db.select().from(sales).where(and(eq(sales.id, id), drizzleWhere(f)))` — Pundit's `policy_scope(Post).find(id)` pattern, giving out-of-scope and nonexistent rows identical 404s on read paths.
+Also documented (free, once `filterFor` exists): **fetch single records through the filter** — `db.select().from(grades).where(and(eq(grades.id, id), drizzleWhere(f)))` — Pundit's `policy_scope(Post).find(id)` pattern, giving out-of-scope and nonexistent rows identical 404s on read paths.
 
 ---
 
 ## 3. Worked examples (docs voice)
 
-### The cashier's list
+### The teacher's list
 
-The void guard from [Scopes](/guide/scopes) already knows cashiers only touch their own sales. The list endpoint asks the same grant the other question — *which rows?* — with `filterFor`:
+The update guard from [Scopes](/guide/scopes) already knows a teacher only touches the grades they entered. The list endpoint asks the same grant the other question — *which rows?* — with `filterFor`:
 
 ::: code-group
 
 ```ts [Fastify]
-app.get('/sales', async req => {
-  const f = await staff.filterFor(req, 'sales.view', { resource: 'sale' })
+app.get('/grades', async req => {
+  const f = await teachers.filterFor(req, 'grades.view', { resource: 'grade' })
   if (f.kind === 'none') return []                    // nothing qualifies — skip the query
-  return db.select().from(sales)
+  return db.select().from(grades)
     .where(f.kind === 'all' ? undefined : f.where as SQL)
-    .orderBy(desc(sales.createdAt))
+    .orderBy(desc(grades.createdAt))
     .limit(20)
 })
 ```
 
 ```ts [Express]
-app.get('/sales', async (req, res) => {
-  const f = await staff.filterFor(req, 'sales.view', { resource: 'sale' })
+app.get('/grades', async (req, res) => {
+  const f = await teachers.filterFor(req, 'grades.view', { resource: 'grade' })
   if (f.kind === 'none') return res.json([])
-  const rows = await db.select().from(sales)
+  const rows = await db.select().from(grades)
     .where(f.kind === 'all' ? undefined : f.where as SQL)
     .limit(20)
   res.json(rows)
@@ -395,15 +395,15 @@ app.get('/sales', async (req, res) => {
 
 :::
 
-The cashier's grant is `'sales.view': 'owned'`, so `f` comes back as `{ kind: 'where' }` carrying one EXISTS against the ownership store — the cashier's page holds only their own sales, and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's. No `sales.view` grant at all still throws — a 403, same as any guard. Your own conditions AND in alongside: `and(eq(sales.status, 'open'), f.where)`. Never spread `f.where` into another object — spreading can overwrite keys and quietly widen access.
+The teacher's grant is `'grades.view': 'owned'`, so `f` comes back as `{ kind: 'where' }` carrying one EXISTS against the ownership store — the teacher's page holds only the grades they entered, and `LIMIT 20` means twenty of *theirs*, not twenty minus everyone else's. No `grades.view` grant at all still throws — a 403, same as any guard. Your own conditions AND in alongside: `and(eq(grades.subject, 'maths'), f.where)`. Never spread `f.where` into another object — spreading can overwrite keys and quietly widen access.
 
-### The manager's list
+### The admin's list
 
-Same route, no new code. The manager's grant is `'sales.view': 'all'` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. No filter built, no IDs enumerated, nothing to pay. One grant through a group with a scope **and** another without? The unrestricted one wins, exactly as it does at the guard.
+Same route, no new code. The admin's grant is `'grades.view': 'all'` — no condition — so `filterFor` returns `{ kind: 'all' }` and the query runs unfiltered. No filter built, no IDs enumerated, nothing to pay. One grant through a group with a scope **and** another without? The unrestricted one wins, exactly as it does at the guard.
 
-### Outside business hours
+### Outside the grading window
 
-The fraud rule from [Scopes](/guide/scopes) — `'sales.view': 'business-hours'` — never looks at a row, so it never becomes SQL. At list time the engine runs the same check it runs at the guard, once, with no resource: at noon it folds to *no restriction*; at 23:00 it folds to `{ kind: 'none', reason: 'scope-denied' }` and the endpoint returns an empty list without touching the database. Prefer a 403 after hours? Branch on it:
+The deadline rule from [Scopes](/guide/scopes) — `'grades.view': 'grading-window'` — never looks at a row, so it never becomes SQL. At list time the engine runs the same check it runs at the guard, once, with no resource: while the window is open it folds to *no restriction*; after it closes it folds to `{ kind: 'none', reason: 'scope-denied' }` and the endpoint returns an empty list without touching the database. Prefer a 403 after the window closes? Branch on it:
 
 ```ts
 if (f.kind === 'none' && f.reason === 'scope-denied') {
@@ -426,10 +426,10 @@ The scope needs nothing new for any of this — a condition scope's `check` **is
 
 | Today | After |
 |---|---|
-| `queryScopes: { owned: (subject) => eq(sales.cashierId, subject.id) }` | Delete — `Scope.owned()` ships its filter via the adapter |
-| `resource.domains: { staff: { 'sales.view': ['owned'] } }` | Delete — the grant already says it; `filterFor` reads the grant |
-| Implicit scoping on every `db.select().from(sales)` | Explicit `const f = await staff.filterFor(req, 'sales.view', { resource: 'sale' })` in the list handler |
-| Custom `queryScopes['small-sale']` builder | The same builder body, moved into `new Scope(..., filter)` next to its `check` |
+| `queryScopes: { owned: (subject) => eq(grades.teacherId, subject.id) }` | Delete — `Scope.owned()` ships its filter via the adapter |
+| `resource.domains: { teachers: { 'grades.view': ['owned'] } }` | Delete — the grant already says it; `filterFor` reads the grant |
+| Implicit scoping on every `db.select().from(grades)` | Explicit `const f = await teachers.filterFor(req, 'grades.view', { resource: 'grade' })` in the list handler |
+| Custom `queryScopes['unpublished']` builder | The same builder body, moved into `new Scope(..., filter)` next to its `check` |
 | Mongoose pre-`find` auto-filter | `Model.find(mongoWhere(f))` in the handler |
 
 The move from implicit to explicit is deliberate (the stated requirement): the proxy silently applied the *wrong* thing — domain-keyed, not grant-keyed — and silently applied *nothing* for unregistered tables. Explicit is what Pundit, CASL, and Cerbos all converged on.
@@ -448,7 +448,7 @@ The move from implicit to explicit is deliberate (the stated requirement): the p
 - **Field/column masking** (separate mechanism with separate failure modes; CASL keeps it out of `accessibleBy` too).
 - **Write-path validation** (RLS `WITH CHECK` analog — validating that an inserted/updated row would satisfy the scope).
 - **Restrictive (AND-composed) scopes** across grants; grants OR, full stop.
-- **Multi-policy plans** (`filterFor(subject, ['sales.view','sales.void'], …)` sharing one grant fetch — cheap later since the map is cached).
+- **Multi-policy plans** (`filterFor(subject, ['grades.view','grades.update'], …)` sharing one grant fetch — cheap later since the map is cached).
 - **A fetch-then-check post-filter helper.** `filterFor` + a manual `authorize` loop is expressible today; blessing it invites the broken-pagination trap all five reports warn about.
 - **Cross-database filtering** (data table and `rbac_resource_owners` in different databases) beyond what the Prisma/Mongoose ID-list already tolerates.
 - **List-filter caching.** Filters are per-(subject, policy, resource, ctx) by design; the grant map is already cached, which is the only expensive part (the unanimous Oso/CASL guidance).
@@ -459,7 +459,7 @@ The move from implicit to explicit is deliberate (the stated requirement): the p
 - **check/filter parity for custom scopes is by convention, not construction.** Two hand-written halves can drift — the classic Pundit bug class. Mitigation is `assertScopeParity` plus the structural sharing of grant resolution; it is a mitigation, not a proof.
 - **Prisma and Mongoose `owned()` is an ID-list**, with an extra query per list request and a real ceiling (~10k owned rows per (owner, type) before `IN`-lists hurt — the documented Oso Cloud limit for the same shape). Only Drizzle gets the single-round-trip EXISTS. If it bites, the escape hatches are a denormalized `ownerId` column with a two-line custom scope, or (Prisma) a hand-declared relation.
 - **Explicitness costs a call per list endpoint**, and forgetting it leaks — the exact bug the old proxy hid (incorrectly). Pundit ships `verify_policy_scoped` for this; a dev-mode "guarded list route never consumed its filter" warning is a candidate follow-up, not in v1.
-- **A filterless row scope yields an empty list, not an error.** The condition-fold fallback is what makes `business-hours` free, and its flip side is that a row scope missing its `filter` folds to `none` silently-but-warned. The alternative (throwing) would break every condition scope or demand explicit classification — more ceremony than it buys.
+- **A filterless row scope yields an empty list, not an error.** The condition-fold fallback is what makes `grading-window` free, and its flip side is that a row scope missing its `filter` folds to `none` silently-but-warned. The alternative (throwing) would break every condition scope or demand explicit classification — more ceremony than it buys.
 - **The guard-path OR-of-scopes change** is real behavior change for multi-scoped grants, and the cache format bump invalidates warm external caches on deploy.
 - **No portable deny fragment for Prisma** — the switch/short-circuit is mandatory there; `drizzleWhere`/`mongoWhere` conveniences have no Prisma sibling.
 - **One more index** on `rbac_resource_owners` (`resource_type, owner_id`), and the EXISTS casts `resource_id` (text) against native PKs — fine for text/uuid PKs, a per-dialect cast for integer PKs that the adapters own and must snapshot-test.

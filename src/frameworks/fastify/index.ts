@@ -5,6 +5,7 @@ import { qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Rbac } from '../../index.js'
+import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
 /** Async guard compatible with Fastify's preHandler/onRequest hook slots. */
@@ -103,7 +104,9 @@ function createDomain<P extends string>(
         try {
           const subject = await resolveSubject(req)
           await rbac.engine.authorize(subject, qualified, {
-            resource: resolveResource ? () => resolveResource(req) : undefined,
+            resource: resolveResource
+              ? () => resolveResource(req)
+              : defaultResourceResolver(filterTarget, req.params),
           })
           if (filterTarget) await rbac.engine.storeFilterFor(subject, qualified, filterTarget)
         } catch (error) {

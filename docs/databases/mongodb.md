@@ -57,23 +57,23 @@ Run this before first traffic — it creates the MongoDB indexes. It also writes
 Policies with `Scope.owned()` check who created each document. The plugin records that for you. Add it to each schema whose documents can be owned:
 
 ```ts
-// src/models/sale.ts
+// src/models/grade.ts
 import { Schema, model } from 'mongoose'
 import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
 import { rbac } from '../rbac/instance.js'
 
-const saleSchema = new Schema({ total: Number, branchId: String })
+const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-saleSchema.plugin(rbacMongoosePlugin, { rbac, type: 'sale' })
+gradeSchema.plugin(rbacMongoosePlugin, { rbac, type: 'grade' })
 
-export const Sale = model('Sale', saleSchema)
+export const Grade = model('Grade', gradeSchema)
 ```
 
 Saving a document now records the current user as its owner:
 
 ```ts
-const sale = await Sale.create({ total, branchId })
-// the requesting cashier now owns sale.id
+const grade = await Grade.create({ student, subject, score, schoolId })
+// the requesting teacher now owns grade.id
 ```
 
 `insertMany` is tracked too. Deleting a document with `deleteOne` or `findOneAndDelete` removes its ownership records. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
@@ -82,12 +82,12 @@ const sale = await Sale.create({ total, branchId })
 `Model.updateMany`, `Model.deleteMany`, `bulkWrite` and raw collection calls fire no document middleware, so the plugin never sees them. Record or remove ownership yourself on those paths:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'sale', id: saleId })
-await rbac.ownership.remove({ type: 'sale', id: saleId })
+await rbac.ownership.record(user.id, { type: 'grade', id: gradeId })
+await rbac.ownership.remove({ type: 'grade', id: gradeId })
 ```
 :::
 
-The plugin also filters reads: on a guarded route, a cashier's `Sale.find()` returns only their own sales. Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Mongoose specifics: [reference](/reference/mongoose).
+The plugin also filters reads: on a guarded route, a teacher's `Grade.find()` returns only the grades they entered. Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Mongoose specifics: [reference](/reference/mongoose).
 
 ## Next steps
 
