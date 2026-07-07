@@ -8,15 +8,15 @@
 import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { rbacFastify } from '../../src/frameworks/fastify/index.js'
-import type { RbacFastifyOptions } from '../../src/frameworks/fastify/index.js'
+import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
+import type { KyroguardFastifyOptions } from '../../src/frameworks/fastify/index.js'
 import {
   Policy,
   PolicyDeniedError,
-  createRbac,
+  createKyroguard,
   qualifyPolicyName,
 } from '../../src/index.js'
-import type { DecisionEvent, Rbac, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { DecisionEvent, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 
 const makeResources = (): ResourceDefinition[] => [
@@ -24,7 +24,7 @@ const makeResources = (): ResourceDefinition[] => [
 ]
 
 interface Harness {
-  rbac: Rbac
+  rbac: Kyroguard
   app: FastifyInstance
 }
 
@@ -32,12 +32,12 @@ async function withHarness(
   config: {
     domains?: string[]
     onDecision?: (event: DecisionEvent) => void
-    pluginOptions?: RbacFastifyOptions
-    setup: (app: FastifyInstance, rbac: Rbac) => Promise<void> | void
+    pluginOptions?: KyroguardFastifyOptions
+    setup: (app: FastifyInstance, rbac: Kyroguard) => Promise<void> | void
   },
   fn: (h: Harness) => Promise<void>,
 ): Promise<void> {
-  const rbac = createRbac({
+  const rbac = createKyroguard({
     adapter: memoryAdapter(),
     resources: makeResources(),
     onDecision: config.onDecision,
@@ -47,7 +47,7 @@ async function withHarness(
       await rbac.sync(makeResources(), domain)
     }
     const app = Fastify()
-    await app.register(rbacFastify(rbac, config.pluginOptions))
+    await app.register(kyroguardFastify(rbac, config.pluginOptions))
     await config.setup(app, rbac)
     await app.ready()
     try {
@@ -70,11 +70,11 @@ const headerSubject = (req: FastifyRequest): SubjectInput | null => {
 const parse = (body: string): any => JSON.parse(body)
 
 describe('fastify integration specifics', () => {
-  test('(a) default 403 body carries statusCode and code RBAC_POLICY_DENIED through the default serializer', () =>
+  test('(a) default 403 body carries statusCode and code ACCESS_DENIED through the default serializer — reason needs formatError/setErrorHandler', () =>
     withHarness(
       {
         setup: app => {
-          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
           app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
@@ -89,8 +89,11 @@ describe('fastify integration specifics', () => {
         expect(res.statusCode).toBe(403)
         const body = parse(res.body)
         expect(body.statusCode).toBe(403)
-        expect(body.code).toBe('RBAC_POLICY_DENIED')
+        expect(body.code).toBe('ACCESS_DENIED')
         expect(typeof body.message).toBe('string')
+        // Fastify's default error serializer has a fixed shape — the reason
+        // field does not travel it; docs/reference/errors.md documents this.
+        expect(body.reason).toBeUndefined()
       },
     ))
 
@@ -98,13 +101,13 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: app => {
-          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
           let seen: unknown = null
           app.setErrorHandler((error, _req, reply) => {
             seen = error
             return reply.code(418).send({
               shaped: true,
-              isRbacPolicyDenied: error instanceof PolicyDeniedError,
+              isPolicyDenied: error instanceof PolicyDeniedError,
               policy: error instanceof PolicyDeniedError ? error.policy : null,
             })
           })
@@ -123,7 +126,7 @@ describe('fastify integration specifics', () => {
         expect(res.statusCode).toBe(418)
         const body = parse(res.body)
         expect(body.shaped).toBe(true)
-        expect(body.isRbacPolicyDenied).toBe(true)
+        expect(body.isPolicyDenied).toBe(true)
         expect(body.policy).toBe(qualifyPolicyName('admin', 'thing.read'))
 
         const seen = await app.inject({ method: 'GET', url: '/seen' })
@@ -144,7 +147,7 @@ describe('fastify integration specifics', () => {
           app.addHook('onSend', async (_req, reply) => {
             reply.header('x-app-hook', 'ran')
           })
-          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
           app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
@@ -159,7 +162,7 @@ describe('fastify integration specifics', () => {
         expect(res.statusCode).toBe(422)
         const body = parse(res.body)
         expect(body.kind).toBe('custom')
-        expect(body.code).toBe('RBAC_POLICY_DENIED')
+        expect(body.code).toBe('ACCESS_DENIED')
         expect(body.url).toBe('/thing')
         // No hijacked reply: the formatted error still travels onSend.
         expect(res.headers['x-app-hook']).toBe('ran')
@@ -170,7 +173,7 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: async (app, rbac) => {
-          const domain = app.rbac.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
           const subjectIdInStore = () => rbac.engine.store.getSubject()?.id ?? null
 
           await app.register(async scope => {
@@ -209,14 +212,14 @@ describe('fastify integration specifics', () => {
       {
         domains: ['a', 'b'],
         setup: async (app, rbac) => {
-          const domainA = app.rbac.domain('a', {
+          const domainA = app.kyroguard.domain('a', {
             getSubject: req => {
               callsA += 1
               return headerSubject(req)
             },
           })
           // Domain B exists on the same app but guards nothing on this route.
-          app.rbac.domain('b', {
+          app.kyroguard.domain('b', {
             getSubject: req => {
               callsB += 1
               return headerSubject(req)
@@ -261,8 +264,8 @@ describe('fastify integration specifics', () => {
         setup: async (app, rbac) => {
           // Distinct subjects per domain — if domain B's guard ever read domain
           // A's memoized subject, its decision would carry subjectId 'ua'.
-          const domainA = app.rbac.domain('a', { getSubject: () => ({ id: 'ua' }) })
-          const domainB = app.rbac.domain('b', { getSubject: () => ({ id: 'ub' }) })
+          const domainA = app.kyroguard.domain('a', { getSubject: () => ({ id: 'ua' }) })
+          const domainB = app.kyroguard.domain('b', { getSubject: () => ({ id: 'ub' }) })
           app.get(
             '/both',
             { preHandler: [domainA.requirePolicy('thing.read'), domainB.requirePolicy('thing.read')] },

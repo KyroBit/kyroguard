@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { RbacEngine } from '../../src/core/engine.js'
+import { KyroguardEngine } from '../../src/core/engine.js'
 import { PolicyDeniedError } from '../../src/core/errors.js'
 import { inProcessBus } from '../../src/cache/bus.js'
 import { memoryCache } from '../../src/cache/memory.js'
@@ -27,13 +27,13 @@ interface Harness {
   adapter: StorageAdapter
   calls: () => number
   bus: InvalidationBus
-  engine: RbacEngine
+  engine: KyroguardEngine
 }
 
 function makeEngine(overrides?: Partial<EngineOptions>): Harness {
   const { adapter, calls } = countingAdapter()
   const bus = inProcessBus()
-  const engine = new RbacEngine({
+  const engine = new KyroguardEngine({
     adapter,
     scopes: new Map(),
     cache: memoryCache({ maxEntries: 100, ttlMs: 60_000 }),

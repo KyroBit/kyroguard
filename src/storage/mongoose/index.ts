@@ -9,5 +9,5 @@ export type {
   RbacUserPolicyDoc,
   RbacUserPolicyGroupDoc,
 } from './models.js'
-export { rbacMongoosePlugin } from './plugin.js'
-export type { RbacMongoosePluginOptions } from './plugin.js'
+export { kyroguardMongoosePlugin } from './plugin.js'
+export type { KyroguardMongoosePluginOptions } from './plugin.js'

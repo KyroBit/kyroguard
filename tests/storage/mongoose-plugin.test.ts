@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * rbacMongoosePlugin behavior on a real mongod (mongodb-memory-server):
+ * kyroguardMongoosePlugin behavior on a real mongod (mongodb-memory-server):
  * automatic ownership tracking through document middleware, ownership cleanup
  * on findOneAndDelete, guard-driven read filtering on find/countDocuments
  * (keyed on the request's activeFilters plan), and the DOCUMENTED gap that
@@ -12,9 +12,9 @@ import mongoose from 'mongoose'
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { inProcessBus } from '../../src/cache/bus.js'
-import { RbacEngine } from '../../src/core/engine.js'
+import { KyroguardEngine } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
-import { mongooseAdapter, rbacModels, rbacMongoosePlugin } from '../../src/storage/mongoose/index.js'
+import { mongooseAdapter, rbacModels, kyroguardMongoosePlugin } from '../../src/storage/mongoose/index.js'
 import { makeConnection, mongoAvailable, stopMongo } from './helpers/mongo.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
 import type { Subject } from '../../src/core/types.js'
@@ -24,7 +24,7 @@ const available = await mongoAvailable()
 afterAll(stopMongo)
 
 if (!available) {
-  test.skip('rbacMongoosePlugin suite (mongod unavailable)', () => {})
+  test.skip('kyroguardMongoosePlugin suite (mongod unavailable)', () => {})
 } else {
   const connection = await makeConnection()
   const adapter = mongooseAdapter(connection)
@@ -32,7 +32,7 @@ if (!available) {
   const models = rbacModels(connection)
 
   const scopes = new Map<string, Scope>([['owned', Scope.owned()]])
-  const engine = new RbacEngine({
+  const engine = new KyroguardEngine({
     adapter,
     scopes,
     cache: null,
@@ -52,7 +52,7 @@ if (!available) {
     branchId: { type: String, required: true },
   })
   const postResource: ResourceDefinition = { type: 'post', policies: [] }
-  rbacMongoosePlugin(postSchema as unknown as mongoose.Schema, {
+  kyroguardMongoosePlugin(postSchema as unknown as mongoose.Schema, {
     rbac: { engine, adapter },
     type: 'post',
   })
@@ -125,7 +125,7 @@ if (!available) {
       return found.map(doc => doc.title).sort()
     })
 
-  describe('rbacMongoosePlugin', () => {
+  describe('kyroguardMongoosePlugin', () => {
     beforeEach(async () => {
       await Post.deleteMany({})
       await models.resourceOwner.deleteMany({})

@@ -4,7 +4,7 @@ import type { StorageAdapter } from '../storage/contract.js'
  * kyroguard.config.ts shape. The adapter factory is lazy — the user's config owns
  * the driver imports, never the CLI.
  */
-export interface RbacConfig {
+export interface KyroguardConfig {
   adapter: () => Promise<StorageAdapter> | StorageAdapter
   domains: DomainConfig[]
   typegen?: {
@@ -23,6 +23,6 @@ export interface DomainConfig {
 }
 
 /** Typed identity — gives kyroguard.config.ts full autocompletion. */
-export function defineConfig(config: RbacConfig): RbacConfig {
+export function defineConfig(config: KyroguardConfig): KyroguardConfig {
   return config
 }

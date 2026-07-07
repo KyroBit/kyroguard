@@ -14,8 +14,8 @@ import { asc, eq } from 'drizzle-orm'
 import { pgTable, serial, text } from 'drizzle-orm/pg-core'
 import { sqliteTable, text as sqliteText } from 'drizzle-orm/sqlite-core'
 
-import { createRbac, MisconfiguredError, Policy, Scope } from '../../src/index.js'
-import type { RbacEngine, ResourceDefinition, Subject } from '../../src/index.js'
+import { createKyroguard, MisconfiguredError, Policy, Scope } from '../../src/index.js'
+import type { KyroguardEngine, ResourceDefinition, Subject } from '../../src/index.js'
 import { drizzleAdapter, trackedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
 import * as sqliteSchema from '../../src/storage/drizzle/schema/sqlite.js'
@@ -66,7 +66,7 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
     { type: 'post', policies: [], table: posts },
     { type: 'event', policies: [], table: events },
   ]
-  const rbac = createRbac({ adapter, resources, cache: false })
+  const rbac = createKyroguard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(pg.db, {
@@ -78,7 +78,7 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
   return { pg, adapter, engine: rbac.engine, rbac, db }
 }
 
-const runAs = <T>(engine: RbacEngine, subject: Subject, fn: () => Promise<T>): Promise<T> =>
+const runAs = <T>(engine: KyroguardEngine, subject: Subject, fn: () => Promise<T>): Promise<T> =>
   engine.store.run(async () => {
     engine.store.setSubject(subject)
     return fn()
@@ -328,7 +328,7 @@ const manager: Subject = { id: 'manager' }
 
 /** The framework guard's flow: enter context, resolve subject, authorize, store the plan. */
 const runGuarded = <T>(
-  engine: RbacEngine,
+  engine: KyroguardEngine,
   subject: Subject,
   policy: string,
   resource: ResourceDefinition,
@@ -370,7 +370,7 @@ async function makeFilterSetup() {
     table: sales,
   }
   const resources: ResourceDefinition[] = [saleResource, { type: 'post', policies: [], table: posts }]
-  const rbac = createRbac({ adapter, resources, cache: false })
+  const rbac = createKyroguard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(pg.db, { rbac: { engine: rbac.engine, adapter }, resources })
@@ -592,7 +592,7 @@ async function makeSqliteFilterSetup() {
     table: salesLite,
   }
   const resources: ResourceDefinition[] = [saleResource]
-  const rbac = createRbac({ adapter, resources, cache: false })
+  const rbac = createKyroguard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(raw, { rbac: { engine: rbac.engine, adapter }, resources })

@@ -8,8 +8,8 @@ A full test file for a guarded route:
 // grades.test.ts
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/kyroguard'
-import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 const policies = [new Policy('grades.view')]
@@ -18,13 +18,13 @@ const groups = {
 }
 
 async function buildApp() {
-  const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
-  await rbac.sync() // loads the policies, seeds the groups
+  const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
+  await guard.sync() // loads the policies, seeds the groups
 
   const app = Fastify()
-  await app.register(rbacFastify(rbac))
+  await app.register(kyroguardFastify(guard))
 
-  const teachers = app.rbac.domain({
+  const teachers = app.kyroguard.domain({
     getSubject: req =>
       req.headers['x-user'] ? { id: String(req.headers['x-user']) } : null,
   })
@@ -62,7 +62,7 @@ await teachers.assignGroup('u1', 'teacher')
 await teachers.assignPolicy('u1', 'grades.update', { scope: 'owned' })
 ```
 
-`rbac.sync()` must run first. It loads the policies and seeds the groups you gave `createRbac`. See [Assigning access](/guide/assigning-access).
+`guard.sync()` must run first. It loads the policies and seeds the groups you gave `createKyroguard`. See [Assigning access](/guide/assigning-access).
 
 ## Testing your own adapter
 

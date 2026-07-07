@@ -20,7 +20,7 @@ export interface RequestStore {
 }
 
 /**
- * Instance-scoped ALS wrapper; each RbacEngine owns its own storage.
+ * Instance-scoped ALS wrapper; each KyroguardEngine owns its own storage.
  *
  * Bun note: callers must use the callback form (`run(store, done)`) inside
  * framework hooks — awaiting a promise that resolves inside `run()` does not

@@ -1,6 +1,6 @@
 /** @kyrobit/kyroguard — framework-agnostic core entry; integrations live at subpaths. */
 
-import { RbacEngine } from './core/engine.js'
+import { KyroguardEngine } from './core/engine.js'
 import { MisconfiguredError } from './core/errors.js'
 import { collectScopes } from './core/scope.js'
 import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
@@ -20,13 +20,13 @@ import type { OwnershipEntry, StorageAdapter } from './storage/contract.js'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export interface CreateRbacOptions {
+export interface CreateKyroguardOptions {
   adapter: StorageAdapter
   /** Resource definitions — source of the scope registry and tracking config. */
   resources?: ResourceDefinition[]
   /** Shorthand for a single guard-only resource definition. */
   policies?: Policy[]
-  /** Group (role) definitions, seeded by rbac.sync() after policies. */
+  /** Group (role) definitions, seeded by guard.sync() after policies. */
   groups?: GroupsDefinition
   /** Policy cache. Default: bounded in-memory LRU (30s TTL). `false` disables caching. */
   cache?: PolicyCache | false
@@ -46,9 +46,9 @@ export interface CreateRbacOptions {
   onCacheEvent?: CacheHook
 }
 
-/** The rbac instance apps create once and hand to a framework integration. */
-export interface Rbac {
-  readonly engine: RbacEngine
+/** The kyroguard instance apps create once and hand to a framework integration. */
+export interface Kyroguard {
+  readonly engine: KyroguardEngine
   readonly adapter: StorageAdapter
   readonly resources: ResourceDefinition[]
   /** UNQUALIFIED policy name → owning resource; guards resolve the filter target through this. */
@@ -104,7 +104,7 @@ export interface AdminSubjectRef {
   tenantId?: string
 }
 
-export function createRbac(options: CreateRbacOptions): Rbac {
+export function createKyroguard(options: CreateKyroguardOptions): Kyroguard {
   const resources = [...(options.resources ?? [])]
   if (options.policies?.length) {
     resources.push({ type: 'policy', policies: options.policies })
@@ -129,7 +129,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
 
   const bus = options.invalidationBus ?? inProcessBus()
 
-  const engine = new RbacEngine({
+  const engine = new KyroguardEngine({
     adapter: options.adapter,
     scopes,
     cache,
@@ -218,7 +218,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       revoke: async (userId, resource, relation) => {
         if (!options.adapter.removeAccess) {
           throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use rbac.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use guard.access.`,
           )
         }
         await options.adapter.removeAccess(userId, resource, relation)
@@ -226,7 +226,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       list: async resource => {
         if (!options.adapter.getAccess) {
           throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use rbac.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use guard.access.`,
           )
         }
         return options.adapter.getAccess(resource)
@@ -255,15 +255,15 @@ export type {
   ScopeFilterResult,
 } from './core/scope.js'
 export {
-  RbacError,
+  KyroguardError,
   UnauthenticatedError,
   PolicyDeniedError,
   ScopeDeniedError,
   ResourceNotFoundError,
   MisconfiguredError,
 } from './core/errors.js'
-export type { RbacErrorCode } from './core/errors.js'
-export { RbacEngine, mergeGrants } from './core/engine.js'
+export type { AccessDeniedReason, KyroguardErrorBody, KyroguardErrorCode } from './core/errors.js'
+export { KyroguardEngine, mergeGrants } from './core/engine.js'
 export type { EngineOptions, AuthorizeOptions } from './core/engine.js'
 export { SubjectStore } from './core/subject-store.js'
 export type { RequestStore } from './core/subject-store.js'
@@ -271,7 +271,7 @@ export { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 export { seedGroups } from './core/seed-groups.js'
 export type { GroupsDefinition, GroupDefinition, GroupPoliciesInput } from './core/seed-groups.js'
 export { defineConfig } from './core/config.js'
-export type { RbacConfig, DomainConfig } from './core/config.js'
+export type { KyroguardConfig, DomainConfig } from './core/config.js'
 export { qualifyPolicyName, toSubjectRef, normalizeSentinel } from './core/types.js'
 export type {
   AnyPolicyName,
@@ -283,7 +283,7 @@ export type {
   DomainName,
   DomainPolicyName,
   QualifiedPolicyName,
-  RbacTypes,
+  KyroguardTypes,
   ResourceRef,
   Subject,
   SubjectInput,

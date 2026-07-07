@@ -51,7 +51,7 @@ Each domain turns its own requests into users. This one recognizes teachers, and
 
 ```ts
 // app.ts
-const teachers = app.rbac.domain('teachers', {
+const teachers = app.kyroguard.domain('teachers', {
   getSubject: async req => {
     const t = await verifyTeacherSession(req)             // your auth, not the library's
     return t ? { id: t.id, tenant_id: t.schoolId } : null // tenant_id pins the request to one school
@@ -70,7 +70,7 @@ Day zero at Greenwood: the grants table is empty, and someone has to make the fi
 This makes the principal all-powerful — inside the office app, inside Greenwood only:
 
 ```ts
-const school = app.rbac.domain('school', {
+const school = app.kyroguard.domain('school', {
   getSubject: async req => {
     const s = await verifyOfficeSession(req)
     if (!s) return null

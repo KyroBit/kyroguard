@@ -3,9 +3,9 @@
  * protocol is normative in docs/reference/testing.md ("The makeApp contract").
  */
 
-import { Policy, Scope, createRbac, qualifyPolicyName } from '../index.js'
+import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../index.js'
 import { memoryAdapter } from './memory-adapter.js'
-import type { Rbac, ResourceDefinition } from '../index.js'
+import type { Kyroguard, ResourceDefinition } from '../index.js'
 import type { SuiteTestApi } from './adapter-suite.js'
 
 export interface RouteSpec {
@@ -34,7 +34,7 @@ export interface TestApp {
 
 export interface FrameworkSuiteOptions {
   name: string
-  makeApp: (rbac: Rbac, routes: RouteSpec[]) => Promise<TestApp>
+  makeApp: (guard: Kyroguard, routes: RouteSpec[]) => Promise<TestApp>
   test: SuiteTestApi
 }
 
@@ -50,24 +50,24 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     config: {
       routes: RouteSpec[]
       domains?: string[]
-      seed?: (rbac: Rbac) => Promise<void>
+      seed?: (guard: Kyroguard) => Promise<void>
     },
-    fn: (app: TestApp, rbac: Rbac) => Promise<void>,
+    fn: (app: TestApp, guard: Kyroguard) => Promise<void>,
   ): Promise<void> => {
-    const rbac = createRbac({ adapter: memoryAdapter(), resources: makeResources() })
+    const guard = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       for (const domain of config.domains ?? ['admin']) {
-        await rbac.sync(makeResources(), domain)
+        await guard.sync(makeResources(), domain)
       }
-      await config.seed?.(rbac)
-      const app = await options.makeApp(rbac, config.routes)
+      await config.seed?.(guard)
+      const app = await options.makeApp(guard, config.routes)
       try {
-        await fn(app, rbac)
+        await fn(app, guard)
       } finally {
         await app.close()
       }
     } finally {
-      rbac.dispose()
+      guard.dispose()
     }
   }
 
@@ -100,13 +100,13 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   })
 
   const grant = (
-    rbac: Rbac,
+    guard: Kyroguard,
     subjectId: string,
     policy: string,
     opts: { domain?: string; tenantId?: string; scope?: string } = {},
   ): Promise<void> => {
     const domain = opts.domain ?? 'admin'
-    return rbac.admin.assignPolicy(
+    return guard.admin.assignPolicy(
       { subjectId, domain, tenantId: opts.tenantId },
       qualifyPolicyName(domain, policy),
       opts.scope,
@@ -114,25 +114,25 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   }
 
   describe(`framework integration contract: ${options.name}`, () => {
-    it('1: no subject → 401 with { message, code: RBAC_UNAUTHENTICATED }', () =>
+    it('1: no subject → 401 with { message, code: UNAUTHENTICATED }', () =>
       withApp({ routes: [route()] }, async app => {
         const res = await get(app, '/thing')
         expect(res.status).toBe(401)
-        expect(res.body.code).toBe('RBAC_UNAUTHENTICATED')
+        expect(res.body.code).toBe('UNAUTHENTICATED')
         expect(typeof res.body.message).toBe('string')
       }))
 
-    it('2: authenticated subject without the grant → 403 RBAC_POLICY_DENIED', () =>
+    it('2: authenticated subject without the grant → 403 ACCESS_DENIED', () =>
       withApp({ routes: [route()] }, async app => {
         const res = await get(app, '/thing', asUser('u1'))
         expect(res.status).toBe(403)
-        expect(res.body.code).toBe('RBAC_POLICY_DENIED')
+        expect(res.body.code).toBe('ACCESS_DENIED')
         expect(typeof res.body.message).toBe('string')
       }))
 
     it('3: granted subject → 200', () =>
       withApp(
-        { routes: [route()], seed: rbac => grant(rbac, 'u1', 'thing.read') },
+        { routes: [route()], seed: guard => grant(guard, 'u1', 'thing.read') },
         async app => {
           const res = await get(app, '/thing', asUser('u1'))
           expect(res.status).toBe(200)
@@ -145,12 +145,12 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         {
           domains: ['admin', 'branch'],
           routes: [route({ domain: 'branch', path: '/branch/thing' })],
-          seed: rbac => grant(rbac, 'u1', 'thing.read', { domain: 'admin' }),
+          seed: guard => grant(guard, 'u1', 'thing.read', { domain: 'admin' }),
         },
         async app => {
           const res = await get(app, '/branch/thing', asUser('u1'))
           expect(res.status).toBe(403)
-          expect(res.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(res.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -158,7 +158,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [route()],
-          seed: rbac => grant(rbac, 'u1', 'thing.read', { tenantId: 't1' }),
+          seed: guard => grant(guard, 'u1', 'thing.read', { tenantId: 't1' }),
         },
         async app => {
           const allowed = await get(app, '/thing', asUser('u1', { 'x-tenant-id': 't1' }))
@@ -166,11 +166,11 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
 
           const wrongTenant = await get(app, '/thing', asUser('u1', { 'x-tenant-id': 't2' }))
           expect(wrongTenant.status).toBe(403)
-          expect(wrongTenant.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(wrongTenant.body.code).toBe('ACCESS_DENIED')
 
           const noTenant = await get(app, '/thing', asUser('u1'))
           expect(noTenant.status).toBe(403)
-          expect(noTenant.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(noTenant.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -184,9 +184,9 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [docRoute()],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
-            await rbac.ownership.record('u1', { type: 'doc', id: 'd1' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
+            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
           },
         },
         async app => {
@@ -195,32 +195,32 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('8: scoped grant + scope check fails → 403 RBAC_SCOPE_DENIED', () =>
+    it('8: scoped grant + scope check fails → 403 ACCESS_DENIED', () =>
       withApp(
         {
           routes: [docRoute()],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
-            await rbac.ownership.record('someone-else', { type: 'doc', id: 'd1' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
+            await guard.ownership.record('someone-else', { type: 'doc', id: 'd1' })
           },
         },
         async app => {
           const res = await get(app, '/docs/d1', asUser('u1'))
           expect(res.status).toBe(403)
-          expect(res.body.code).toBe('RBAC_SCOPE_DENIED')
+          expect(res.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
-    it('9: scoped grant + resource resolver returns null → 404 RBAC_RESOURCE_NOT_FOUND', () =>
+    it('9: scoped grant + resource resolver returns null → 404 NOT_FOUND', () =>
       withApp(
         {
           routes: [docRoute({ resource: () => null })],
-          seed: rbac => grant(rbac, 'u1', 'docs.read', { scope: 'owned' }),
+          seed: guard => grant(guard, 'u1', 'docs.read', { scope: 'owned' }),
         },
         async app => {
           const res = await get(app, '/docs/d1', asUser('u1'))
           expect(res.status).toBe(404)
-          expect(res.body.code).toBe('RBAC_RESOURCE_NOT_FOUND')
+          expect(res.body.code).toBe('NOT_FOUND')
         },
       ))
 
@@ -232,9 +232,9 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
             route({ path: '/admin/thing' }),
             route({ domain: 'branch', path: '/branch/thing' }),
           ],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'thing.read', { domain: 'admin' })
-            await grant(rbac, 'u2', 'thing.read', { domain: 'branch' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read', { domain: 'admin' })
+            await grant(guard, 'u2', 'thing.read', { domain: 'branch' })
           },
         },
         async app => {
@@ -245,7 +245,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
 
           const crossDomain = await get(app, '/branch/thing', asUser('u1'))
           expect(crossDomain.status).toBe(403)
-          expect(crossDomain.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(crossDomain.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -253,9 +253,9 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [route({ policy: 'thing.read+other.read' })],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'thing.read')
-            await grant(rbac, 'u1', 'other.read')
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read')
+            await grant(guard, 'u1', 'other.read')
           },
         },
         async app => {
@@ -265,9 +265,9 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('12: RbacErrors travel the framework pipeline — x-app-hook present on 200/401/403 (v0 reply-hijack regression)', () =>
+    it('12: KyroguardErrors travel the framework pipeline — x-app-hook present on 200/401/403 (v0 reply-hijack regression)', () =>
       withApp(
-        { routes: [route()], seed: rbac => grant(rbac, 'u1', 'thing.read') },
+        { routes: [route()], seed: guard => grant(guard, 'u1', 'thing.read') },
         async app => {
           const ok = await get(app, '/thing', asUser('u1'))
           expect(ok.status).toBe(200)
@@ -275,12 +275,12 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
 
           const forbidden = await get(app, '/thing', asUser('u2'))
           expect(forbidden.status).toBe(403)
-          expect(forbidden.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(forbidden.body.code).toBe('ACCESS_DENIED')
           expect(forbidden.headers['x-app-hook']).toBe('ran')
 
           const unauthenticated = await get(app, '/thing')
           expect(unauthenticated.status).toBe(401)
-          expect(unauthenticated.body.code).toBe('RBAC_UNAUTHENTICATED')
+          expect(unauthenticated.body.code).toBe('UNAUTHENTICATED')
           expect(unauthenticated.headers['x-app-hook']).toBe('ran')
         },
       ))
@@ -289,25 +289,25 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [route()],
-          seed: rbac =>
-            rbac.seedGroups(
+          seed: guard =>
+            guard.seedGroups(
               { editors: { label: 'Editors', policies: ['thing.read'] } },
               { domain: 'admin' },
             ),
         },
-        async (app, rbac) => {
+        async (app, guard) => {
           // Prime the cache with the empty policy map.
           const denied = await get(app, '/thing', asUser('u1'))
           expect(denied.status).toBe(403)
 
-          await rbac.admin.assignGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
+          await guard.admin.assignGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
           const allowed = await get(app, '/thing', asUser('u1'))
           expect(allowed.status).toBe(200)
 
-          await rbac.admin.removeGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
+          await guard.admin.removeGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
           const revoked = await get(app, '/thing', asUser('u1'))
           expect(revoked.status).toBe(403)
-          expect(revoked.body.code).toBe('RBAC_POLICY_DENIED')
+          expect(revoked.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -315,10 +315,10 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [docRoute({ path: '/docs/:id', resource: undefined })],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
-            await rbac.ownership.record('u1', { type: 'doc', id: 'd1' })
-            await rbac.ownership.record('someone-else', { type: 'doc', id: 'd2' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
+            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
+            await guard.ownership.record('someone-else', { type: 'doc', id: 'd2' })
           },
         },
         async app => {
@@ -326,7 +326,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
 
           const foreign = await get(app, '/docs/d2', asUser('u1'))
           expect(foreign.status).toBe(403)
-          expect(foreign.body.code).toBe('RBAC_SCOPE_DENIED')
+          expect(foreign.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -334,15 +334,15 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [docRoute({ path: '/docs-inbox', resource: undefined })],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
-            await rbac.ownership.record('u1', { type: 'doc', id: 'd1' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
+            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
           },
         },
         async app => {
           const res = await get(app, '/docs-inbox', asUser('u1'))
           expect(res.status).toBe(403)
-          expect(res.body.code).toBe('RBAC_SCOPE_DENIED')
+          expect(res.body.code).toBe('ACCESS_DENIED')
         },
       ))
 
@@ -350,9 +350,9 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [docRoute({ path: '/docs/:id', resource: () => ({ type: 'doc', id: 'd9' }) })],
-          seed: async rbac => {
-            await grant(rbac, 'u1', 'docs.read', { scope: 'owned' })
-            await rbac.ownership.record('u1', { type: 'doc', id: 'd9' })
+          seed: async guard => {
+            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
+            await guard.ownership.record('u1', { type: 'doc', id: 'd9' })
           },
         },
         async app => {
@@ -365,7 +365,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       withApp(
         {
           routes: [docRoute({ path: '/docs/:id', resource: undefined })],
-          seed: rbac => grant(rbac, 'u1', 'docs.read'),
+          seed: guard => grant(guard, 'u1', 'docs.read'),
         },
         async app => {
           expect((await get(app, '/docs/d2', asUser('u1'))).status).toBe(200)

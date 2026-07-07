@@ -16,11 +16,11 @@
 import { describe, expect, it } from 'bun:test'
 import express from 'express'
 import { createServer } from 'node:http'
-import { rbacExpress } from '../../src/frameworks/express/index.js'
+import { kyroguardExpress } from '../../src/frameworks/express/index.js'
 import { runFrameworkContractSuite } from '../../src/testing/index.js'
 import type { Request, RequestHandler, Response } from 'express'
 import type { AddressInfo } from 'node:net'
-import type { Rbac, SubjectInput } from '../../src/index.js'
+import type { Kyroguard, SubjectInput } from '../../src/index.js'
 import type { RouteSpec, TestApp } from '../../src/testing/index.js'
 
 /** Per-request getSubject invocation counter, attached by the first middleware. */
@@ -38,7 +38,7 @@ function subjectFromHeaders(req: Request): SubjectInput | null {
   return subject
 }
 
-async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
+async function makeApp(rbac: Kyroguard, routes: RouteSpec[]): Promise<TestApp> {
   const app = express()
 
   // Native Express middleware — MUST run for every response, including the
@@ -56,7 +56,7 @@ async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
     next()
   })
 
-  const integration = rbacExpress(rbac)
+  const integration = kyroguardExpress(rbac)
   app.use(integration.context())
 
   // The named-domain overload's return type (ReturnType picks the last overload).
@@ -129,9 +129,9 @@ runFrameworkContractSuite({
 
 describe('express contract harness extras', () => {
   it('x-app-hook and x-getsubject-calls appear even on unmatched routes (404)', async () => {
-    const { createRbac, Policy } = await import('../../src/index.js')
+    const { createKyroguard, Policy } = await import('../../src/index.js')
     const { memoryAdapter } = await import('../../src/testing/index.js')
-    const rbac = createRbac({
+    const rbac = createKyroguard({
       adapter: memoryAdapter(),
       resources: [{ type: 'thing', policies: [new Policy('thing.read')] }],
     })

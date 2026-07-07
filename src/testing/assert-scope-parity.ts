@@ -1,8 +1,8 @@
-import { MisconfiguredError, RbacError } from '../index.js'
-import type { FilterResult, QualifiedPolicyName, Rbac, Subject } from '../index.js'
+import { MisconfiguredError, KyroguardError } from '../index.js'
+import type { FilterResult, QualifiedPolicyName, Kyroguard, Subject } from '../index.js'
 
 export interface AssertScopeParityOptions {
-  rbac: Rbac
+  rbac: Kyroguard
   subject: Subject
   policy: QualifiedPolicyName
   /** The registered resource type being listed. */
@@ -24,7 +24,7 @@ export async function assertScopeParity(options: AssertScopeParityOptions): Prom
   const definition = rbac.resources.find(candidate => candidate.type === resource)
   if (!definition) {
     throw new MisconfiguredError(
-      `[kyroguard] assertScopeParity: resource type "${resource}" is not registered on this rbac instance.`,
+      `[kyroguard] assertScopeParity: resource type "${resource}" is not registered on this kyroguard instance.`,
     )
   }
 
@@ -39,7 +39,7 @@ export async function assertScopeParity(options: AssertScopeParityOptions): Prom
         resource: () => ({ type: resource, id: row.id }),
       })
     } catch (error) {
-      if (!(error instanceof RbacError)) throw error
+      if (!(error instanceof KyroguardError)) throw error
       allowed = false
     }
     const inList = listed.has(row.id)

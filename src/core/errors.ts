@@ -1,13 +1,24 @@
-export type RbacErrorCode =
-  | 'RBAC_UNAUTHENTICATED'
-  | 'RBAC_POLICY_DENIED'
-  | 'RBAC_SCOPE_DENIED'
-  | 'RBAC_RESOURCE_NOT_FOUND'
-  | 'RBAC_MISCONFIGURED'
+export type KyroguardErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'ACCESS_DENIED'
+  | 'NOT_FOUND'
+  | 'MISCONFIGURED'
 
-export abstract class RbacError extends Error {
+/** Distinguishes the two ACCESS_DENIED denials in error bodies. */
+export type AccessDeniedReason = 'policy' | 'scope'
+
+export interface KyroguardErrorBody {
+  message: string
+  code: KyroguardErrorCode
+  /** Present only when `code` is ACCESS_DENIED. */
+  reason?: AccessDeniedReason
+}
+
+export abstract class KyroguardError extends Error {
   abstract readonly statusCode: number
-  abstract readonly code: RbacErrorCode
+  abstract readonly code: KyroguardErrorCode
+  /** Set only by the ACCESS_DENIED errors. */
+  readonly reason?: AccessDeniedReason
 
   constructor(message: string) {
     super(message)
@@ -15,15 +26,17 @@ export abstract class RbacError extends Error {
   }
 
   /** Default response body. Frameworks may override via formatError. */
-  toBody(): { message: string; code: RbacErrorCode } {
-    return { message: this.message, code: this.code }
+  toBody(): KyroguardErrorBody {
+    return this.code === 'ACCESS_DENIED' && this.reason
+      ? { message: this.message, code: this.code, reason: this.reason }
+      : { message: this.message, code: this.code }
   }
 }
 
 /** No subject on the request — authentication missing or failed. → 401 */
-export class UnauthenticatedError extends RbacError {
+export class UnauthenticatedError extends KyroguardError {
   readonly statusCode = 401
-  readonly code = 'RBAC_UNAUTHENTICATED'
+  readonly code = 'UNAUTHENTICATED'
 
   constructor(message = 'Unauthorized') {
     super(message)
@@ -31,9 +44,10 @@ export class UnauthenticatedError extends RbacError {
 }
 
 /** Subject lacks the required policy in this domain + tenant. → 403 */
-export class PolicyDeniedError extends RbacError {
+export class PolicyDeniedError extends KyroguardError {
   readonly statusCode = 403
-  readonly code = 'RBAC_POLICY_DENIED'
+  readonly code = 'ACCESS_DENIED'
+  override readonly reason = 'policy'
 
   constructor(
     readonly policy: string,
@@ -44,9 +58,10 @@ export class PolicyDeniedError extends RbacError {
 }
 
 /** Policy granted but the scope check rejected this resource. → 403 */
-export class ScopeDeniedError extends RbacError {
+export class ScopeDeniedError extends KyroguardError {
   readonly statusCode = 403
-  readonly code = 'RBAC_SCOPE_DENIED'
+  readonly code = 'ACCESS_DENIED'
+  override readonly reason = 'scope'
 
   constructor(
     readonly policy: string,
@@ -58,9 +73,9 @@ export class ScopeDeniedError extends RbacError {
 }
 
 /** Scoped guard could not resolve the target resource. → 404 */
-export class ResourceNotFoundError extends RbacError {
+export class ResourceNotFoundError extends KyroguardError {
   readonly statusCode = 404
-  readonly code = 'RBAC_RESOURCE_NOT_FOUND'
+  readonly code = 'NOT_FOUND'
 
   constructor(message = 'Not found') {
     super(message)
@@ -68,7 +83,7 @@ export class ResourceNotFoundError extends RbacError {
 }
 
 /** Library wired incorrectly (developer error, not a request outcome). → 500 */
-export class MisconfiguredError extends RbacError {
+export class MisconfiguredError extends KyroguardError {
   readonly statusCode = 500
-  readonly code = 'RBAC_MISCONFIGURED'
+  readonly code = 'MISCONFIGURED'
 }

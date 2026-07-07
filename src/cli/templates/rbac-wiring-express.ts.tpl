@@ -1,22 +1,22 @@
 /**
- * RBAC wiring for Express. Finish the TODOs, then call registerRbac from your
- * server bootstrap. Guards forward typed RbacErrors to Express's error
+ * RBAC wiring for Express. Finish the TODOs, then call registerKyroguard from your
+ * server bootstrap. Guards forward typed KyroguardErrors to Express's error
  * pipeline via next(err): 401 unauthenticated, 403 policy/scope denied,
  * 404 resource not found.
  */
-import { createRbac } from '@kyrobit/kyroguard'
-import { rbacExpress } from '@kyrobit/kyroguard/express'
+import { createKyroguard } from '@kyrobit/kyroguard'
+import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 import { resources } from './policies.js'
 import type { StorageAdapter } from '@kyrobit/kyroguard'
 import type { Express } from 'express'
 
-export function registerRbac(app: Express, adapter: StorageAdapter) {
+export function registerKyroguard(app: Express, adapter: StorageAdapter) {
   // Reuse your app's adapter/db handle — same construction as kyroguard.config.ts.
-  const rbac = createRbac({ adapter, resources })
+  const guard = createKyroguard({ adapter, resources })
 
-  const { context, domain: createDomain, errorHandler } = rbacExpress(rbac)
+  const { context, domain: createDomain, errorHandler } = kyroguardExpress(guard)
 
-  // Opens the per-request rbac context. Register BEFORE any domain guard.
+  // Opens the per-request kyroguard context. Register BEFORE any domain guard.
   app.use(context())
 
   const domain = createDomain('{{DOMAIN}}', {
@@ -43,8 +43,8 @@ export function registerRbac(app: Express, adapter: StorageAdapter) {
   //   handler,
   // )
 
-  // Register AFTER your routes so rbac errors become JSON responses:
+  // Register AFTER your routes so kyroguard errors become JSON responses:
   app.use(errorHandler())
 
-  return { rbac, domain }
+  return { guard, domain }
 }

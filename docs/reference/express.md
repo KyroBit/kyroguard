@@ -2,18 +2,18 @@
 
 Reference for `@kyrobit/kyroguard/express`. Works on Express 4.18+ and Express 5. For a walkthrough, see [Express](/guide/express).
 
-## rbacExpress()
+## kyroguardExpress()
 
 ```ts
-import { rbacExpress } from '@kyrobit/kyroguard/express'
+import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 
-function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
+function kyroguardExpress(guard: Kyroguard, options?: ExpressKyroguardOptions): ExpressKyroguard
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Rbac` | The instance from [`createRbac()`](/reference/core-api#createrbac). |
-| `options.formatError` | `(error: RbacError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
+| `rbac` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createrbac). |
+| `options.formatError` | `(error: KyroguardError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 **Returns** three factories:
 
@@ -26,11 +26,11 @@ function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 
 ```ts
 import express from 'express'
-import { rbacExpress } from '@kyrobit/kyroguard/express'
-import { rbac } from './rbac.js'
+import { kyroguardExpress } from '@kyrobit/kyroguard/express'
+import { guard } from './rbac.js'
 
 const app = express()
-const { context, domain, errorHandler } = rbacExpress(rbac)
+const { context, domain, errorHandler } = kyroguardExpress(guard)
 
 app.use(context()) // before any guard
 
@@ -78,24 +78,24 @@ Guards never write responses. A denial travels through `next(err)` into your err
 app.use(errorHandler())
 ```
 
-For an `RbacError` it responds with `error.statusCode` and a JSON body. Everything else is passed to `next(error)`, so your own error middleware still applies.
+For a `KyroguardError` it responds with `error.statusCode` and a JSON body. Everything else is passed to `next(error)`, so your own error middleware still applies.
 
 ```json
 // 403 — policy not granted
-{ "message": "Forbidden", "code": "RBAC_POLICY_DENIED" }
+{ "message": "Forbidden", "code": "ACCESS_DENIED", "reason": "policy" }
 
 // 401 — getSubject returned null
-{ "message": "Unauthorized", "code": "RBAC_UNAUTHENTICATED" }
+{ "message": "Unauthorized", "code": "UNAUTHENTICATED" }
 ```
 
-Scoped denials produce `RBAC_SCOPE_DENIED` (403) and `RBAC_RESOURCE_NOT_FOUND` (404) the same way. See [Errors](/reference/errors).
+A failed scope check produces `ACCESS_DENIED` with `"reason": "scope"`, and a scoped grant whose resource is missing produces `NOT_FOUND` (404) the same way. See [Errors](/reference/errors).
 
 ### formatError
 
 Pass `formatError` to shape the denial response yourself:
 
 ```ts
-const { context, domain, errorHandler } = rbacExpress(rbac, {
+const { context, domain, errorHandler } = kyroguardExpress(guard, {
   formatError: (error, req) => ({
     status: error.statusCode,
     body: { code: error.code, path: req.path },

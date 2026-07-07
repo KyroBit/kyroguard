@@ -44,18 +44,18 @@ This creates the six rbac tables. `npx prisma db push` also works during develop
 
 ## 4. Wire the adapter
 
-Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createRbac`:
+Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createKyroguard`:
 
 ```ts
 // src/rbac/instance.ts
 import { PrismaClient } from '@prisma/client'
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 import { resources } from './policies.js'
 
 export const client = new PrismaClient()
 export const adapter = prismaAdapter(client)
-export const rbac = createRbac({ adapter, resources })
+export const guard = createKyroguard({ adapter, resources })
 ```
 
 Any client generated from a schema that includes the rbac models works. You own the client, so call `$disconnect()` on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
@@ -68,18 +68,18 @@ npx kyroguard sync
 
 This writes your policies and groups into the rbac tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
 
-## Track ownership with `rbacPrismaExtension`
+## Track ownership with `kyroguardPrismaExtension`
 
 Policies with `Scope.owned()` check who created each row. The extension records that for you. Extend your client once and use the extended handle in request handlers:
 
 ```ts
 // src/db.ts
-import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
-import { client, rbac } from './rbac/instance.js'
+import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { client, guard } from './rbac/instance.js'
 
 export const db = client.$extends(
-  rbacPrismaExtension({
-    rbac,
+  kyroguardPrismaExtension({
+    rbac: guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),
 )
@@ -100,8 +100,8 @@ const grade = await db.grade.create({ data: { student, subject, score } })
 It only sees `create`, `createMany` and `upsert` on registered models. It never sees raw SQL, nested writes through a relation, `createMany` rows without an `id` in the data, or a `create` with a custom `select` that omits `id`. Deletes leave ownership records behind. Cover those paths yourself:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'grade', id: grade.id })
-await rbac.ownership.remove({ type: 'grade', id: grade.id })
+await guard.ownership.record(user.id, { type: 'grade', id: grade.id })
+await guard.ownership.remove({ type: 'grade', id: grade.id })
 ```
 :::
 

@@ -9,7 +9,7 @@ export interface DomainTypeInfo {
 }
 
 /**
- * Writes kyroguard.d.ts augmenting the RbacTypes interface. Every interpolated
+ * Writes kyroguard.d.ts augmenting the KyroguardTypes interface. Every interpolated
  * name — union literals AND property keys — goes through JSON.stringify so
  * user-controlled policy/domain names can never inject declaration code.
  */
@@ -38,7 +38,7 @@ function renderDeclaration(domains: DomainTypeInfo[]): string {
     'export {}',
     '',
     "declare module '@kyrobit/kyroguard' {",
-    '  interface RbacTypes {',
+    '  interface KyroguardTypes {',
     `    Domain: ${domainUnion}`,
     `    PolicyName: ${allPolicies}`,
     `    DomainPolicies: ${domainPolicies}`,

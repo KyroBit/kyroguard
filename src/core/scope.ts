@@ -3,7 +3,7 @@ import type { ResourceDefinition } from './policy.js'
 import type { StorageAdapter } from '../storage/contract.js'
 
 export interface ScopeCheckContext {
-  /** The db handle passed to createRbac (tracked or raw) — untyped by design. */
+  /** The db handle passed to createKyroguard (tracked or raw) — untyped by design. */
   db: unknown
   /** The storage adapter — powers portable checks like Scope.owned(). */
   adapter: StorageAdapter

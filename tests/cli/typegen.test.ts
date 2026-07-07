@@ -102,7 +102,7 @@ function unionLiterals(node: ts.TypeNode): string[] {
 }
 
 describe('generateTypes', () => {
-  test('plain names: valid TS augmenting @kyrobit/kyroguard RbacTypes', async () => {
+  test('plain names: valid TS augmenting @kyrobit/kyroguard KyroguardTypes', async () => {
     const text = await generate([
       { name: 'admin', policyNames: ['posts.read', 'posts.create'] },
       { name: 'customer', policyNames: ['posts.read'] },
@@ -115,7 +115,7 @@ describe('generateTypes', () => {
 
     const parsed = parseDeclaration(text)
     expect(parsed.moduleName).toBe('@kyrobit/kyroguard')
-    expect(parsed.interfaceName).toBe('RbacTypes')
+    expect(parsed.interfaceName).toBe('KyroguardTypes')
     expect(parsed.memberNames).toEqual(['Domain', 'PolicyName', 'DomainPolicies'])
     expect(parsed.domainUnion.toSorted()).toEqual(['admin', 'customer'])
     // PolicyName is deduped across domains.

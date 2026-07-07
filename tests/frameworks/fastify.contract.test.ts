@@ -11,13 +11,13 @@
 import { describe, expect, it } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyRequest } from 'fastify'
-import { rbacFastify } from '../../src/frameworks/fastify/index.js'
+import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
 import type { FastifyDomain } from '../../src/frameworks/fastify/index.js'
 import { runFrameworkContractSuite } from '../../src/testing/index.js'
 import type { RouteSpec, TestApp, TestAppResponse } from '../../src/testing/index.js'
-import type { Rbac, SubjectInput } from '../../src/index.js'
+import type { Kyroguard, SubjectInput } from '../../src/index.js'
 
-async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
+async function makeApp(rbac: Kyroguard, routes: RouteSpec[]): Promise<TestApp> {
   const app = Fastify()
 
   // Per-request getSubject invocation count (harness protocol item 1).
@@ -30,13 +30,13 @@ async function makeApp(rbac: Rbac, routes: RouteSpec[]): Promise<TestApp> {
     reply.header('x-getsubject-calls', String(getSubjectCalls.get(req) ?? 0))
   })
 
-  await app.register(rbacFastify(rbac))
+  await app.register(kyroguardFastify(rbac))
 
   const domains = new Map<string, FastifyDomain>()
   const domainFor = (name: string): FastifyDomain => {
     let domain = domains.get(name)
     if (!domain) {
-      domain = app.rbac.domain(name, {
+      domain = app.kyroguard.domain(name, {
         getSubject: req => {
           getSubjectCalls.set(req, (getSubjectCalls.get(req) ?? 0) + 1)
           const id = req.headers['x-subject-id']

@@ -28,18 +28,18 @@ There is no schema file to add. The adapter defines its own Mongoose models.
 
 ## 2. Wire the adapter
 
-Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createRbac`:
+Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createKyroguard`:
 
 ```ts
 // src/rbac/instance.ts
 import { createConnection } from 'mongoose'
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 import { resources } from './policies.js'
 
 export const connection = await createConnection(process.env.MONGODB_URI!).asPromise()
 export const adapter = mongooseAdapter(connection)
-export const rbac = createRbac({ adapter, resources })
+export const guard = createKyroguard({ adapter, resources })
 ```
 
 You own the connection, so close it on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
@@ -52,19 +52,19 @@ npx kyroguard sync
 
 Run this before first traffic — it creates the MongoDB indexes. It also writes your policies and groups, and generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
-## Track ownership with `rbacMongoosePlugin`
+## Track ownership with `kyroguardMongoosePlugin`
 
 Policies with `Scope.owned()` check who created each document. The plugin records that for you. Add it to each schema whose documents can be owned:
 
 ```ts
 // src/models/grade.ts
 import { Schema, model } from 'mongoose'
-import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
-import { rbac } from '../rbac/instance.js'
+import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { guard } from '../rbac/instance.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(rbacMongoosePlugin, { rbac, type: 'grade' })
+gradeSchema.plugin(kyroguardMongoosePlugin, { rbac: guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```
@@ -82,8 +82,8 @@ const grade = await Grade.create({ student, subject, score, schoolId })
 `Model.updateMany`, `Model.deleteMany`, `bulkWrite` and raw collection calls fire no document middleware, so the plugin never sees them. Record or remove ownership yourself on those paths:
 
 ```ts
-await rbac.ownership.record(user.id, { type: 'grade', id: gradeId })
-await rbac.ownership.remove({ type: 'grade', id: gradeId })
+await guard.ownership.record(user.id, { type: 'grade', id: gradeId })
+await guard.ownership.remove({ type: 'grade', id: gradeId })
 ```
 :::
 

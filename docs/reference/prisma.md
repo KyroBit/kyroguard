@@ -16,10 +16,10 @@ function prismaAdapter(client: PrismaClientLike): StorageAdapter
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 
-const rbac = createRbac({ adapter: prismaAdapter(new PrismaClient()) })
+const guard = createKyroguard({ adapter: prismaAdapter(new PrismaClient()) })
 ```
 
 The returned adapter:
@@ -47,31 +47,31 @@ The list is capped at `PRISMA_ID_LIST_CAP` (10,000) ids per filter. Hitting the 
 
 There is no portable "match nothing" predicate in Prisma, so short-circuit `kind: 'none'` to `[]` yourself instead of running the query — see [Filtering lists](/guide/scopes#filtering-lists).
 
-## rbacPrismaExtension()
+## kyroguardPrismaExtension()
 
 ```ts
-import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
 
-function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPrismaExtension
+function kyroguardPrismaExtension(options: KyroguardPrismaExtensionOptions): KyroguardPrismaExtension
 ```
 
 Client extension that records ownership when your app creates rows, and filters reads on registered models by the grant of the route's guard. Apply it with `client.$extends(...)` and use the extended client in request code.
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Rbac` | Your `createRbac` instance. |
+| `rbac` | `Kyroguard` | Your `createKyroguard` instance. |
 | `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model StudentGrade` is `'studentGrade'`. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
-import { rbac } from './rbac.js'
+import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { guard } from './rbac.js'
 
 const client = new PrismaClient()
 
 export const db = client.$extends(
-  rbacPrismaExtension({
-    rbac,
+  kyroguardPrismaExtension({
+    rbac: guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),
 )
@@ -91,7 +91,7 @@ A registered model gets [automatic filtering](/guide/scopes#automatic-filtering)
 Reads run unfiltered when no guard activated a filter for the model's resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). Raw SQL, `aggregate`, `groupBy` and relations loaded through `include` are never intercepted.
 
 ::: warning
-Raw SQL, nested writes through relations, `createManyAndReturn`, `updateMany` and deletes are not intercepted. Call `rbac.ownership.record()` on those paths, and `rbac.ownership.remove()` when deleting an owned resource. Otherwise stale ownership rows keep passing `Scope.owned()` checks for rows that no longer exist. See [Ownership](/guide/ownership).
+Raw SQL, nested writes through relations, `createManyAndReturn`, `updateMany` and deletes are not intercepted. Call `guard.ownership.record()` on those paths, and `guard.ownership.remove()` when deleting an owned resource. Otherwise stale ownership rows keep passing `Scope.owned()` checks for rows that no longer exist. See [Ownership](/guide/ownership).
 :::
 
 ## prismaSchemaSnippet

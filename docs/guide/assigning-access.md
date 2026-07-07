@@ -34,23 +34,23 @@ Changes apply immediately on this server. Running several servers? See [Producti
 
 ## Scripts and admin panels
 
-Outside a request handler there is often no domain instance. Use `rbac.admin.*` there:
+Outside a request handler there is often no domain instance. Use `guard.admin.*` there:
 
 ```ts
-import { rbac } from './rbac.js'
+import { guard } from './rbac.js'
 
-await rbac.admin.assignGroup(
+await guard.admin.assignGroup(
   { subjectId: 'user-42', domain: 'teachers', tenantId: 'school-1' },
   'teacher',
 )
 
-await rbac.admin.assignPolicy(
+await guard.admin.assignPolicy(
   { subjectId: 'user-42', domain: 'teachers', tenantId: 'school-1' },
   'teachers.grades.view',
 )
 ```
 
-Same operations, made explicit. `rbac.admin` takes full policy names like `teachers.grades.view`. Domain instances add the prefix for you. This API does not.
+Same operations, made explicit. `guard.admin` takes full policy names like `teachers.grades.view`. Domain instances add the prefix for you. This API does not.
 
 ## Owners
 

@@ -17,11 +17,11 @@ function mongooseAdapter(connection: Connection): StorageAdapter
 
 ```ts
 import mongoose from 'mongoose'
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 
 const connection = await mongoose.createConnection(process.env.MONGO_URL!).asPromise()
-const rbac = createRbac({ adapter: mongooseAdapter(connection) })
+const guard = createKyroguard({ adapter: mongooseAdapter(connection) })
 ```
 
 The returned adapter:
@@ -68,29 +68,29 @@ const teachers = await models.userPolicyGroup.find({ domain: 'teachers' })
 
 The document types (`RbacPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
 
-## rbacMongoosePlugin()
+## kyroguardMongoosePlugin()
 
 ```ts
-import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
 
-function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void
+function kyroguardMongoosePlugin(schema: Schema, options: KyroguardMongoosePluginOptions): void
 ```
 
 Schema plugin for your own models. It records ownership on save, and filters reads by the grant of the route's guard. Apply it before compiling the model.
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Rbac` | Your `createRbac` instance. |
+| `rbac` | `Kyroguard` | Your `createKyroguard` instance. |
 | `type` | `string` | Resource type in the ownership store, for example `'grade'`. |
 
 ```ts
 import { Schema, model } from 'mongoose'
-import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
-import { rbac } from './rbac.js'
+import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { guard } from './rbac.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(rbacMongoosePlugin, { rbac, type: 'grade' })
+gradeSchema.plugin(kyroguardMongoosePlugin, { rbac: guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```
@@ -104,5 +104,5 @@ export const Grade = model('Grade', gradeSchema)
 Reads run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
 
 ::: warning
-`Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `rbac.ownership.record()` and `rbac.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
+`Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `guard.ownership.record()` and `guard.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
 :::

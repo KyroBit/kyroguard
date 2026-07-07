@@ -18,8 +18,8 @@ Paste this into `server.ts`:
 
 ```ts
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/kyroguard'
-import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 // What teachers can do
@@ -30,16 +30,16 @@ const groups = {
   teacher: { label: 'Teacher', policies: ['grades.view', 'grades.enter'] },
 }
 
-const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
+const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
 
 // Loads policies + groups — with a real database you run: npx kyroguard sync
-await rbac.sync()
+await guard.sync()
 
 const app = Fastify()
-await app.register(rbacFastify(rbac))
+await app.register(kyroguardFastify(guard))
 
 // Demo auth: the user id comes from a header
-const teachers = app.rbac.domain({
+const teachers = app.kyroguard.domain({
   getSubject: async req => {
     const id = req.headers['x-user-id']
     return typeof id === 'string' ? { id } : null
@@ -80,7 +80,7 @@ curl -i localhost:3000/grades
 
 ```
 HTTP/1.1 401 Unauthorized
-{"statusCode":401,"code":"RBAC_UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
+{"statusCode":401,"code":"UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
 ```
 
 Someone not hired yet:
@@ -91,7 +91,7 @@ curl -i localhost:3000/grades -H 'x-user-id: u1'
 
 ```
 HTTP/1.1 403 Forbidden
-{"statusCode":403,"code":"RBAC_POLICY_DENIED","error":"Forbidden","message":"Forbidden"}
+{"statusCode":403,"code":"ACCESS_DENIED","error":"Forbidden","message":"Forbidden"}
 ```
 
 ## 4. Hire them

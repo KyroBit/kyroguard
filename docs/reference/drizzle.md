@@ -59,25 +59,25 @@ Wraps your Drizzle database. Inserts into registered resource tables record owne
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `rbac` | `Rbac` | required | Your `createRbac` instance. |
+| `rbac` | `Kyroguard` | required | Your `createKyroguard` instance. |
 | `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked and filtered. Other tables pass through. |
 | `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { trackedDb } from '@kyrobit/kyroguard/drizzle'
-import { rbac, resources } from './rbac.js'
+import { rbac: guard, resources } from './rbac.js'
 
 const rawDb = drizzle(process.env.DATABASE_URL!)
 
-export const db = trackedDb(rawDb, { rbac, resources })
+export const db = trackedDb(rawDb, { rbac: guard, resources })
 ```
 
 ### What gets tracked
 
 An insert needs the new row ids. The wrapper reads them from `values()` rows that carry an `id`, or from a `.returning()` result. When no user is set on the request, seeders and jobs for example, the insert runs plainly. Inside a transaction, the ownership row commits together with the insert.
 
-Updates and deletes are not intercepted. Call `rbac.ownership.remove()` when you delete an owned resource.
+Updates and deletes are not intercepted. Call `guard.ownership.remove()` when you delete an owned resource.
 
 ::: warning
 An insert without ids in `values()` and without `.returning()` cannot be attributed. Set `strictTracking: 'error'` in development to catch these paths. Use `db.untracked` where skipping tracking is intentional.

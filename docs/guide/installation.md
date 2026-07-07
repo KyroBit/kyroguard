@@ -85,7 +85,7 @@ Details per database: [Drizzle](/databases/drizzle), [Prisma](/databases/prisma)
 
 ## 4. Wire your framework
 
-`kyroguard init` put the wiring in `src/rbac/wiring.ts`. Finish its TODOs: pass your adapter to `createRbac`, register it, and guard a first route. The complete setups are [Fastify](/guide/fastify) and [Express](/guide/express).
+`kyroguard init` put the wiring in `src/rbac/wiring.ts`. Finish its TODOs: pass your adapter to `createKyroguard`, register it, and guard a first route. The complete setups are [Fastify](/guide/fastify) and [Express](/guide/express).
 
 ## 5. Sync
 
@@ -113,9 +113,9 @@ curl -i localhost:3000/grades
 
 ```
 HTTP/1.1 401 Unauthorized
-{"statusCode":401,"code":"RBAC_UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
+{"statusCode":401,"code":"UNAUTHENTICATED","error":"Unauthorized","message":"Unauthorized"}
 ```
 
-A 401 means the guard is enforcing. Express bodies look like `{"message":"Unauthorized","code":"RBAC_UNAUTHENTICATED"}`.
+A 401 means the guard is enforcing. Express bodies look like `{"message":"Unauthorized","code":"UNAUTHENTICATED"}`.
 
 Now give a user access: [Assigning access](/guide/assigning-access).

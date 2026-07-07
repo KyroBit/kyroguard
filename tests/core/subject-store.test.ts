@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { RbacEngine } from '../../src/core/engine.js'
+import { KyroguardEngine } from '../../src/core/engine.js'
 import { SubjectStore } from '../../src/core/subject-store.js'
 import { inProcessBus } from '../../src/cache/bus.js'
 import { memoryAdapter } from '../../src/testing/index.js'
@@ -7,8 +7,8 @@ import type { Subject } from '../../src/core/types.js'
 
 const tick = (ms = 1) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-function makeEngine(): RbacEngine {
-  return new RbacEngine({
+function makeEngine(): KyroguardEngine {
+  return new KyroguardEngine({
     adapter: memoryAdapter(),
     scopes: new Map(),
     cache: null,

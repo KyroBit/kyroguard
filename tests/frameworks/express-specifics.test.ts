@@ -8,14 +8,14 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import express, { Router } from 'express'
 import { createServer } from 'node:http'
-import { rbacExpress } from '../../src/frameworks/express/index.js'
-import { PolicyDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
-import { Policy, createRbac } from '../../src/index.js'
+import { kyroguardExpress } from '../../src/frameworks/express/index.js'
+import { PolicyDeniedError, ScopeDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
+import { Policy, createKyroguard } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { Express, Request, RequestHandler } from 'express'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { Rbac, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
@@ -23,8 +23,8 @@ const resources = (): ResourceDefinition[] => [
   { type: 'thing', policies: [new Policy('thing.read')] },
 ]
 
-async function makeRbac(domains: string[] = ['admin']): Promise<Rbac> {
-  const rbac = createRbac({ adapter: memoryAdapter(), resources: resources() })
+async function makeGuard(domains: string[] = ['admin']): Promise<Kyroguard> {
+  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: resources() })
   for (const domain of domains) await rbac.sync(resources(), domain)
   return rbac
 }
@@ -95,13 +95,16 @@ beforeEach(() => {
 // ── (a) errorHandler ─────────────────────────────────────────────────────────
 
 describe('errorHandler()', () => {
-  test('renders an RbacError as its statusCode + { message, code } JSON', async () => {
-    const rbac = await makeRbac()
+  test('renders a KyroguardError as its statusCode + toBody() JSON — ACCESS_DENIED bodies carry reason', async () => {
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.get('/denied', (_req, _res, next) => {
         next(new PolicyDeniedError('admin.thing.read'))
+      })
+      app.get('/scope-denied', (_req, _res, next) => {
+        next(new ScopeDeniedError('admin.thing.read', 'owned'))
       })
       app.get('/unauth', (_req, _res, next) => {
         next(new UnauthenticatedError())
@@ -111,11 +114,15 @@ describe('errorHandler()', () => {
       try {
         const denied = await getJson(`${served.url}/denied`)
         expect(denied.status).toBe(403)
-        expect(denied.body).toEqual({ message: 'Forbidden', code: 'RBAC_POLICY_DENIED' })
+        expect(denied.body).toEqual({ message: 'Forbidden', code: 'ACCESS_DENIED', reason: 'policy' })
+
+        const scopeDenied = await getJson(`${served.url}/scope-denied`)
+        expect(scopeDenied.status).toBe(403)
+        expect(scopeDenied.body).toEqual({ message: 'Forbidden', code: 'ACCESS_DENIED', reason: 'scope' })
 
         const unauth = await getJson(`${served.url}/unauth`)
         expect(unauth.status).toBe(401)
-        expect(unauth.body).toEqual({ message: 'Unauthorized', code: 'RBAC_UNAUTHENTICATED' })
+        expect(unauth.body).toEqual({ message: 'Unauthorized', code: 'UNAUTHENTICATED' })
       } finally {
         await served.close()
       }
@@ -124,11 +131,11 @@ describe('errorHandler()', () => {
     }
   })
 
-  test('delegates non-RbacError to the downstream error handler via next(err)', async () => {
-    const rbac = await makeRbac()
+  test('delegates non-KyroguardError to the downstream error handler via next(err)', async () => {
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       const boom = new Error('boom')
       let received: unknown = null
       app.get('/boom', (_req, _res, next) => {
@@ -158,10 +165,10 @@ describe('errorHandler()', () => {
 
 describe('formatError option', () => {
   test('overrides both status and body, and receives the request', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac, {
+      const integration = kyroguardExpress(rbac, {
         formatError: (error, req) => ({
           status: 418,
           body: { kind: error.code, path: req.path, custom: true },
@@ -175,7 +182,7 @@ describe('formatError option', () => {
       try {
         const res = await getJson(`${served.url}/thing`, { 'x-subject-id': 'u1' })
         expect(res.status).toBe(418)
-        expect(res.body).toEqual({ kind: 'RBAC_POLICY_DENIED', path: '/thing', custom: true })
+        expect(res.body).toEqual({ kind: 'ACCESS_DENIED', path: '/thing', custom: true })
       } finally {
         await served.close()
       }
@@ -189,10 +196,10 @@ describe('formatError option', () => {
 
 describe('guard error strategy', () => {
   test('a throwing getSubject yields a 500 through the default express handler, no unhandled rejection', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', {
         getSubject: () => {
@@ -200,7 +207,7 @@ describe('guard error strategy', () => {
         },
       })
       app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
-      // errorHandler forwards non-RbacError → express default terminal handler.
+      // errorHandler forwards non-KyroguardError → express default terminal handler.
       app.use(integration.errorHandler())
       const served = await serve(app)
       try {
@@ -219,10 +226,10 @@ describe('guard error strategy', () => {
   })
 
   test('an async-rejecting getSubject also routes through next(err), never the socket', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use((_req, res, next) => {
         res.setHeader('x-app-hook', 'ran')
         next()
@@ -264,10 +271,10 @@ describe('guard error strategy', () => {
 
 describe('domain independence', () => {
   test('two domains resolve subjects and grants independently', async () => {
-    const rbac = await makeRbac(['admin', 'branch'])
+    const rbac = await makeGuard(['admin', 'branch'])
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const admin = integration.domain('admin', { getSubject: headerSubject })
       const branch = integration.domain('branch', { getSubject: headerSubject })
@@ -288,10 +295,10 @@ describe('domain independence', () => {
 
         const cross1 = await getJson(`${served.url}/branch/thing`, { 'x-subject-id': 'u1' })
         expect(cross1.status).toBe(403)
-        expect(cross1.body.code).toBe('RBAC_POLICY_DENIED')
+        expect(cross1.body.code).toBe('ACCESS_DENIED')
         const cross2 = await getJson(`${served.url}/admin/thing`, { 'x-subject-id': 'u2' })
         expect(cross2.status).toBe(403)
-        expect(cross2.body.code).toBe('RBAC_POLICY_DENIED')
+        expect(cross2.body.code).toBe('ACCESS_DENIED')
       } finally {
         await served.close()
       }
@@ -305,14 +312,14 @@ describe('domain independence', () => {
 
 describe('ALS propagation', () => {
   test('context() opens a store that survives into async handlers past guard resolution', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       await rbac.admin.assignPolicy(
         { subjectId: 'u1', domain: 'admin' },
         'admin.thing.read',
       )
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', { getSubject: headerSubject })
       app.get('/thing', domain.requirePolicy('thing.read'), (async (_req, res) => {
@@ -347,10 +354,10 @@ describe('ALS propagation', () => {
   })
 
   test('concurrent requests keep isolated stores (no subject bleed)', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', { getSubject: headerSubject })
       app.get('/echo', domain.subjectHook(), (async (_req, res) => {
@@ -373,11 +380,11 @@ describe('ALS propagation', () => {
     }
   })
 
-  test('guard without context() middleware fails as RBAC_MISCONFIGURED via next(err), not a crash', async () => {
-    const rbac = await makeRbac()
+  test('guard without context() middleware fails as MISCONFIGURED via next(err), not a crash', async () => {
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       // context() deliberately NOT registered.
       const domain = integration.domain('admin', { getSubject: headerSubject })
       app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
@@ -386,7 +393,7 @@ describe('ALS propagation', () => {
       try {
         const res = await getJson(`${served.url}/thing`, { 'x-subject-id': 'u1' })
         expect(res.status).toBe(500)
-        expect(res.body.code).toBe('RBAC_MISCONFIGURED')
+        expect(res.body.code).toBe('MISCONFIGURED')
         await new Promise(resolve => setTimeout(resolve, 20))
         expect(unhandledRejections).toEqual([])
       } finally {
@@ -402,11 +409,11 @@ describe('ALS propagation', () => {
 
 describe('router mounting', () => {
   test('guards work when routes live on a Router mounted at /api', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       await rbac.admin.assignPolicy({ subjectId: 'u1', domain: 'admin' }, 'admin.thing.read')
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', { getSubject: headerSubject })
 
@@ -423,11 +430,11 @@ describe('router mounting', () => {
 
         const denied = await getJson(`${served.url}/api/thing`, { 'x-subject-id': 'u2' })
         expect(denied.status).toBe(403)
-        expect(denied.body.code).toBe('RBAC_POLICY_DENIED')
+        expect(denied.body.code).toBe('ACCESS_DENIED')
 
         const unauth = await getJson(`${served.url}/api/thing`)
         expect(unauth.status).toBe(401)
-        expect(unauth.body.code).toBe('RBAC_UNAUTHENTICATED')
+        expect(unauth.body.code).toBe('UNAUTHENTICATED')
       } finally {
         await served.close()
       }
@@ -437,10 +444,10 @@ describe('router mounting', () => {
   })
 
   test('router-scoped errorHandler renders errors inside the mount', async () => {
-    const rbac = await makeRbac()
+    const rbac = await makeGuard()
     try {
       const app = express()
-      const integration = rbacExpress(rbac)
+      const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', { getSubject: headerSubject })
 
@@ -453,7 +460,7 @@ describe('router mounting', () => {
       try {
         const res = await getJson(`${served.url}/api/thing`)
         expect(res.status).toBe(401)
-        expect(res.body.code).toBe('RBAC_UNAUTHENTICATED')
+        expect(res.body.code).toBe('UNAUTHENTICATED')
       } finally {
         await served.close()
       }

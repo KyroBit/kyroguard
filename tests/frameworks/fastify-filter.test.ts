@@ -9,9 +9,9 @@
 import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
-import { rbacFastify } from '../../src/frameworks/fastify/index.js'
-import { Policy, Scope, createRbac, qualifyPolicyName } from '../../src/index.js'
-import type { FilterResult, Rbac, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
+import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../../src/index.js'
+import type { FilterResult, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -30,7 +30,7 @@ const makeResources = (): ResourceDefinition[] => [
 
 const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
-async function seed(rbac: Rbac): Promise<void> {
+async function seed(rbac: Kyroguard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
@@ -57,12 +57,12 @@ function render(filter: FilterResult): unknown {
 }
 
 async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<void> {
-  const rbac = createRbac({ adapter: memoryAdapter(), resources: makeResources() })
+  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
   try {
     await seed(rbac)
     const app = Fastify()
-    await app.register(rbacFastify(rbac))
-    const staff = app.rbac.domain('staff', {
+    await app.register(kyroguardFastify(rbac))
+    const staff = app.kyroguard.domain('staff', {
       getSubject: (req): SubjectInput | null => {
         const id = req.headers['x-subject-id']
         return typeof id === 'string' && id !== '' ? { id } : null
@@ -137,7 +137,7 @@ describe('fastify domain.filterFor', () => {
     withApp(async app => {
       const res = await list(app)
       expect(res.statusCode).toBe(401)
-      expect(JSON.parse(res.body).code).toBe('RBAC_UNAUTHENTICATED')
+      expect(JSON.parse(res.body).code).toBe('UNAUTHENTICATED')
     }))
 
   test('requirePolicy stores the exercised policy\'s plan — same subject, same table, per-route filters', () =>
@@ -158,18 +158,18 @@ describe('fastify domain.filterFor', () => {
       expect(JSON.parse(res.body)).toEqual({ kind: 'unset' })
     }))
 
-  test('policy on no registered resource → 500 RBAC_MISCONFIGURED', async () => {
-    const rbac = createRbac({ adapter: memoryAdapter(), resources: makeResources() })
+  test('policy on no registered resource → 500 MISCONFIGURED', async () => {
+    const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       const app = Fastify()
-      await app.register(rbacFastify(rbac))
-      const staff = app.rbac.domain('staff', { getSubject: () => ({ id: 'u1' }) })
+      await app.register(kyroguardFastify(rbac))
+      const staff = app.kyroguard.domain('staff', { getSubject: () => ({ id: 'u1' }) })
       app.get('/orphan', async req => render(await staff.filterFor!(req, 'sales.missing')))
       await app.ready()
       try {
         const res = await app.inject({ method: 'GET', url: '/orphan' })
         expect(res.statusCode).toBe(500)
-        expect(JSON.parse(res.body).code).toBe('RBAC_MISCONFIGURED')
+        expect(JSON.parse(res.body).code).toBe('MISCONFIGURED')
       } finally {
         await app.close()
       }

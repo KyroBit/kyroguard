@@ -42,7 +42,7 @@ If `include` already covers the directory the file is written to, you are done.
 
 ## What gets typed
 
-- Domain names in `domain(name, ...)` (Fastify: `app.rbac.domain`).
+- Domain names in `domain(name, ...)` (Fastify: `app.kyroguard.domain`).
 - Policy names in `requirePolicy()`, per domain. The `admin` domain only accepts `admin` policies.
 - Policy names in the domain's `assignPolicy()` / `removePolicy()`.
 

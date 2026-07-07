@@ -7,11 +7,11 @@ Domains split one backend into named apps, like `admin` and `teachers`. Tenants 
 One school group, two apps. `admin` is the school-office app. `teachers` is the teacher portal:
 
 ```ts
-const admin = app.rbac.domain('admin', {
+const admin = app.kyroguard.domain('admin', {
   getSubject: req => getOfficeSession(req),
 })
 
-const teachers = app.rbac.domain('teachers', {
+const teachers = app.kyroguard.domain('teachers', {
   getSubject: req => getTeacherSession(req),
 })
 
@@ -30,7 +30,7 @@ A grant on one domain never works on another. Give someone `grades.view` on `tea
 
 Each domain also has its own policy names. `admin.requirePolicy('reports.view')` checks `admin.reports.view`. The `teachers` guard checks `teachers.grades.view`. They are different policies. Each domain gets its own policies file: `students.manage` and `reports.view` for the office, the grade policies for teachers. See [Policies](/guide/policies).
 
-A single-app setup skips domains entirely. `app.rbac.domain({ getSubject })` takes no name, and policies stay unprefixed. Add domains when a second app shows up.
+A single-app setup skips domains entirely. `app.kyroguard.domain({ getSubject })` takes no name, and policies stay unprefixed. Add domains when a second app shows up.
 
 ## Tenants
 
@@ -45,7 +45,7 @@ Grants are exact. Amina is a coordinator in school-1. In school-2 she has no acc
 On the request side, put the school on the user in `getSubject`:
 
 ```ts
-const teachers = app.rbac.domain('teachers', {
+const teachers = app.kyroguard.domain('teachers', {
   getSubject: async req => {
     const user = await getTeacherSession(req)
     return user ? { id: user.id, tenant_id: user.schoolId } : null

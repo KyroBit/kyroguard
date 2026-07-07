@@ -2,13 +2,13 @@
 /**
  * The memory adapter's listFilters over plain row predicates — the shape that
  * makes engine.filterFor testable without a database — plus assertScopeParity
- * driven end-to-end through createRbac against the reference adapter.
+ * driven end-to-end through createKyroguard against the reference adapter.
  */
 
 import { describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createRbac } from '../../src/index.js'
-import type { FilterResult, Rbac, StorageAdapter } from '../../src/index.js'
+import { Policy, Scope, createKyroguard } from '../../src/index.js'
+import type { FilterResult, Kyroguard, StorageAdapter } from '../../src/index.js'
 import { assertScopeParity, memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -88,9 +88,9 @@ describe('memory adapter listFilters — predicate fragments', () => {
 })
 
 describe('assertScopeParity — filterFor end-to-end on the memory adapter', () => {
-  const buildRbac = async (): Promise<{ adapter: StorageAdapter; rbac: Rbac }> => {
+  const buildGuard = async (): Promise<{ adapter: StorageAdapter; rbac: Kyroguard }> => {
     const adapter = memoryAdapter()
-    const rbac = createRbac({
+    const rbac = createKyroguard({
       adapter,
       cache: false,
       resources: [
@@ -118,7 +118,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   }
 
   test("a single 'owned' grant filters the list to owned rows and holds parity", async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view', 'owned')
     const subject = { id: 'u1' }
 
@@ -137,7 +137,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test('multiple scopes on one policy OR together on both paths', async () => {
-    const { adapter, rbac } = await buildRbac()
+    const { adapter, rbac } = await buildGuard()
     await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view', 'owned')
     await adapter.upsertGroup({ name: 'viewers', label: 'Viewers' })
     await adapter.setGroupPolicies('viewers', [{ policyName: 'posts.view', scope: 'granted' }])
@@ -158,7 +158,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test("the 'in-tenant' scope passes only rows with an access entry in the subject's tenant", async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     await rbac.admin.assignPolicy(
       { subjectId: 'u9', tenantId: 't1' },
       'posts.view',
@@ -180,7 +180,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test("an 'in-tenant' grant held by a tenant-less subject folds to none on both paths", async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     await rbac.admin.assignPolicy({ subjectId: 'u8' }, 'posts.view', 'in-tenant')
     const subject = { id: 'u8' }
 
@@ -198,7 +198,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test('no grant at all is parity-safe: filterFor answers no-policy, authorize denies, the list is empty', async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     const subject = { id: 'stranger' }
 
     const filter = await rbac.engine.filterFor(subject, 'posts.view', rbac.resources[0]!)
@@ -215,7 +215,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test('assertScopeParity rejects when the query drifts from the checks', async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view', 'owned')
 
     expect(
@@ -231,7 +231,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
   })
 
   test('assertScopeParity rejects loudly for an unregistered resource type', async () => {
-    const { rbac } = await buildRbac()
+    const { rbac } = await buildGuard()
     expect(
       assertScopeParity({
         rbac,

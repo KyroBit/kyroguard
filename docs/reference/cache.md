@@ -15,13 +15,13 @@ function memoryCache(options: MemoryCacheOptions): PolicyCache
 | `maxEntries` | `number` | Size limit. Least recently used entries are evicted first. |
 | `ttlMs` | `number` | Lifetime per entry. |
 
-An in-memory cache with a size limit and per-entry TTL. `createRbac()` builds one by default (`maxEntries: 10_000`, `ttlMs: 30_000`). Pass your own to change the limits:
+An in-memory cache with a size limit and per-entry TTL. `createKyroguard()` builds one by default (`maxEntries: 10_000`, `ttlMs: 30_000`). Pass your own to change the limits:
 
 ```ts
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { memoryCache } from '@kyrobit/kyroguard/cache'
 
-const rbac = createRbac({
+const guard = createKyroguard({
   adapter,
   cache: memoryCache({ maxEntries: 50_000, ttlMs: 10_000 }),
 })
@@ -59,14 +59,14 @@ Cross-instance invalidation over Redis pub/sub. The module never imports a Redis
 
 ```ts
 import { Redis } from 'ioredis'
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { redisBus } from '@kyrobit/kyroguard/cache'
 
 const publisher = new Redis(process.env.REDIS_URL!)
 const subscriber = new Redis(process.env.REDIS_URL!)
 
 const bus = redisBus(publisher, subscriber)
-const rbac = createRbac({ adapter, invalidationBus: bus })
+const guard = createKyroguard({ adapter, invalidationBus: bus })
 
 // shutdown:
 await bus.close()
@@ -140,7 +140,7 @@ interface InvalidationBus {
 }
 ```
 
-The engine publishes after every grant change. It clears its local cache on every delivered event. Receiving your own published event back is harmless. Call `close()` yourself at shutdown — `rbac.dispose()` only detaches the engine's own handler.
+The engine publishes after every grant change. It clears its local cache on every delivered event. Receiving your own published event back is harmless. Call `close()` yourself at shutdown — `guard.dispose()` only detaches the engine's own handler.
 
 ## CacheEvent
 
@@ -153,4 +153,4 @@ interface CacheEvent {
 type CacheHook = (event: CacheEvent) => void
 ```
 
-Emitted through `onCacheEvent` on [`createRbac()`](/reference/core-api#createrbac). Errors thrown by the hook are swallowed. Observability never affects authorization.
+Emitted through `onCacheEvent` on [`createKyroguard()`](/reference/core-api#createrbac). Errors thrown by the hook are swallowed. Observability never affects authorization.

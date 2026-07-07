@@ -148,7 +148,7 @@ export interface ListFilters {
 }
 
 export interface AdapterCapabilities {
-  /** trackedDb (Drizzle) / rbacMongoosePlugin (Mongoose) available. */
+  /** trackedDb (Drizzle) / kyroguardMongoosePlugin (Mongoose) available. */
   autoOwnershipTracking: boolean
   /** @deprecated Superseded by listFiltering. */
   queryScoping: boolean

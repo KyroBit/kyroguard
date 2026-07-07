@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { RbacEngine, mergeGrants } from '../../src/core/engine.js'
+import { KyroguardEngine, mergeGrants } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
 import {
   PolicyDeniedError,
@@ -17,12 +17,12 @@ import type { PolicyGrant, StorageAdapter } from '../../src/storage/contract.js'
 
 interface Harness {
   adapter: StorageAdapter
-  engine: RbacEngine
+  engine: KyroguardEngine
 }
 
 function makeEngine(overrides?: Partial<EngineOptions>): Harness {
   const adapter = overrides?.adapter ?? memoryAdapter()
-  const engine = new RbacEngine({
+  const engine = new KyroguardEngine({
     adapter,
     scopes: new Map(),
     cache: null,
@@ -54,7 +54,7 @@ describe('authorize() decision matrix', () => {
     )
     expect(err).toBeInstanceOf(UnauthenticatedError)
     expect((err as UnauthenticatedError).statusCode).toBe(401)
-    expect((err as UnauthenticatedError).code).toBe('RBAC_UNAUTHENTICATED')
+    expect((err as UnauthenticatedError).code).toBe('UNAUTHENTICATED')
   })
 
   test('undefined subject → UnauthenticatedError', async () => {
@@ -71,7 +71,7 @@ describe('authorize() decision matrix', () => {
     )
   })
 
-  test('policy not granted → PolicyDeniedError with code RBAC_POLICY_DENIED (403)', async () => {
+  test('policy not granted → PolicyDeniedError with code ACCESS_DENIED, reason policy (403)', async () => {
     const { engine } = makeEngine()
     const err = await engine.authorize({ id: 'u1' }, 'admin.posts.read').then(
       () => null,
@@ -79,8 +79,14 @@ describe('authorize() decision matrix', () => {
     )
     expect(err).toBeInstanceOf(PolicyDeniedError)
     expect((err as PolicyDeniedError).statusCode).toBe(403)
-    expect((err as PolicyDeniedError).code).toBe('RBAC_POLICY_DENIED')
+    expect((err as PolicyDeniedError).code).toBe('ACCESS_DENIED')
+    expect((err as PolicyDeniedError).reason).toBe('policy')
     expect((err as PolicyDeniedError).policy).toBe('admin.posts.read')
+    expect((err as PolicyDeniedError).toBody()).toEqual({
+      message: 'Forbidden',
+      code: 'ACCESS_DENIED',
+      reason: 'policy',
+    })
   })
 
   test('granted policy → resolves (200-equivalent)', async () => {
@@ -150,8 +156,14 @@ describe('authorize() scoped grants', () => {
       (e: unknown) => e,
     )
     expect(err).toBeInstanceOf(ScopeDeniedError)
-    expect((err as ScopeDeniedError).code).toBe('RBAC_SCOPE_DENIED')
+    expect((err as ScopeDeniedError).code).toBe('ACCESS_DENIED')
+    expect((err as ScopeDeniedError).reason).toBe('scope')
     expect((err as ScopeDeniedError).scope).toBe('owned')
+    expect((err as ScopeDeniedError).toBody()).toEqual({
+      message: 'Forbidden',
+      code: 'ACCESS_DENIED',
+      reason: 'scope',
+    })
   })
 
   test('no resource resolver → a condition scope can allow (business hours)', async () => {
@@ -202,7 +214,7 @@ describe('authorize() scoped grants', () => {
       )
     expect(err).toBeInstanceOf(ResourceNotFoundError)
     expect((err as ResourceNotFoundError).statusCode).toBe(404)
-    expect((err as ResourceNotFoundError).code).toBe('RBAC_RESOURCE_NOT_FOUND')
+    expect((err as ResourceNotFoundError).code).toBe('NOT_FOUND')
   })
 
   test('scope check returns false → ScopeDeniedError', async () => {
@@ -456,7 +468,7 @@ describe('authorize() inAuthz suppression', () => {
 
   test('set while the resolver and scope checks run, restored after allow', async () => {
     const observed: Record<string, boolean> = {}
-    let engineRef: RbacEngine
+    let engineRef: KyroguardEngine
     const scopes = new Map([
       [
         'probe',

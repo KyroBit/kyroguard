@@ -1,7 +1,7 @@
 import { and, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { MisconfiguredError } from '../../core/errors.js'
-import type { RbacEngine } from '../../core/engine.js'
+import type { KyroguardEngine } from '../../core/engine.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Subject } from '../../core/types.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
@@ -9,7 +9,7 @@ import type { DrizzleStorageAdapter } from './adapter.js'
 
 export interface TrackedDbOptions {
   rbac: {
-    engine: RbacEngine
+    engine: KyroguardEngine
     adapter: StorageAdapter
   }
   resources: ResourceDefinition[]
@@ -18,7 +18,7 @@ export interface TrackedDbOptions {
 }
 
 interface Ctx {
-  engine: RbacEngine
+  engine: KyroguardEngine
   adapter: StorageAdapter
   tableMap: Map<unknown, ResourceDefinition>
   strictTracking: 'warn' | 'error' | 'off'
@@ -27,7 +27,7 @@ interface Ctx {
 
 interface InsertTracking {
   resourceType: string
-  engine: RbacEngine
+  engine: KyroguardEngine
   write: (entries: OwnershipEntry[]) => Promise<void>
   strictTracking: 'warn' | 'error' | 'off'
   warned: Set<string>

@@ -1,10 +1,10 @@
 import { normalizeSentinel } from '../../core/types.js'
 import type { FilterQuery, Query, Schema } from 'mongoose'
-import type { RbacEngine } from '../../core/engine.js'
+import type { KyroguardEngine } from '../../core/engine.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
-export interface RbacMongoosePluginOptions {
-  rbac: { engine: RbacEngine; adapter: StorageAdapter }
+export interface KyroguardMongoosePluginOptions {
+  rbac: { engine: KyroguardEngine; adapter: StorageAdapter }
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
 }
@@ -23,7 +23,7 @@ function documentId(doc: unknown): string | null {
  * collection ops fire NO document middleware, so they are neither tracked
  * nor filtered — see docs/reference/mongoose.md.
  */
-export function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void {
+export function kyroguardMongoosePlugin(schema: Schema, options: KyroguardMongoosePluginOptions): void {
   const { engine, adapter } = options.rbac
 
   async function recordOwnershipFor(docs: unknown[]): Promise<void> {

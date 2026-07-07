@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * rbacPrismaExtension behavior against a real generated client on SQLite:
+ * kyroguardPrismaExtension behavior against a real generated client on SQLite:
  * automatic ownership tracking on create / createMany / upsert, the DOCUMENTED
  * gap that createMany can only record client-provided ids (Prisma returns
  * only a count), the silent no-op without a request subject, and the
@@ -10,8 +10,8 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { inProcessBus } from '../../src/cache/bus.js'
-import { RbacEngine } from '../../src/core/engine.js'
-import { prismaAdapter, rbacPrismaExtension } from '../../src/storage/prisma/index.js'
+import { KyroguardEngine } from '../../src/core/engine.js'
+import { prismaAdapter, kyroguardPrismaExtension } from '../../src/storage/prisma/index.js'
 import { makePrismaFixture } from './helpers/prisma-fixture/setup.js'
 import type { Subject } from '../../src/core/types.js'
 
@@ -19,12 +19,12 @@ const fixture = await makePrismaFixture('rbac-prisma-ext-')
 const { client } = fixture
 
 const adapter = prismaAdapter(client)
-const engine = new RbacEngine({ adapter, scopes: new Map(), cache: null, bus: inProcessBus() })
+const engine = new KyroguardEngine({ adapter, scopes: new Map(), cache: null, bus: inProcessBus() })
 
 // The generated $extends signature is a project-specific mapped type; the
 // fixture client is structural, so the extension object goes through as-is.
 const extended = client.$extends(
-  rbacPrismaExtension({
+  kyroguardPrismaExtension({
     rbac: { engine, adapter },
     resources: [{ type: 'post', model: 'post' }],
   }),
@@ -53,7 +53,7 @@ const asSubject = <T>(who: Subject, fn: () => Promise<T>): Promise<T> =>
 const isOwner = (ownerId: string, id: string): Promise<boolean> =>
   adapter.isOwner(ownerId, { type: 'post', id })
 
-describe('rbacPrismaExtension', () => {
+describe('kyroguardPrismaExtension', () => {
   beforeEach(async () => {
     await client.rbacResourceOwner.deleteMany({})
     await client.post.deleteMany({})

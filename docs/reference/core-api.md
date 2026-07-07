@@ -2,10 +2,10 @@
 
 Reference for `@kyrobit/kyroguard`, the framework-agnostic core. Integrations live at subpaths: [Fastify](/reference/fastify), [Express](/reference/express), [Drizzle](/reference/drizzle), [Prisma](/reference/prisma), [Mongoose](/reference/mongoose), [Cache](/reference/cache), [Testing](/reference/testing).
 
-## createRbac()
+## createKyroguard()
 
 ```ts
-function createRbac(options: CreateRbacOptions): Rbac
+function createKyroguard(options: CreateKyroguardOptions): Kyroguard
 ```
 
 | Option | Type | Default | Description |
@@ -24,10 +24,10 @@ function createRbac(options: CreateRbacOptions): Rbac
 | `onCacheEvent` | `CacheHook` | — | Fires on cache hits, misses and invalidations. |
 
 ```ts
-import { createRbac, Policy, Scope } from '@kyrobit/kyroguard'
+import { createKyroguard, Policy, Scope } from '@kyrobit/kyroguard'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
-const rbac = createRbac({
+const guard = createKyroguard({
   adapter: memoryAdapter(),
   policies: [
     new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
@@ -46,20 +46,20 @@ const rbac = createRbac({
     },
   },
 })
-await rbac.sync()
+await guard.sync()
 ```
 
-## Rbac
+## Kyroguard
 
-The instance returned by `createRbac()`.
+The instance returned by `createKyroguard()`.
 
 | Member | Description |
 | --- | --- |
-| `engine` | The authorization engine (`RbacEngine`). |
-| `adapter` | The adapter passed to `createRbac()`. |
+| `engine` | The authorization engine (`KyroguardEngine`). |
+| `adapter` | The adapter passed to `createKyroguard()`. |
 | `resources` | The resource definitions, including the `policies` shorthand. |
 | `resourceForPolicy` | Unqualified policy name → the resource that defines it. Guards resolve their filter target through it — see [`storeFilterFor`](#storefilterfor). |
-| `sync()` | Load the `createRbac` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
+| `sync()` | Load the `createKyroguard` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
 | `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
@@ -78,7 +78,7 @@ The instance returned by `createRbac()`.
 | `cache.clear()` | Drop all cached policies on every instance. |
 | `dispose()` | Detach bus subscriptions (shutdown, tests). |
 
-`rbac.admin` is the low-level API. It takes qualified policy names — domain prefix included, like `admin.reports.view` — and an explicit domain/tenant:
+`guard.admin` is the low-level API. It takes qualified policy names — domain prefix included, like `admin.reports.view` — and an explicit domain/tenant:
 
 ```ts
 interface AdminSubjectRef {
@@ -87,7 +87,7 @@ interface AdminSubjectRef {
   tenantId?: string
 }
 
-await rbac.admin.assignPolicy({ subjectId: 'zainab', domain: 'admin' }, 'admin.reports.view')
+await guard.admin.assignPolicy({ subjectId: 'zainab', domain: 'admin' }, 'admin.reports.view')
 ```
 
 Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
@@ -165,7 +165,7 @@ The built-ins ship both halves. Default names: `owned`, `granted`, `in-tenant`. 
 teachers.filterFor(req, policy): Promise<FilterResult>
 
 // On the engine:
-rbac.engine.filterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
+guard.engine.filterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
 
 type FilterResult =
   | { kind: 'all' }
@@ -188,10 +188,10 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 ## storeFilterFor()
 
 ```ts
-rbac.engine.storeFilterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
+guard.engine.storeFilterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
 ```
 
-The guard-path entry behind [automatic filtering](/guide/scopes#automatic-filtering). After `requirePolicy` allows, the framework guard calls it with the policy it just checked and that policy's resource (from [`resourceForPolicy`](#rbac)): it runs [`filterFor`](#filterfor) and activates the result for the rest of the request, keyed by `resource.type`. `trackedDb`, the Prisma extension and the Mongoose plugin key their read filtering on that per-request state alone — a resource with no active filter is read unfiltered.
+The guard-path entry behind [automatic filtering](/guide/scopes#automatic-filtering). After `requirePolicy` allows, the framework guard calls it with the policy it just checked and that policy's resource (from [`resourceForPolicy`](#kyroguard)): it runs [`filterFor`](#filterfor) and activates the result for the rest of the request, keyed by `resource.type`. `trackedDb`, the Prisma extension and the Mongoose plugin key their read filtering on that per-request state alone — a resource with no active filter is read unfiltered.
 
 ## GroupDefinition
 
@@ -223,26 +223,26 @@ interface Subject {
 
 ## Error classes
 
-All guards throw subclasses of `RbacError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`. See [Errors](/reference/errors).
+All guards throw subclasses of `KyroguardError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`, plus `reason` on the `ACCESS_DENIED` errors. See [Errors](/reference/errors).
 
-| Class | Status | Code |
-| --- | --- | --- |
-| `UnauthenticatedError` | 401 | `RBAC_UNAUTHENTICATED` |
-| `PolicyDeniedError` | 403 | `RBAC_POLICY_DENIED` |
-| `ScopeDeniedError` | 403 | `RBAC_SCOPE_DENIED` |
-| `ResourceNotFoundError` | 404 | `RBAC_RESOURCE_NOT_FOUND` |
-| `MisconfiguredError` | 500 | `RBAC_MISCONFIGURED` |
+| Class | Status | Code | `reason` |
+| --- | --- | --- | --- |
+| `UnauthenticatedError` | 401 | `UNAUTHENTICATED` | — |
+| `PolicyDeniedError` | 403 | `ACCESS_DENIED` | `'policy'` |
+| `ScopeDeniedError` | 403 | `ACCESS_DENIED` | `'scope'` |
+| `ResourceNotFoundError` | 404 | `NOT_FOUND` | — |
+| `MisconfiguredError` | 500 | `MISCONFIGURED` | — |
 
-`UnknownPolicyError` and `UnknownScopeError` are not `RbacError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
+`UnknownPolicyError` and `UnknownScopeError` are not `KyroguardError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
 
 ## Other exports
 
 Functions:
 
-- `syncPolicies(adapter, resources, domain?, options?)` — sync one domain's policies into storage. `rbac.sync()` calls this. See [Sync](/guide/sync).
-- `seedGroups(adapter, groups, allPolicies?, domain?)` — upsert groups and replace their policies. `rbac.seedGroups()` calls this.
+- `syncPolicies(adapter, resources, domain?, options?)` — sync one domain's policies into storage. `guard.sync()` calls this. See [Sync](/guide/sync).
+- `seedGroups(adapter, groups, allPolicies?, domain?)` — upsert groups and replace their policies. `guard.seedGroups()` calls this.
 - `backfillGroupDependencies(adapter, resources, domain?, options?)` — add missing policy dependencies to every group.
-- `collectScopes(resources)` — build the scope registry from resource definitions. `createRbac()` calls this.
+- `collectScopes(resources)` — build the scope registry from resource definitions. `createKyroguard()` calls this.
 - `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
 - `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
@@ -252,7 +252,7 @@ Functions:
 
 Classes:
 
-- `RbacEngine` — the decision engine behind every guard. Most apps never construct one.
+- `KyroguardEngine` — the decision engine behind every guard. Most apps never construct one.
 - `SubjectStore` — per-request state holder, for custom framework integrations.
 
 Types:
@@ -260,9 +260,9 @@ Types:
 - Subjects: `Subject`, `SubjectInput`, `SubjectRef`.
 - Policies: `ResourceDefinition`, `PolicyMap`, `ResourceRef`.
 - Groups: `GroupsDefinition`, `GroupDefinition`, `GroupPoliciesInput`.
-- Names: `RbacTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
+- Names: `KyroguardTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
 - Storage contract: `StorageAdapter`, `AdapterCapabilities`, `ListFilters`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`, `OwnershipEntry`. See [Custom adapters](/guide/custom-adapters).
 - Cache: `PolicyCache`, `PolicyCacheKey`, `InvalidationBus`, `InvalidationEvent`, `CacheEvent`, `CacheHook`. See [Cache](/reference/cache).
-- Hooks: `DecisionEvent`, `DecisionHook`, `RbacErrorCode`.
+- Hooks: `DecisionEvent`, `DecisionHook`, `KyroguardErrorCode`.
 - Engine: `EngineOptions`, `AuthorizeOptions`, `FilterResult`, `RequestStore`, `ScopeCheckFn`, `ScopeCheckContext`, `ScopeFilterFn`, `ScopeFilterContext`, `ScopeFilterResult`, `Awaitable`.
-- Config: `RbacConfig`, `DomainConfig`.
+- Config: `KyroguardConfig`, `DomainConfig`.

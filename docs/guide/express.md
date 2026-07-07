@@ -5,16 +5,16 @@ Wire `@kyrobit/kyroguard` into Express 4 or 5. This is a complete setup:
 ```ts
 // app.ts
 import express from 'express'
-import { createRbac } from '@kyrobit/kyroguard'
-import { rbacExpress } from '@kyrobit/kyroguard/express'
+import { createKyroguard } from '@kyrobit/kyroguard'
+import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/rbac-schema.js' // written by `kyroguard init`
 import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'
 
-const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }), resources })
-const { context, domain, errorHandler } = rbacExpress(rbac)
+const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }), resources })
+const { context, domain, errorHandler } = kyroguardExpress(guard)
 
 const app = express()
 app.use(context())
@@ -49,16 +49,17 @@ A denied guard never writes the response itself. It passes the error to `errorHa
 ```json
 {
   "message": "Forbidden",
-  "code": "RBAC_POLICY_DENIED"
+  "code": "ACCESS_DENIED",
+  "reason": "policy"
 }
 ```
 
-That is the 403 for a missing policy. The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
+That is the 403 for a missing policy — a failed scope check sends the same code with `"reason": "scope"`. The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
 
 To change the response shape, pass `formatError`:
 
 ```ts
-const { context, domain, errorHandler } = rbacExpress(rbac, {
+const { context, domain, errorHandler } = kyroguardExpress(guard, {
   formatError: error => ({
     status: error.statusCode,
     body: { error: error.code },

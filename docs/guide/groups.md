@@ -92,13 +92,13 @@ Members are untouched. Re-seeding changes what a group grants, never who has it.
 ## Turning a group off
 
 ```ts
-await rbac.adapter.upsertGroup({ name: 'teacher', label: 'Teacher', isActive: false })
-await rbac.cache.clear()
+await guard.adapter.upsertGroup({ name: 'teacher', label: 'Teacher', isActive: false })
+await guard.cache.clear()
 ```
 
 Set `isActive: false` and the group grants nothing. Members keep the assignment but lose the policies. Set it back to `true` to restore them.
 
-`rbac.cache.clear()` makes the change take effect immediately.
+`guard.cache.clear()` makes the change take effect immediately.
 
 ## Next steps
 

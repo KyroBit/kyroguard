@@ -9,7 +9,7 @@ Your admins can hold every policy. So why does `is_super` exist?
 You just opened school-2. Nobody there has a role yet — and there is no one who could hand them out. The owner can already do everything, because ownership is not something you are given:
 
 ```ts
-const teachers = app.rbac.domain('teachers', {
+const teachers = app.kyroguard.domain('teachers', {
   getSubject: async req => {
     const user = await auth(req)
     const schoolId = req.headers['x-school-id'] as string
@@ -56,7 +56,7 @@ For the actions that touch the owner themselves — deleting the owner's account
 
 The rule of thumb: **if someone should be able to lose the access, it is a role.** Reserve `is_super` for the person the school belongs to — and keep that set tiny, because super requests skip scopes and per-policy audit detail. Every bypass still lands in the [audit hook](/guide/production) as `reason: 'super'`, so owner activity stays visible.
 
-To turn the bypass off globally — some deployments want no superusers at all — pass `superBypass: false` to `createRbac`.
+To turn the bypass off globally — some deployments want no superusers at all — pass `superBypass: false` to `createKyroguard`.
 
 ## Next steps
 

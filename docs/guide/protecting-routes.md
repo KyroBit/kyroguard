@@ -34,7 +34,7 @@ The user must hold the named policy. Otherwise the request is denied. Viewing gr
 Return the logged-in user, or `null`:
 
 ```ts
-const teachers = app.rbac.domain({
+const teachers = app.kyroguard.domain({
   getSubject: async req => {
     const token = req.headers.authorization?.slice('Bearer '.length)
     if (!token) return null
@@ -53,9 +53,9 @@ Every guarded request ends one of four ways:
 | Status | Meaning | `code` in the body |
 | --- | --- | --- |
 | 200 | Allowed | — |
-| 401 | No logged-in user | `RBAC_UNAUTHENTICATED` |
-| 403 | Policy not granted, or scope check failed | `RBAC_POLICY_DENIED` / `RBAC_SCOPE_DENIED` |
-| 404 | Scoped grant, but the resource does not exist | `RBAC_RESOURCE_NOT_FOUND` |
+| 401 | No logged-in user | `UNAUTHENTICATED` |
+| 403 | Policy not granted, or scope check failed | `ACCESS_DENIED` (`reason: 'policy'` / `'scope'`) |
+| 404 | Scoped grant, but the resource does not exist | `NOT_FOUND` |
 
 The exact response bodies are shown in [Fastify](/guide/fastify) and [Express](/guide/express).
 

@@ -1,15 +1,15 @@
-import { MisconfiguredError, RbacError } from '../../core/errors.js'
+import { MisconfiguredError, KyroguardError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
-import type { Rbac } from '../../index.js'
+import type { Kyroguard } from '../../index.js'
 import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
 
-export interface ExpressRbacOptions extends ErrorFormatter<Request> {}
+export interface ExpressKyroguardOptions extends ErrorFormatter<Request> {}
 
-export interface ExpressRbac {
+export interface ExpressKyroguard {
   /** Opens the per-request ALS context. Register once, before any domain guard. */
   context(): RequestHandler
   /** Hook-free domain factory — registering it never touches app-wide state. */
@@ -19,17 +19,17 @@ export interface ExpressRbac {
   ): DomainInstance<Request, RequestHandler, P>
   /** Single-area apps don't need a domain name — policies stay unprefixed. */
   domain(options: DomainOptions<Request>): DomainInstance<Request, RequestHandler, ''>
-  /** Terminal error middleware: renders RbacError, delegates everything else. */
+  /** Terminal error middleware: renders KyroguardError, delegates everything else. */
   errorHandler(): ErrorRequestHandler
 }
 
-export function rbacExpress(rbac: Rbac, options: ExpressRbacOptions = {}): ExpressRbac {
+export function kyroguardExpress(guard: Kyroguard, options: ExpressKyroguardOptions = {}): ExpressKyroguard {
   return {
     context() {
       return (_req, _res, next) => {
         // Callback form is mandatory: under Bun, a promise-wrapped store.run()
         // does not propagate ALS context to the rest of the middleware chain.
-        rbac.engine.store.enter(next)
+        guard.engine.store.enter(next)
       }
     },
 
@@ -38,12 +38,12 @@ export function rbacExpress(rbac: Rbac, options: ExpressRbacOptions = {}): Expre
       domainOptions?: DomainOptions<Request>,
     ) =>
       typeof nameOrOptions === 'string'
-        ? createDomain(rbac, nameOrOptions, domainOptions!)
-        : createDomain(rbac, '', nameOrOptions)) as ExpressRbac['domain'],
+        ? createDomain(guard, nameOrOptions, domainOptions!)
+        : createDomain(guard, '', nameOrOptions)) as ExpressKyroguard['domain'],
 
     errorHandler() {
       return (error: unknown, req, res, next) => {
-        if (!(error instanceof RbacError) || res.headersSent) {
+        if (!(error instanceof KyroguardError) || res.headersSent) {
           next(error)
           return
         }
@@ -59,15 +59,15 @@ export function rbacExpress(rbac: Rbac, options: ExpressRbacOptions = {}): Expre
 }
 
 function createDomain<P extends string>(
-  rbac: Rbac,
+  guard: Kyroguard,
   name: P,
   options: DomainOptions<Request>,
 ): DomainInstance<Request, RequestHandler, P> {
   const resolveSubject = async (req: Request): Promise<Subject | null> => {
-    const store = rbac.engine.store.get()
+    const store = guard.engine.store.get()
     if (!store) {
       throw new MisconfiguredError(
-        `[kyroguard] No request context for domain "${name}" — register rbacExpress(rbac).context() before its guards.`,
+        `[kyroguard] No request context for domain "${name}" — register kyroguardExpress(guard).context() before its guards.`,
       )
     }
     if (store.domainSubjects.has(name)) {
@@ -97,53 +97,53 @@ function createDomain<P extends string>(
     requirePolicy(policy: string, guardOptions?: GuardOptions<Request>): RequestHandler {
       const qualified = qualifyPolicyName(name, policy)
       const resource = guardOptions?.resource
-      const filterTarget = rbac.resourceForPolicy.get(policy)
-      return guard(async req => {
+      const filterTarget = guard.resourceForPolicy.get(policy)
+      return asyncGuard(async req => {
         const subject = await resolveSubject(req)
-        await rbac.engine.authorize(subject, qualified, {
+        await guard.engine.authorize(subject, qualified, {
           resource: resource
             ? () => resource(req)
             : defaultResourceResolver(filterTarget, req.params),
         })
-        if (filterTarget) await rbac.engine.storeFilterFor(subject, qualified, filterTarget)
+        if (filterTarget) await guard.engine.storeFilterFor(subject, qualified, filterTarget)
       })
     },
 
     subjectHook(): RequestHandler {
-      return guard(async req => {
+      return asyncGuard(async req => {
         await resolveSubject(req)
       })
     },
 
     filterFor: async (req: Request, policy: string) => {
       const subject = await resolveSubject(req)
-      return rbac.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(rbac, policy))
+      return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, policy))
     },
 
     assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
-      rbac.admin.assignGroup(adminRef(subjectId, opts?.tenantId), group),
+      guard.admin.assignGroup(adminRef(subjectId, opts?.tenantId), group),
     removeGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
-      rbac.admin.removeGroup(adminRef(subjectId, opts?.tenantId), group),
+      guard.admin.removeGroup(adminRef(subjectId, opts?.tenantId), group),
     assignPolicy: (
       subjectId: string,
       policy: string,
       opts?: { tenantId?: string; scope?: string },
     ) =>
-      rbac.admin.assignPolicy(
+      guard.admin.assignPolicy(
         adminRef(subjectId, opts?.tenantId),
         qualifyPolicyName(name, policy),
         opts?.scope,
       ),
     removePolicy: (subjectId: string, policy: string, opts?: { tenantId?: string }) =>
-      rbac.admin.removePolicy(adminRef(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
+      guard.admin.removePolicy(adminRef(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
   }
 }
 
-function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
-  const resource = rbac.resourceForPolicy.get(policy)
+function filterResource(guard: Kyroguard, policy: string): ResourceDefinition {
+  const resource = guard.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createKyroguard({ resources }).`,
     )
   }
   return resource
@@ -155,7 +155,7 @@ function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
  * next(err) here. A falsy rejection is upgraded to an error — it must never
  * fall through as a successful next() (that would authorize the request).
  */
-function guard(run: (req: Request) => Promise<void>): RequestHandler {
+function asyncGuard(run: (req: Request) => Promise<void>): RequestHandler {
   return (req, _res, next) => {
     run(req).then(
       () => next(),

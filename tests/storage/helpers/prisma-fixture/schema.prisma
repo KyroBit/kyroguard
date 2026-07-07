@@ -1,6 +1,6 @@
 // Test fixture schema for the Prisma storage adapter.
 //
-// The six Rbac* models below are a paste of `prismaSchemaSnippet`
+// The six Kyroguard* models below are a paste of `prismaSchemaSnippet`
 // (src/storage/prisma/schema-snippet.ts) — KEEP THEM IN SYNC. The `Post`
 // model at the bottom is fixture-only, used by the extension tests as a
 // tracked resource model.

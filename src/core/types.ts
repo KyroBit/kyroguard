@@ -5,16 +5,16 @@ export type Awaitable<T> = T | Promise<T>
  * empty: augmentation ADDS members, TypeScript rejects re-declaring one.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface RbacTypes {}
+export interface KyroguardTypes {}
 
 /** The augmented Domain union, or string before augmentation. */
-export type DomainName = RbacTypes extends { Domain: infer P extends string } ? P : string
+export type DomainName = KyroguardTypes extends { Domain: infer P extends string } ? P : string
 
 /** The augmented PolicyName union, or string before augmentation. */
-export type AnyPolicyName = RbacTypes extends { PolicyName: infer P extends string } ? P : string
+export type AnyPolicyName = KyroguardTypes extends { PolicyName: infer P extends string } ? P : string
 
 /** The policy union for one domain, or string before augmentation. */
-export type DomainPolicyName<P extends string> = RbacTypes extends { DomainPolicies: infer M }
+export type DomainPolicyName<P extends string> = KyroguardTypes extends { DomainPolicies: infer M }
   ? P extends keyof M
     ? M[P] & string
     : string

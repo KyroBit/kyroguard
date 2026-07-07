@@ -29,7 +29,7 @@ On MySQL and SQLite the detected dialect reads `mysql` or `sqlite`. The file lis
 
 ## 2. Migrate
 
-Add the rbac schema file to your drizzle-kit config. Your dialect and credentials stay as they are:
+Add the kyroguard schema file to your drizzle-kit config. Your dialect and credentials stay as they are:
 
 ```ts
 // drizzle.config.ts
@@ -58,14 +58,14 @@ Pass your Drizzle db and the scaffolded schema module to `drizzleAdapter`:
 
 ```ts
 // src/rbac/instance.ts
-import { createRbac } from '@kyrobit/kyroguard'
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from '../db/rbac-schema.js'
 import { rawDb } from '../db/index.js'
 import { resources } from './policies.js'
 
 export const adapter = drizzleAdapter(rawDb, { schema })
-export const rbac = createRbac({ adapter, resources })
+export const guard = createKyroguard({ adapter, resources })
 ```
 
 `kyroguard.config.ts` contains the same wiring for the CLI. Finish its TODO so it imports your db. The scaffolded schema file mirrors `@kyrobit/kyroguard/drizzle/schema/pg` (and `mysql`, `sqlite`). Either module works as the `schema` option.
@@ -86,7 +86,7 @@ Policies with `Scope.owned()` check who created each row. `trackedDb` records th
 // src/rbac/instance.ts
 import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 
-export const db = trackedDb(rawDb, { rbac, resources })
+export const db = trackedDb(rawDb, { rbac: guard, resources })
 ```
 
 Link each resource to its table in `src/rbac/policies.ts`:

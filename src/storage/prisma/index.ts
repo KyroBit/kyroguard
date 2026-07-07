@@ -1,9 +1,9 @@
 export { prismaAdapter, PRISMA_ID_LIST_CAP } from './adapter.js'
-export { rbacPrismaExtension } from './extension.js'
+export { kyroguardPrismaExtension } from './extension.js'
 export type {
-  RbacPrismaExtension,
-  RbacPrismaExtensionOptions,
-  RbacPrismaResourceRegistration,
+  KyroguardPrismaExtension,
+  KyroguardPrismaExtensionOptions,
+  KyroguardPrismaResourceRegistration,
 } from './extension.js'
 export type {
   PrismaClientLike,

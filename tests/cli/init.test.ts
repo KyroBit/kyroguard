@@ -101,8 +101,8 @@ describe('kyroguard init --yes', () => {
     expect(groups).toContain("'grades.update': 'owned'")
 
     // Fastify wiring variant.
-    expect(wiring).toContain('rbacFastify')
-    expect(wiring).not.toContain('rbacExpress')
+    expect(wiring).toContain('kyroguardFastify')
+    expect(wiring).not.toContain('kyroguardExpress')
     expect(wiring).not.toContain('{{DOMAIN}}')
 
     // The pg schema defines exactly the 6 rbac tables.
@@ -159,8 +159,8 @@ describe('kyroguard init --yes', () => {
     expect(config).toContain("name: 'admin'")
 
     const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('rbacExpress')
-    expect(wiring).not.toContain('rbacFastify')
+    expect(wiring).toContain('kyroguardExpress')
+    expect(wiring).not.toContain('kyroguardFastify')
 
     // Mongoose owns its indexes via ensureSchema — no drizzle schema file.
     expect(existsSync(join(cwd, 'src', 'db', 'rbac-schema.ts'))).toBe(false)
@@ -205,7 +205,7 @@ describe('kyroguard init --yes', () => {
     expect(existsSync(join(cwd, 'src', 'rbac', 'policies.ts'))).toBe(true)
     expect(existsSync(join(cwd, 'src', 'rbac', 'groups.ts'))).toBe(true)
     const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('rbacFastify')
+    expect(wiring).toContain('kyroguardFastify')
     expect(existsSync(join(cwd, 'src', 'db'))).toBe(false)
 
     // Next steps mention the migration flow.
@@ -270,7 +270,7 @@ describe('kyroguard init --yes', () => {
     const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('drizzleAdapter')
     const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('rbacFastify')
+    expect(wiring).toContain('kyroguardFastify')
     const schema = await readFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), 'utf8')
     expect(schema).toContain("pgTable('rbac_policies'")
   })

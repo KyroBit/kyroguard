@@ -1,12 +1,12 @@
 /**
- * DX sugar around createRbac — the shapes the quick start is built on:
+ * DX sugar around createKyroguard — the shapes the quick start is built on:
  * plain `policies`, `groups` seeded by sync(), no-arg sync, and the
  * nameless domain({ getSubject }) overload.
  */
 import { describe, test, expect } from 'bun:test'
 import Fastify from 'fastify'
-import { createRbac, Policy } from '../../src/index.js'
-import { rbacFastify } from '../../src/frameworks/fastify/index.js'
+import { createKyroguard, Policy } from '../../src/index.js'
+import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 
 const definitions = () => ({
@@ -19,10 +19,10 @@ const definitions = () => ({
   },
 })
 
-describe('createRbac sugar', () => {
-  test('sync() with no arguments syncs the policies given to createRbac', async () => {
+describe('createKyroguard sugar', () => {
+  test('sync() with no arguments syncs the policies given to createKyroguard', async () => {
     const adapter = memoryAdapter()
-    const rbac = createRbac({ adapter, policies: definitions().policies })
+    const rbac = createKyroguard({ adapter, policies: definitions().policies })
 
     await rbac.sync()
 
@@ -31,10 +31,10 @@ describe('createRbac sugar', () => {
     rbac.dispose()
   })
 
-  test('sync() also seeds the groups given to createRbac, with dependency back-fill', async () => {
+  test('sync() also seeds the groups given to createKyroguard, with dependency back-fill', async () => {
     const adapter = memoryAdapter()
     const { policies, groups } = definitions()
-    const rbac = createRbac({ adapter, policies, groups })
+    const rbac = createKyroguard({ adapter, policies, groups })
 
     await rbac.sync()
 
@@ -50,7 +50,7 @@ describe('createRbac sugar', () => {
   test('sync(domain) qualifies both policies and groups under the domain', async () => {
     const adapter = memoryAdapter()
     const { policies, groups } = definitions()
-    const rbac = createRbac({ adapter, policies, groups })
+    const rbac = createKyroguard({ adapter, policies, groups })
 
     await rbac.sync('branch')
 
@@ -64,10 +64,10 @@ describe('createRbac sugar', () => {
     rbac.dispose()
   })
 
-  test("seedGroups resolves 'all' from createRbac's policies automatically", async () => {
+  test("seedGroups resolves 'all' from createKyroguard's policies automatically", async () => {
     const adapter = memoryAdapter()
     const { policies } = definitions()
-    const rbac = createRbac({ adapter, policies })
+    const rbac = createKyroguard({ adapter, policies })
     await rbac.sync()
 
     await rbac.seedGroups({ owner: { label: 'Owner', policies: 'all' } })
@@ -83,7 +83,7 @@ describe('createRbac sugar', () => {
   test('explicit sync(resources, domain) does not touch groups', async () => {
     const adapter = memoryAdapter()
     const { policies, groups } = definitions()
-    const rbac = createRbac({ adapter, policies, groups })
+    const rbac = createKyroguard({ adapter, policies, groups })
 
     await rbac.sync([{ type: 'sale', policies }], 'other')
 
@@ -94,12 +94,12 @@ describe('createRbac sugar', () => {
   test('domain({ getSubject }) guards with unqualified policy names end to end', async () => {
     const adapter = memoryAdapter()
     const { policies, groups } = definitions()
-    const rbac = createRbac({ adapter, policies, groups })
+    const rbac = createKyroguard({ adapter, policies, groups })
     await rbac.sync()
 
     const app = Fastify()
-    await app.register(rbacFastify(rbac))
-    const shop = app.rbac.domain({
+    await app.register(kyroguardFastify(rbac))
+    const shop = app.kyroguard.domain({
       getSubject: async req => {
         const id = req.headers['x-user-id']
         return typeof id === 'string' ? { id } : null

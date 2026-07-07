@@ -1,7 +1,7 @@
-import type { RbacConfig } from '../../core/config.js'
+import type { KyroguardConfig } from '../../core/config.js'
 import type { StorageAdapter } from '../../storage/contract.js'
 
-export async function run(config: RbacConfig): Promise<void> {
+export async function run(config: KyroguardConfig): Promise<void> {
   let adapter: StorageAdapter | undefined
   try {
     adapter = await config.adapter()

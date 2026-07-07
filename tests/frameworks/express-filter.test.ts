@@ -7,11 +7,11 @@
 import { describe, expect, test } from 'bun:test'
 import express from 'express'
 import { createServer } from 'node:http'
-import { rbacExpress } from '../../src/frameworks/express/index.js'
-import { Policy, Scope, createRbac, qualifyPolicyName } from '../../src/index.js'
+import { kyroguardExpress } from '../../src/frameworks/express/index.js'
+import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../../src/index.js'
 import type { AddressInfo } from 'node:net'
 import type { Request } from 'express'
-import type { FilterResult, Rbac, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { FilterResult, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -30,7 +30,7 @@ const makeResources = (): ResourceDefinition[] => [
 
 const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
-async function seed(rbac: Rbac): Promise<void> {
+async function seed(rbac: Kyroguard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
@@ -61,11 +61,11 @@ interface Harness {
 }
 
 async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const rbac = createRbac({ adapter: memoryAdapter(), resources: makeResources() })
+  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
   try {
     await seed(rbac)
     const app = express()
-    const integration = rbacExpress(rbac)
+    const integration = kyroguardExpress(rbac)
     app.use(integration.context())
     const staff = integration.domain('staff', {
       getSubject: (req: Request): SubjectInput | null => {
@@ -157,14 +157,14 @@ describe('express domain.filterFor', () => {
     withApp(async h => {
       const res = await h.get('/sales')
       expect(res.status).toBe(401)
-      expect(res.body.code).toBe('RBAC_UNAUTHENTICATED')
+      expect(res.body.code).toBe('UNAUTHENTICATED')
     }))
 
-  test('policy on no registered resource → 500 RBAC_MISCONFIGURED', () =>
+  test('policy on no registered resource → 500 MISCONFIGURED', () =>
     withApp(async h => {
       const res = await h.get('/orphan', 'cashier')
       expect(res.status).toBe(500)
-      expect(res.body.code).toBe('RBAC_MISCONFIGURED')
+      expect(res.body.code).toBe('MISCONFIGURED')
     }))
 
   test("requirePolicy stores the exercised policy's plan — same subject, same table, per-route filters", () =>

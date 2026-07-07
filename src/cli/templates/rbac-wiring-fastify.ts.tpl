@@ -1,22 +1,22 @@
 /**
- * RBAC wiring for Fastify. Finish the TODOs, then call registerRbac from your
- * server bootstrap. Guards throw typed RbacErrors through Fastify's own error
+ * RBAC wiring for Fastify. Finish the TODOs, then call registerKyroguard from your
+ * server bootstrap. Guards throw typed KyroguardErrors through Fastify's own error
  * pipeline: 401 unauthenticated, 403 policy/scope denied, 404 resource not
  * found — your error handler and onSend hooks keep working.
  */
-import { createRbac } from '@kyrobit/kyroguard'
-import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { createKyroguard } from '@kyrobit/kyroguard'
+import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { resources } from './policies.js'
 import type { StorageAdapter } from '@kyrobit/kyroguard'
 import type { FastifyInstance } from 'fastify'
 
-export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter) {
+export async function registerKyroguard(app: FastifyInstance, adapter: StorageAdapter) {
   // Reuse your app's adapter/db handle — same construction as kyroguard.config.ts.
-  const rbac = createRbac({ adapter, resources })
+  const guard = createKyroguard({ adapter, resources })
 
-  await app.register(rbacFastify(rbac))
+  await app.register(kyroguardFastify(guard))
 
-  const domain = app.rbac.domain('{{DOMAIN}}', {
+  const domain = app.kyroguard.domain('{{DOMAIN}}', {
     // Resolved lazily at guard time, memoized per request per domain.
     // Return null when the request is unauthenticated → 401.
     getSubject: async request => {
@@ -46,5 +46,5 @@ export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter
   //   async request => { /* ... */ },
   // )
 
-  return { rbac, domain }
+  return { guard, domain }
 }

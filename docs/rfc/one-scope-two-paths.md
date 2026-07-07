@@ -131,11 +131,11 @@ export type PolicyMap = Map<string, string[] | null>
 
 export interface EngineOptions {
   // …existing…
-  /** Resource registry — resourceType → definition. Built by createRbac from options.resources. */
+  /** Resource registry — resourceType → definition. Built by createKyroguard from options.resources. */
   resources: Map<string, ResourceDefinition>
 }
 
-export class RbacEngine {
+export class KyroguardEngine {
   /**
    * List-path decision procedure. Throws UnauthenticatedError / PolicyDeniedError
    * exactly like authorize(); resolves with the trichotomy otherwise.
@@ -182,7 +182,7 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   // …existing…
   /**
    * List-path counterpart of requirePolicy. Resolves the subject (memoized per
-   * request/domain like requirePolicy), throws the same typed RbacErrors,
+   * request/domain like requirePolicy), throws the same typed KyroguardErrors,
    * returns the trichotomy. `resource` is the registered resource type.
    */
   filterFor(
@@ -343,7 +343,7 @@ The invariant this feature exists to guarantee: **for every row, `check(subject,
 
 ```ts
 export async function assertScopeParity(options: {
-  rbac: Rbac
+  rbac: Kyroguard
   subject: Subject
   policy: QualifiedPolicyName
   resource: string
@@ -407,7 +407,7 @@ The deadline rule from [Scopes](/guide/scopes) — `'grades.view': 'grading-wind
 
 ```ts
 if (f.kind === 'none' && f.reason === 'scope-denied') {
-  return reply.code(403).send({ code: 'RBAC_SCOPE_DENIED' })
+  return reply.code(403).send({ code: 'ACCESS_DENIED' })
 }
 ```
 
@@ -420,7 +420,7 @@ The scope needs nothing new for any of this — a condition scope's `check` **is
 **Phase 1 — next minor (additive).**
 - Ship: `Scope#filter`, `ListFilter`, `engine.filterFor`, `domain.filterFor`, `StorageAdapter.listFilters` on all three adapters, `capabilities.listFiltering`, `ResourceDefinition.idColumn/prisma/fields`, `drizzleWhere`/`mongoWhere`, `assertScopeParity`, the `(resource_type, owner_id)` index in `ensureSchema`.
 - `PolicyMap` becomes `Map<string, string[] | null>`; `authorize` ORs across scopes; cache key version bumped (external caches repopulate; the semantic change only affects subjects holding one policy under multiple different scopes — release-noted prominently).
-- Deprecate with one-time runtime warnings: `TrackedDbOptions.queryScopes`, `ResourceDefinition.domains`, `RbacMongoosePluginOptions.queryScopes`/`domains`, `capabilities.queryScoping`. Old path keeps working unchanged.
+- Deprecate with one-time runtime warnings: `TrackedDbOptions.queryScopes`, `ResourceDefinition.domains`, `KyroguardMongoosePluginOptions.queryScopes`/`domains`, `capabilities.queryScoping`. Old path keeps working unchanged.
 
 **Phase 2 — docs.** Rewrite the query-scoping guide around `filterFor`. Migration table:
 

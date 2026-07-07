@@ -11,8 +11,8 @@ TypeScript types in sync.
   Mongoose — all certified against the same behavioral contract test suite.
 - **Strict isolation**: domain and tenant assignments match by exact
   equality. A grant in one domain or tenant never applies in another.
-- **Typed decisions**: guards throw typed errors (`RBAC_POLICY_DENIED`,
-  `RBAC_SCOPE_DENIED`, …) through your framework's own error pipeline.
+- **Typed decisions**: guards throw typed errors (`ACCESS_DENIED`,
+  `ACCESS_DENIED`, …) through your framework's own error pipeline.
 - **Bounded cache** (LRU + TTL, instance-scoped) with a pluggable
   cross-instance invalidation bus.
 - **Scoped grants** — conditions on a permission: own rows only
@@ -29,19 +29,19 @@ npx kyroguard init   # detects your stack, scaffolds schema + config + wiring
 ## At a glance
 
 ```ts
-// rbac.ts
-import { createRbac } from '@kyrobit/kyroguard'
+// guard.ts
+import { createKyroguard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/rbac-schema'
 import { db } from './db'
 
-export const rbac = createRbac({ adapter: drizzleAdapter(db, { schema }) })
+export const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }) })
 ```
 
 ```ts
 // Fastify
-await app.register(rbacFastify(rbac))
-const admin = app.rbac.domain('admin', { getSubject: req => auth.user(req) })
+await app.register(kyroguardFastify(guard))
+const admin = app.kyroguard.domain('admin', { getSubject: req => auth.user(req) })
 
 app.get('/transactions/:id', {
   preHandler: admin.requirePolicy('transactions.view', {
@@ -53,7 +53,7 @@ app.get('/transactions/:id', {
 A subject without `admin.transactions.view` receives:
 
 ```json
-{ "statusCode": 403, "code": "RBAC_POLICY_DENIED", "error": "Forbidden", "message": "Forbidden" }
+{ "statusCode": 403, "code": "ACCESS_DENIED", "error": "Forbidden", "message": "Forbidden" }
 ```
 
 ## Documentation

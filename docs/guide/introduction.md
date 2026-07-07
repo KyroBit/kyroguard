@@ -8,8 +8,8 @@ Here is the whole library in one file:
 
 ```ts
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/kyroguard'
-import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing' // in-memory store, no database
 
 // A policy is a named permission — one thing a user can do
@@ -18,15 +18,15 @@ const policies = [new Policy('grades.view')]
 // A group is a job title
 const groups = { teacher: { label: 'Teacher', policies: ['grades.view'] } }
 
-// One rbac instance for the whole app
-const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
-await rbac.sync() // loads the policies and the groups
+// One kyroguard instance for the whole app
+const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
+await guard.sync() // loads the policies and the groups
 
 const app = Fastify()
-await app.register(rbacFastify(rbac))
+await app.register(kyroguardFastify(guard))
 
 // A domain turns a request into a user
-const teachers = app.rbac.domain({
+const teachers = app.kyroguard.domain({
   getSubject: async req => ({ id: req.headers['x-user-id'] as string }),
 })
 

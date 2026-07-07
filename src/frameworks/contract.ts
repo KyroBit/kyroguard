@@ -3,7 +3,7 @@
  * app-wide hook — otherwise two domains on one app overwrite each other's subject.
  */
 
-import type { RbacError } from '../core/errors.js'
+import type { KyroguardError } from '../core/errors.js'
 import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInput } from '../core/types.js'
 
 export interface GuardOptions<TReq> {
@@ -66,5 +66,5 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
 
 export interface ErrorFormatter<TReq> {
   /** Override the default { message, code } body per framework instance. */
-  formatError?: (error: RbacError, req: TReq) => { status: number; body: unknown }
+  formatError?: (error: KyroguardError, req: TReq) => { status: number; body: unknown }
 }
