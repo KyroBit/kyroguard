@@ -1,16 +1,17 @@
 # Building a multi-tenant SaaS
 
-You run the platform. Every school is a customer. Each school brings teachers, students, and parents — three audiences, plus your own back office. This page puts the whole system together. Each piece is taught on its own page; here they only meet.
+You run the platform. Every school is a customer. Each school brings teachers, students, and parents — three audiences. The school office is a fourth, and your own back office makes five. This page puts the whole system together. Each piece is taught on its own page; here they only meet.
 
 | In your product | In @kyrobit/rbac |
 |---|---|
 | The platform back office | The `admin` domain — grants with no tenant are platform-wide |
-| Each school | A tenant. Tenants are data, not config — unbounded, nothing to register |
+| Each school | A tenant — the boundary every grant lives inside. Data, not config; nothing to register |
+| The school office (hires teachers, enrolls students, runs the LMS) | The `school` domain — its staff hold tenant-scoped roles |
 | Teachers, students, parents | One domain each: own app face, own policy names, own `getSubject` |
-| The principal | The owner — `is_super`, computed per request, powerful only in their school |
+| The principal | The owner — `is_super` on the `school` domain, powerful only in their school |
 | A teacher at two schools | Two assignments, one per tenant |
 
-## Four domains, one createRbac
+## Five domains, one createRbac
 
 ```ts
 // rbac.config.ts
@@ -22,16 +23,17 @@ export default defineConfig({
     { name: 'teachers', policies: './src/rbac/teachers/policies.ts', groups: './src/rbac/teachers/groups.ts' },
     { name: 'students', policies: './src/rbac/students/policies.ts', groups: './src/rbac/students/groups.ts' },
     { name: 'parents',  policies: './src/rbac/parents/policies.ts',  groups: './src/rbac/parents/groups.ts' },
+    { name: 'school',   policies: './src/rbac/school/policies.ts',   groups: './src/rbac/school/groups.ts' },
     { name: 'admin',    policies: './src/rbac/admin/policies.ts',    groups: './src/rbac/admin/groups.ts' },
   ],
 })
 ```
 
-The files stay small. Teachers get the grade policies: `grades.view`, `grades.enter`, `grades.update`. Students get `grades.view`. Parents get `grades.view` and `attendance.view`. Admin gets `schools.manage` and `reports.view`. Same short names, four namespaces — the domain prefixes them apart. Domains and tenants are taught in [Multi-tenancy](/guide/multi-tenancy).
+The files stay small. Teachers get the grade policies: `grades.view`, `grades.enter`, `grades.update`. Students get `grades.view`. Parents get `grades.view` and `attendance.view`. The office gets `staff.manage`, `students.enroll`, `courses.manage`. Its groups: `registrar` holds `{ 'students.enroll': 'all', 'courses.manage': 'all' }`; `administrator` holds `policies: 'all'`. Admin gets `schools.manage` and `reports.view`. Same short names, five namespaces — the domain prefixes them apart. Domains and tenants are taught in [Multi-tenancy](/guide/multi-tenancy).
 
 ## Wiring the audiences
 
-Each domain resolves its own users. Here are two of the four:
+Each domain resolves its own users. Here are two of the five:
 
 ```ts
 // app.ts
@@ -50,11 +52,22 @@ const parents = app.rbac.domain('parents', {
 })
 
 app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, listGrades)
-
 app.get('/portal/grades', { preHandler: parents.requirePolicy('grades.view') }, listChildGrades)
 ```
 
-The guards check `teachers.grades.view` and `parents.grades.view` — different policies. `tenant_id` pins every request to one school. `students` and `admin` wire up the same way. Setup details: [Fastify](/guide/fastify).
+The guards check `teachers.grades.view` and `parents.grades.view` — different policies. `tenant_id` pins every request to one school. `students`, `school`, and `admin` wire up the same way. Setup details: [Fastify](/guide/fastify).
+
+## The school runs itself
+
+```ts
+app.post('/staff/hire', { preHandler: school.requirePolicy('staff.manage') }, async req => {
+  const office = await verifyOfficeSession(req)
+  const teacher = await createTeacherAccount(req.body)
+  await teachers.assignGroup(teacher.id, 'teacher', { tenantId: office.schoolId })
+})
+```
+
+The office is an audience too, hiring through its own portal. Enrollment is the same shape, into the `students` domain. Note the split: the route's guard lives in one domain, the grant it writes lands in another. Domains separate audiences, not power.
 
 ## The platform side
 
@@ -67,13 +80,12 @@ const admin = app.rbac.domain('admin', {
     return staff ? { id: staff.id, is_super: staff.role === 'platform_admin' } : null
   },
 })
-
 await admin.assignGroup(analyst.id, 'reporting')
 ```
 
 Matching is exact, and that is the trick. A grant with no `tenantId` matches requests that carry no tenant — exactly where admin requests live. So plain admin grants are platform-wide by construction.
 
-`is_super` here marks your own operators: they pass every admin check. A support engineer who needs eyes inside one school gets an ordinary per-tenant assignment — `teachers.assignGroup(engineer.id, 'coordinator', { tenantId: 'school-42' })`. Inside each school, the per-request bypass belongs to the principal instead — that story is [Owners](/guide/owners).
+`is_super` here marks your own operators: they pass every admin check. A support engineer who needs eyes inside one school gets an ordinary per-tenant assignment — `teachers.assignGroup(engineer.id, 'coordinator', { tenantId: 'school-42' })`. Inside each school, the bypass belongs to the principal. It is computed on the `school` domain — their own portal ([Owners](/guide/owners)).
 
 ## A parent sees only their child
 
@@ -130,12 +142,11 @@ How scopes work — both halves, failing closed, keeping them honest — is [Sco
 
 ## Onboarding a school
 
-Day zero for a new customer, in order:
-
 1. Create the school row. Its id is the tenant — nothing to register.
 2. Set its principal in your users table. Ownership is your data.
-3. The principal signs in. `is_super` computes true; every check in their school passes ([Owners](/guide/owners)).
-4. The principal hires staff: `teachers.assignGroup(user.id, 'teacher', { tenantId: school.id })` ([Assigning access](/guide/assigning-access)).
+3. The principal signs into the school portal as owner. `is_super` computes true; every office check passes ([Owners](/guide/owners)).
+4. They hire the first registrar: `school.assignGroup(user.id, 'registrar', { tenantId: school.id })`.
+5. The office takes over — enrolls students, hires teachers ([Assigning access](/guide/assigning-access)).
 
 ## Limits to know
 
