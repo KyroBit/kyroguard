@@ -1,17 +1,35 @@
 # Building a multi-tenant SaaS
 
-You run the platform. Every school is a customer. Each school brings teachers, students, and parents — three audiences. The school office is a fourth, and your own back office makes five. This page puts the whole system together. Each piece is taught on its own page; here they only meet.
+You built a school app. Now you want to sell it to many schools. Every school should feel the app is theirs alone — that is a multi-tenant SaaS, and this is its shape:
 
-| In your product | In @kyrobit/rbac |
-|---|---|
-| The platform back office | The `admin` domain — grants with no tenant are platform-wide |
-| Each school | A tenant — the boundary every grant lives inside. Data, not config; nothing to register |
-| The school office (hires teachers, enrolls students, runs the LMS) | The `school` domain — its staff hold tenant-scoped roles |
-| Teachers, students, parents | One domain each: own app face, own policy names, own `getSubject` |
-| The principal | The owner — `is_super` on the `school` domain, powerful only in their school |
-| A teacher at two schools | Two assignments, one per tenant |
+```
+You (the platform)
+├── Greenwood School
+│   ├── office (hires teachers, enrolls students)
+│   └── teachers · students · parents
+└── Hillside School
+    └── ...same...
+```
 
-## Five domains, one createRbac
+This page follows one school — Greenwood — from signup to daily life. Every piece is taught in depth on its own page; here you watch them work together.
+
+## 1. Greenwood signs up
+
+A **tenant** is one customer's world — here, one school ([Multi-tenancy](/guide/multi-tenancy)). To the library a tenant is just an id you attach to grants and requests; there is nothing to register.
+
+So onboarding Greenwood is one insert in your own database:
+
+```ts
+const [greenwood] = await db.insert(schools)
+  .values({ name: 'Greenwood School' }).returning() // your table, your id
+// greenwood.id is the tenant id — every Greenwood grant will carry it
+```
+
+## 2. Five front doors
+
+Greenwood's people are not one crowd. A **domain** is one kind of user's app — teachers get one, parents get another; you get the admin one ([Multi-tenancy](/guide/multi-tenancy)).
+
+This declares the five front doors, each with its own policies and groups:
 
 ```ts
 // rbac.config.ts
@@ -20,76 +38,84 @@ import { defineConfig } from '@kyrobit/rbac'
 export default defineConfig({
   adapter: () => import('./src/db.js').then(m => m.adapter),
   domains: [
-    { name: 'teachers', policies: './src/rbac/teachers/policies.ts', groups: './src/rbac/teachers/groups.ts' },
-    { name: 'students', policies: './src/rbac/students/policies.ts', groups: './src/rbac/students/groups.ts' },
-    { name: 'parents',  policies: './src/rbac/parents/policies.ts',  groups: './src/rbac/parents/groups.ts' },
-    { name: 'school',   policies: './src/rbac/school/policies.ts',   groups: './src/rbac/school/groups.ts' },
-    { name: 'admin',    policies: './src/rbac/admin/policies.ts',    groups: './src/rbac/admin/groups.ts' },
+    { name: 'teachers', policies: './src/rbac/teachers/policies.ts', groups: './src/rbac/teachers/groups.ts' }, // the teacher app
+    { name: 'students', policies: './src/rbac/students/policies.ts', groups: './src/rbac/students/groups.ts' }, // the student app
+    { name: 'parents',  policies: './src/rbac/parents/policies.ts',  groups: './src/rbac/parents/groups.ts' },  // the parent portal
+    { name: 'school',   policies: './src/rbac/school/policies.ts',   groups: './src/rbac/school/groups.ts' },   // the school office
+    { name: 'admin',    policies: './src/rbac/admin/policies.ts',    groups: './src/rbac/admin/groups.ts' },    // YOUR back office
   ],
 })
 ```
 
-The files stay small. Teachers get the grade policies: `grades.view`, `grades.enter`, `grades.update`. Students get `grades.view`. Parents get `grades.view` and `attendance.view`. The office gets `staff.manage`, `students.enroll`, `courses.manage`. Its groups: `registrar` holds `{ 'students.enroll': 'all', 'courses.manage': 'all' }`; `administrator` holds `policies: 'all'`. Admin gets `schools.manage` and `reports.view`. Same short names, five namespaces — the domain prefixes them apart. Domains and tenants are taught in [Multi-tenancy](/guide/multi-tenancy).
-
-## Wiring the audiences
-
-Each domain resolves its own users. Here are two of the five:
+Each domain turns its own requests into users. This one recognizes teachers, and the guard on the route checks their permission:
 
 ```ts
 // app.ts
 const teachers = app.rbac.domain('teachers', {
   getSubject: async req => {
-    const t = await verifyTeacherSession(req)
-    return t ? { id: t.id, tenant_id: t.schoolId } : null
-  },
-})
-
-const parents = app.rbac.domain('parents', {
-  getSubject: async req => {
-    const p = await verifyParentSession(req)
-    return p ? { id: p.id, tenant_id: p.schoolId } : null
+    const t = await verifyTeacherSession(req)             // your auth, not the library's
+    return t ? { id: t.id, tenant_id: t.schoolId } : null // tenant_id pins the request to one school
   },
 })
 
 app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, listGrades)
-app.get('/portal/grades', { preHandler: parents.requirePolicy('grades.view') }, listChildGrades)
 ```
 
-The guards check `teachers.grades.view` and `parents.grades.view` — different policies. `tenant_id` pins every request to one school. `students`, `school`, and `admin` wire up the same way. Setup details: [Fastify](/guide/fastify).
+`parents`, `students`, `school`, and `admin` wire up the same way, each with its own session check ([Fastify](/guide/fastify)).
 
-## The school runs itself
+## 3. The principal gets the keys
+
+Day zero at Greenwood: the grants table is empty, and someone has to make the first hire. That someone is the principal — the **owner**, the person whose `is_super: true` passes every check in their domain ([Owners](/guide/owners)).
+
+This makes the principal all-powerful — inside the office app, inside Greenwood only:
+
+```ts
+const school = app.rbac.domain('school', {
+  getSubject: async req => {
+    const s = await verifyOfficeSession(req)
+    if (!s) return null
+    return {
+      id: s.id,
+      tenant_id: s.schoolId,
+      is_super: s.id === s.school.principalId, // the owner check — your data decides
+    }
+  },
+})
+```
+
+## 4. The principal hires a registrar
+
+The principal opens the office app and adds Ms. Riaz to the front office. That is one group assignment — a **group** is a job title ([Groups](/guide/groups)).
+
+This gives Ms. Riaz the registrar job — at Greenwood, nowhere else:
+
+```ts
+await school.assignGroup(msRiaz.id, 'registrar', { tenantId: greenwood.id }) // tenantId: only this school
+```
+
+`registrar` lives in the `school` domain's groups file — say `{ 'staff.manage': 'all', 'students.enroll': 'all' }` ([Assigning access](/guide/assigning-access)).
+
+## 5. The office hires a teacher
+
+Ms. Riaz hires Greenwood's first teacher. Look at what is doing what: the HIRE button lives in the office app. The TEACHING permission lives in the teachers app. One button, two domains.
+
+The guard checks the office's permission; the grant it writes lands in the teachers domain:
 
 ```ts
 app.post('/staff/hire', { preHandler: school.requirePolicy('staff.manage') }, async req => {
-  const office = await verifyOfficeSession(req)
-  const teacher = await createTeacherAccount(req.body)
-  await teachers.assignGroup(teacher.id, 'teacher', { tenantId: office.schoolId })
+  const staff = await verifyOfficeSession(req)                                    // who pressed the button
+  const teacher = await createTeacherAccount(req.body)                            // your users table
+  await teachers.assignGroup(teacher.id, 'teacher', { tenantId: staff.schoolId }) // grant lands in the OTHER domain
 })
 ```
 
-The office is an audience too, hiring through its own portal. Enrollment is the same shape, into the `students` domain. Note the split: the route's guard lives in one domain, the grant it writes lands in another. Domains separate audiences, not power.
+Domains separate audiences, not power — any server code holding the `teachers` domain object can write grants into it.
 
-## The platform side
+## 6. A parent logs in
 
-Platform staff belong to no school. Their `getSubject` sets no `tenant_id`:
+A Greenwood parent should see exactly one thing: their own child's grades. No built-in rule fits. Not "rows I created" — the parent never created a grade. Not "rows in my school" — that is every grade at Greenwood. The rule is "rows about MY child", and it lives in your `parent_children` table. You write that rule once, as a **scope** — a condition on a permission ([Scopes](/guide/scopes)).
 
-```ts
-const admin = app.rbac.domain('admin', {
-  getSubject: async req => {
-    const staff = await verifyStaffSession(req)
-    return staff ? { id: staff.id, is_super: staff.role === 'platform_admin' } : null
-  },
-})
-await admin.assignGroup(analyst.id, 'reporting')
-```
-
-Matching is exact, and that is the trick. A grant with no `tenantId` matches requests that carry no tenant — exactly where admin requests live. So plain admin grants are platform-wide by construction.
-
-`is_super` here marks your own operators: they pass every admin check. A support engineer who needs eyes inside one school gets an ordinary per-tenant assignment — `teachers.assignGroup(engineer.id, 'coordinator', { tenantId: 'school-42' })`. Inside each school, the bypass belongs to the principal. It is computed on the `school` domain — their own portal ([Owners](/guide/owners)).
-
-## A parent sees only their child
-
-The relationship rule, and no built-in fits. Not `owned` — the parent never created the grade. Not `in-tenant` — that is every grade in the school. Not `granted` — nobody shares grades row by row. The rule lives in your `parent_children` table. Write a scope on it, both halves — the check for single rows, the filter for lists:
+This is the "my child only" rule — a check half for one row, a filter half for lists:
 
 ```ts
 // parents/scopes.ts
@@ -100,61 +126,54 @@ import { grades, parentChildren } from '../db/schema.js'
 
 const childIdsOf = async (parentId: string) => {
   const rows = await db.select({ id: parentChildren.childId })
-    .from(parentChildren).where(eq(parentChildren.parentId, parentId))
+    .from(parentChildren).where(eq(parentChildren.parentId, parentId)) // YOUR family-tree table
   return rows.map(r => r.id)
 }
 
 export const ownChild = new Scope(
   'own-child',
   'Own child',
-  async (parent, grade) => {
-    if (!grade) return false // row rule: no row, no pass
+  async (parent, grade) => {  // check: may this parent see THIS row?
+    if (!grade) return false  // no row named — fail closed
     const [row] = await db.select().from(grades).where(eq(grades.id, grade.id))
     if (!row) return false
     return (await childIdsOf(parent.id)).includes(row.studentId)
   },
-  async parent => {
+  async parent => {           // filter: which rows go in their lists?
     const ids = await childIdsOf(parent.id)
     return ids.length ? { where: inArray(grades.studentId, ids) } : false
   },
 )
 ```
 
-Students seeing their own grades is the same shape, smaller:
-
-```ts
-export const ownGrades = new Scope('own-grades', 'Own grades',
-  async (student, grade) =>
-    !!grade && (await db.select().from(grades).where(eq(grades.id, grade.id)))[0]?.studentId === student.id,
-  student => ({ where: eq(grades.studentId, student.id) }))
-```
-
-Declare each in its policy's `scopeOptions`, then grant it in the group:
+Declare `ownChild` in the policy's `scopeOptions`, then this line attaches the rule to every parent's grant:
 
 ```ts
 // parents/groups.ts
 parent: { label: 'Parent', policies: { 'grades.view': 'own-child', 'attendance.view': 'own-child' } },
-// students/groups.ts
-student: { label: 'Student', policies: { 'grades.view': 'own-grades' } },
 ```
 
-How scopes work — both halves, failing closed, keeping them honest — is [Scopes](/guide/scopes).
+## 7. Meanwhile at Hillside
 
-## Onboarding a school
-
-1. Create the school row. Its id is the tenant — nothing to register.
-2. Set its principal in your users table. Ownership is your data.
-3. The principal signs into the school portal as owner. `is_super` computes true; every office check passes ([Owners](/guide/owners)).
-4. They hire the first registrar: `school.assignGroup(user.id, 'registrar', { tenantId: school.id })`.
-5. The office takes over — enrolls students, hires teachers ([Assigning access](/guide/assigning-access)).
+Hillside School signed up last month, and nothing above touched it. Matching is exact: Ms. Riaz's grant says `registrar` at Greenwood, so a request carrying Hillside's tenant id finds nothing — nothing at Greenwood leaks to Hillside.
 
 ## Limits to know
 
-There is one tenant level. Tenants never nest. A district above schools is modeled in your app: give district staff one assignment per school, or compute `is_super` across the schools they run. And relationship scopes ride on your own tables — the library never learns your family tree.
+There is one tenant level — tenants never nest, so a district above schools is modeled in your app: one assignment per school, or `is_super` computed across the schools they run. Relationship scopes ride on your own tables — the library never learns your family tree. Both are by design.
+
+## The whole picture
+
+| Who | Which app (domain) | What they can touch | Enforced by |
+|---|---|---|---|
+| You, the platform | `admin` | Every school | Grants with no `tenant_id` are platform-wide; `is_super` for your operators |
+| The principal | `school` | Everything at Greenwood | `is_super` computed in `getSubject` ([Owners](/guide/owners)) |
+| Ms. Riaz, registrar | `school` | Staff and enrollment at Greenwood | The `registrar` group, granted with Greenwood's `tenantId` |
+| A teacher | `teachers` | Grades at Greenwood | The `teacher` group, granted with Greenwood's `tenantId` |
+| A student | `students` | Their own grades | An own-grades scope on `grades.view`, same shape as `own-child` |
+| A parent | `parents` | Their own child's grades | The `own-child` scope on `grades.view` |
 
 ## Next steps
 
 - [Multi-tenancy](/guide/multi-tenancy) — domains and tenants, taught properly.
-- [Scopes](/guide/scopes) — the check and filter halves in depth.
 - [Owners and superusers](/guide/owners) — the principal's bypass in full.
-- [Production](/guide/production) — caching, audit, multiple servers.
+- [Scopes](/guide/scopes) — the check and filter halves in depth.
