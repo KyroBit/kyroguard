@@ -22,7 +22,7 @@ export async function syncPolicies(
   for (const policy of all) {
     for (const dep of policy.dependsOn) {
       if (!codeNames.has(dep)) {
-        throw new Error(`[rbac] Policy "${policy.name}" depends on "${dep}" which is not defined.`)
+        throw new Error(`[kyroguard] Policy "${policy.name}" depends on "${dep}" which is not defined.`)
       }
     }
   }
@@ -49,7 +49,7 @@ export async function syncPolicies(
   if (orphans.length > 0) {
     await adapter.deletePolicies(orphans.map(record => record.id))
     log(
-      `[rbac] Removed ${orphans.length} orphaned policies: ${orphans
+      `[kyroguard] Removed ${orphans.length} orphaned policies: ${orphans
         .map(record => record.name)
         .join(', ')}`,
     )
@@ -57,7 +57,7 @@ export async function syncPolicies(
 
   await backfillGroupDependencies(adapter, resources, domain, options)
 
-  log(`[rbac] Synced ${all.length} policies.`)
+  log(`[kyroguard] Synced ${all.length} policies.`)
 }
 
 /**
@@ -124,13 +124,13 @@ export async function backfillGroupDependencies(
         missing.map(name => ({ policyName: name, scope: effective.get(name) ?? null })),
       )
       log(
-        `[rbac] Filled ${missing.length} missing deps for group ${group.name}: ${missing
+        `[kyroguard] Filled ${missing.length} missing deps for group ${group.name}: ${missing
           .map(name => `${name}${effective.get(name) ? ` (scope: ${effective.get(name)})` : ''}`)
           .join(', ')}`,
       )
       for (const name of conflicts) {
         log(
-          `[rbac] WARNING: "${name}" is required by grants with different scopes in group ${group.name} — filled unrestricted. Define it explicitly in the group to control its scope.`,
+          `[kyroguard] WARNING: "${name}" is required by grants with different scopes in group ${group.name} — filled unrestricted. Define it explicitly in the group to control its scope.`,
         )
       }
     }

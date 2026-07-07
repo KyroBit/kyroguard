@@ -3,14 +3,14 @@
 A storage adapter connects the library to a database. Drizzle, Prisma and Mongoose adapters ship in the box. For anything else, implement one interface:
 
 ```ts
-import type { StorageAdapter } from '@kyrobit/rbac'
+import type { StorageAdapter } from '@kyrobit/kyroguard'
 
 const adapter: StorageAdapter = {
   id: 'my-adapter',
   // Optional extras your adapter supports. All false is a valid adapter.
   capabilities: { autoOwnershipTracking: false, queryScoping: false },
 
-  // Policy sync — called by `rbac sync`
+  // Policy sync — called by `kyroguard sync`
   upsertPolicies,
   listPolicies,
   deletePolicies,
@@ -46,7 +46,7 @@ The contract suite is the specification. Your adapter is correct exactly when th
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { runStorageAdapterContractSuite } from '@kyrobit/rbac/testing'
+import { runStorageAdapterContractSuite } from '@kyrobit/kyroguard/testing'
 
 runStorageAdapterContractSuite({
   name: 'my-adapter',
@@ -62,6 +62,6 @@ runStorageAdapterContractSuite({
 
 ## Where the details live
 
-The exact behavior of every method is documented in the contract source file: [src/storage/contract.ts](https://github.com/KyroBit/rbac/blob/main/src/storage/contract.ts). Each documented rule maps to one case in the suite.
+The exact behavior of every method is documented in the contract source file: [src/storage/contract.ts](https://github.com/KyroBit/kyroguard/blob/main/src/storage/contract.ts). Each documented rule maps to one case in the suite.
 
-Stuck on what a method should do? `memoryAdapter()` is a complete, readable implementation of the same contract: [src/testing/memory-adapter.ts](https://github.com/KyroBit/rbac/blob/main/src/testing/memory-adapter.ts). Copy its behavior, not its storage.
+Stuck on what a method should do? `memoryAdapter()` is a complete, readable implementation of the same contract: [src/testing/memory-adapter.ts](https://github.com/KyroBit/kyroguard/blob/main/src/testing/memory-adapter.ts). Copy its behavior, not its storage.

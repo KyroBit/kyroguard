@@ -1,11 +1,11 @@
 # Testing
 
-Reference for `@kyrobit/rbac/testing`: an in-memory adapter for fast app tests, plus two contract suites — one for storage adapters, one for framework integrations. For usage guidance, see [Testing](/guide/testing).
+Reference for `@kyrobit/kyroguard/testing`: an in-memory adapter for fast app tests, plus two contract suites — one for storage adapters, one for framework integrations. For usage guidance, see [Testing](/guide/testing).
 
 ## memoryAdapter()
 
 ```ts
-import { memoryAdapter } from '@kyrobit/rbac/testing'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 function memoryAdapter(): StorageAdapter
 ```
@@ -13,8 +13,8 @@ function memoryAdapter(): StorageAdapter
 A complete in-memory storage adapter. No database needed. It is also the reference implementation the contract suite measures other adapters against.
 
 ```ts
-import { createRbac, Policy } from '@kyrobit/rbac'
-import { memoryAdapter } from '@kyrobit/rbac/testing'
+import { createRbac, Policy } from '@kyrobit/kyroguard'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 const rbac = createRbac({
   adapter: memoryAdapter(),
@@ -44,7 +44,7 @@ interface SuiteTestApi {
 ## runStorageAdapterContractSuite()
 
 ```ts
-import { runStorageAdapterContractSuite } from '@kyrobit/rbac/testing'
+import { runStorageAdapterContractSuite } from '@kyrobit/kyroguard/testing'
 
 function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptions): void
 ```
@@ -60,7 +60,7 @@ This suite defines the storage contract. An adapter conforms exactly when the su
 ```ts
 // my-adapter.contract.test.ts
 import { describe, it, expect } from 'bun:test'
-import { runStorageAdapterContractSuite } from '@kyrobit/rbac/testing'
+import { runStorageAdapterContractSuite } from '@kyrobit/kyroguard/testing'
 import { makeMyAdapter } from './my-adapter.js'
 
 runStorageAdapterContractSuite({
@@ -82,7 +82,7 @@ When `cleanup` is omitted, the suite calls `adapter.close?.()` after each case.
 ## runFrameworkContractSuite()
 
 ```ts
-import { runFrameworkContractSuite } from '@kyrobit/rbac/testing'
+import { runFrameworkContractSuite } from '@kyrobit/kyroguard/testing'
 
 function runFrameworkContractSuite(options: FrameworkSuiteOptions): void
 ```
@@ -98,7 +98,7 @@ Black-box HTTP contract for framework integrations. The suite builds its own `Rb
 ```ts
 // my-framework.contract.test.ts
 import { describe, it, expect } from 'bun:test'
-import { runFrameworkContractSuite } from '@kyrobit/rbac/testing'
+import { runFrameworkContractSuite } from '@kyrobit/kyroguard/testing'
 import { makeTestApp } from './harness.js'
 
 runFrameworkContractSuite({

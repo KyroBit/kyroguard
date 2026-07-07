@@ -1,11 +1,11 @@
 # Mongoose
 
-Reference for `@kyrobit/rbac/mongoose`. Requires Mongoose 8. Setup walkthrough: [MongoDB](/databases/mongodb).
+Reference for `@kyrobit/kyroguard/mongoose`. Requires Mongoose 8. Setup walkthrough: [MongoDB](/databases/mongodb).
 
 ## mongooseAdapter()
 
 ```ts
-import { mongooseAdapter } from '@kyrobit/rbac/mongoose'
+import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 import type { Connection } from 'mongoose'
 
 function mongooseAdapter(connection: Connection): StorageAdapter
@@ -17,8 +17,8 @@ function mongooseAdapter(connection: Connection): StorageAdapter
 
 ```ts
 import mongoose from 'mongoose'
-import { createRbac } from '@kyrobit/rbac'
-import { mongooseAdapter } from '@kyrobit/rbac/mongoose'
+import { createRbac } from '@kyrobit/kyroguard'
+import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 
 const connection = await mongoose.createConnection(process.env.MONGO_URL!).asPromise()
 const rbac = createRbac({ adapter: mongooseAdapter(connection) })
@@ -28,7 +28,7 @@ The returned adapter:
 
 - `id`: `'mongoose'`.
 - `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true, listFiltering: true }`.
-- Creates its indexes when `rbac sync` runs. No separate migration step.
+- Creates its indexes when `kyroguard sync` runs. No separate migration step.
 - Does not close the connection. You own the connection lifecycle.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
@@ -45,7 +45,7 @@ Ids are cast to `ObjectId` when the resource's registered `table` (its Mongoose 
 ## rbacModels()
 
 ```ts
-import { rbacModels } from '@kyrobit/rbac/mongoose'
+import { rbacModels } from '@kyrobit/kyroguard/mongoose'
 
 function rbacModels(connection: Connection): RbacModels
 ```
@@ -71,7 +71,7 @@ The document types (`RbacPolicyDoc` and friends) are exported from the same subp
 ## rbacMongoosePlugin()
 
 ```ts
-import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
+import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
 
 function rbacMongoosePlugin(schema: Schema, options: RbacMongoosePluginOptions): void
 ```
@@ -85,7 +85,7 @@ Schema plugin for your own models. It records ownership on save, and filters rea
 
 ```ts
 import { Schema, model } from 'mongoose'
-import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
+import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
 import { rbac } from './rbac.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })

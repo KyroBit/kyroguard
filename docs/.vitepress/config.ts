@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: '@kyrobit/rbac',
+  title: 'KyroGuard',
   description:
-    'Permissions for your Node app. Define them in code, assign them to users, enforce them on routes.',
+    'KyroGuard — permissions for your Node app. Define them in code, assign them to users, enforce them on routes.',
 
   themeConfig: {
     search: { provider: 'local' },
@@ -11,7 +11,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Reference', link: '/reference/core-api' },
-      { text: 'GitHub', link: 'https://github.com/KyroBit/rbac' },
+      { text: 'GitHub', link: 'https://github.com/KyroBit/kyroguard' },
     ],
 
     sidebar: [
@@ -72,7 +72,7 @@ export default defineConfig({
       },
     ],
 
-    socialLinks: [{ icon: 'github', link: 'https://github.com/KyroBit/rbac' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/KyroBit/kyroguard' }],
 
     outline: { level: [2, 3] },
   },

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@kyrobit/rbac",
+      "name": "@kyrobit/kyroguard",
       "dependencies": {
         "@paralleldrive/cuid2": "^3.3.0",
         "fastify-plugin": "^6.0.0",

@@ -267,11 +267,11 @@ An unmapped field is a **fail-closed `false`** plus a one-time named warning —
 **Deny/allow composition helpers** — small, per backend, for callers who want one expression instead of the switch:
 
 ```ts
-// @kyrobit/rbac/drizzle
+// @kyrobit/kyroguard/drizzle
 export function drizzleWhere(f: ListFilter): SQL | undefined
 // all → undefined · none → sql`1 = 0` · where → f.where as SQL
 
-// @kyrobit/rbac/mongoose
+// @kyrobit/kyroguard/mongoose
 export function mongoWhere(f: ListFilter): Record<string, unknown>
 // all → {} · none → { $expr: { $eq: [0, 1] } } (CASL's EMPTY_RESULT_QUERY) · where → f.where
 ```
@@ -339,7 +339,7 @@ export const ownEditable = new Scope('own-editable', 'Own, unpublished, in windo
 The invariant this feature exists to guarantee: **for every row, `check(subject, {type, id}, ctx)` ≡ row ∈ filtered query.** Two enforcements:
 
 1. **Structural:** both paths resolve grants through the same `getPolicyMap`, the same scope registry, the same OR/fold rules. Condition scopes are parity-safe by construction (one function). Only Tier-2/3 custom row filters can drift.
-2. **Test helper** in `@kyrobit/rbac/testing`:
+2. **Test helper** in `@kyrobit/kyroguard/testing`:
 
 ```ts
 export async function assertScopeParity(options: {

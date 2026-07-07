@@ -5,7 +5,7 @@
  * the compound `@@unique` names double as the compound-unique inputs the
  * adapter relies on — change either only in lockstep with the adapter.
  */
-export const prismaSchemaSnippet = `// ── @kyrobit/rbac models ─────────────────────────────────────────────────────
+export const prismaSchemaSnippet = `// ── @kyrobit/kyroguard models ─────────────────────────────────────────────────────
 // Generated tables interoperate with the Drizzle schema: identical table
 // names, snake_case columns, defaults and unique constraints.
 // domain / tenantId use the '' sentinel (never NULL).

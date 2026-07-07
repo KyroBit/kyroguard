@@ -9,7 +9,7 @@ import type { StorageAdapter } from '../../src/storage/contract.js'
 
 /**
  * Full fixture project driven through the real CLI path:
- * loadConfig(rbac.config.ts) → runSync(). The config's lazy adapter factory
+ * loadConfig(kyroguard.config.ts) → runSync(). The config's lazy adapter factory
  * returns a module-level singleton (rig.ts) wrapping memoryAdapter(), so the
  * test can observe exactly what sync wrote across the CLI import boundary —
  * Bun's module cache makes the fixture's `import './rig.ts'` and the test's
@@ -102,14 +102,14 @@ export const adapter = {
   )
 
   await writeFile(
-    join(dir, 'rbac.config.ts'),
+    join(dir, 'kyroguard.config.ts'),
     `import { adapter } from './rig.ts'
 
 export default {
   // Lazy factory, as the real config template ships it.
   adapter: async () => adapter,
   domains: [{ name: 'admin', policies: './policies.ts', groups: './groups.ts' }],
-  typegen: { output: './rbac.d.ts' },
+  typegen: { output: './kyroguard.d.ts' },
 }
 `,
     'utf8',
@@ -128,7 +128,7 @@ beforeAll(async () => {
     syncLogs.push(args.map(String).join(' '))
   }
   try {
-    const { config, path } = await loadConfig(join(fixture, 'rbac.config.ts'))
+    const { config, path } = await loadConfig(join(fixture, 'kyroguard.config.ts'))
     await runSync(config, dirname(path))
   } finally {
     console.log = originalLog
@@ -145,7 +145,7 @@ afterAll(async () => {
   if (fixture) await rm(fixture, { recursive: true, force: true })
 })
 
-describe('rbac sync (full fixture project)', () => {
+describe('kyroguard sync (full fixture project)', () => {
   test('adapter factory resolved the singleton and sync completed without error', () => {
     expect(rig.calls.length).toBeGreaterThan(0)
     expect(syncLogs.some(line => line.includes('sync failed'))).toBe(false)
@@ -211,13 +211,13 @@ describe('rbac sync (full fixture project)', () => {
     expect(rig.calls.indexOf('upsertPolicies')).toBeGreaterThan(rig.calls.indexOf('ensureSchema'))
   })
 
-  test('rbac.d.ts was written with the domain union and unqualified policy names', async () => {
-    const declaration = await readFile(join(fixture, 'rbac.d.ts'), 'utf8')
-    expect(declaration).toContain("declare module '@kyrobit/rbac'")
+  test('kyroguard.d.ts was written with the domain union and unqualified policy names', async () => {
+    const declaration = await readFile(join(fixture, 'kyroguard.d.ts'), 'utf8')
+    expect(declaration).toContain("declare module '@kyrobit/kyroguard'")
     expect(declaration).toContain('Domain: "admin"')
     expect(declaration).toContain('PolicyName: "docs.read" | "docs.write"')
     expect(declaration).toContain('"admin": "docs.read" | "docs.write"')
-    expect(syncLogs.some(line => line.includes('Wrote') && line.includes('rbac.d.ts'))).toBe(true)
+    expect(syncLogs.some(line => line.includes('Wrote') && line.includes('kyroguard.d.ts'))).toBe(true)
   })
 
   test('adapter.close was called (exactly once, last)', () => {

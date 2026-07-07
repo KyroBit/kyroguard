@@ -1,14 +1,14 @@
 import type { StorageAdapter } from '../storage/contract.js'
 
 /**
- * rbac.config.ts shape. The adapter factory is lazy — the user's config owns
+ * kyroguard.config.ts shape. The adapter factory is lazy — the user's config owns
  * the driver imports, never the CLI.
  */
 export interface RbacConfig {
   adapter: () => Promise<StorageAdapter> | StorageAdapter
   domains: DomainConfig[]
   typegen?: {
-    /** Output path for the generated declaration file. Default './rbac.d.ts'. */
+    /** Output path for the generated declaration file. Default './kyroguard.d.ts'. */
     output?: string
   }
 }
@@ -22,7 +22,7 @@ export interface DomainConfig {
   groups?: string
 }
 
-/** Typed identity — gives rbac.config.ts full autocompletion. */
+/** Typed identity — gives kyroguard.config.ts full autocompletion. */
 export function defineConfig(config: RbacConfig): RbacConfig {
   return config
 }

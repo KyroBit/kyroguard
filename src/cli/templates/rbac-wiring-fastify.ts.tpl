@@ -4,14 +4,14 @@
  * pipeline: 401 unauthenticated, 403 policy/scope denied, 404 resource not
  * found — your error handler and onSend hooks keep working.
  */
-import { createRbac } from '@kyrobit/rbac'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
+import { createRbac } from '@kyrobit/kyroguard'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
 import { resources } from './policies.js'
-import type { StorageAdapter } from '@kyrobit/rbac'
+import type { StorageAdapter } from '@kyrobit/kyroguard'
 import type { FastifyInstance } from 'fastify'
 
 export async function registerRbac(app: FastifyInstance, adapter: StorageAdapter) {
-  // Reuse your app's adapter/db handle — same construction as rbac.config.ts.
+  // Reuse your app's adapter/db handle — same construction as kyroguard.config.ts.
   const rbac = createRbac({ adapter, resources })
 
   await app.register(rbacFastify(rbac))

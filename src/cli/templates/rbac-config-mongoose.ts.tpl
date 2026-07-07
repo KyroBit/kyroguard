@@ -1,12 +1,12 @@
-import { defineConfig } from '@kyrobit/rbac'
+import { defineConfig } from '@kyrobit/kyroguard'
 
 export default defineConfig({
-  // Lazy adapter factory: only db-touching commands (`rbac sync`, `rbac status`)
-  // open a connection — `rbac generate` never does, and the CLI itself never
+  // Lazy adapter factory: only db-touching commands (`kyroguard sync`, `kyroguard status`)
+  // open a connection — `kyroguard generate` never does, and the CLI itself never
   // imports a database driver.
   adapter: async () => {
     const { createConnection } = await import('mongoose')
-    const { mongooseAdapter } = await import('@kyrobit/rbac/mongoose')
+    const { mongooseAdapter } = await import('@kyrobit/kyroguard/mongoose')
     const connection = await createConnection(
       process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/app',
     ).asPromise()
@@ -19,5 +19,5 @@ export default defineConfig({
       groups: './src/rbac/groups.ts',
     },
   ],
-  typegen: { output: './rbac.d.ts' },
+  typegen: { output: './kyroguard.d.ts' },
 })

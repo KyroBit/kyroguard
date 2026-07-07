@@ -19,7 +19,7 @@ datasource db {
   url      = env("RBAC_PRISMA_DB_URL")
 }
 
-// ── @kyrobit/rbac models (from prismaSchemaSnippet) ──────────────────────────
+// ── @kyrobit/kyroguard models (from prismaSchemaSnippet) ──────────────────────────
 
 model RbacPolicy {
   id           String   @id @default(cuid())

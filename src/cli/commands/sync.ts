@@ -27,7 +27,7 @@ export async function run(config: RbacConfig, baseDir: string): Promise<void> {
         const groups = await loadGroups(resolve(baseDir, domain.groups))
         await seedGroups(adapter, groups, allPolicies, domainName)
         console.log(
-          `[rbac] Seeded ${Object.keys(groups).length} groups${domainName ? ` for domain "${domainName}"` : ''}.`,
+          `[kyroguard] Seeded ${Object.keys(groups).length} groups${domainName ? ` for domain "${domainName}"` : ''}.`,
         )
         // Seeding is replace-all per group (S8), which wipes the dependencies
         // syncPolicies just filled — run the back-fill again so they stick.
@@ -37,14 +37,14 @@ export async function run(config: RbacConfig, baseDir: string): Promise<void> {
       domains.push({ name: domainName, policyNames: allPolicies.map(policy => policy.name) })
     }
 
-    const output = resolve(baseDir, config.typegen?.output ?? './rbac.d.ts')
+    const output = resolve(baseDir, config.typegen?.output ?? './kyroguard.d.ts')
     await generateTypes(domains, output)
-    console.log(`[rbac] Wrote ${output}`)
+    console.log(`[kyroguard] Wrote ${output}`)
   } catch (error) {
-    console.error(`[rbac] sync failed: ${messageOf(error)}`)
+    console.error(`[kyroguard] sync failed: ${messageOf(error)}`)
     if (isMissingTableError(error)) {
       console.error(
-        '[rbac] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).',
+        '[kyroguard] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).',
       )
     }
     process.exitCode = 1
@@ -57,7 +57,7 @@ async function loadGroups(path: string): Promise<GroupsDefinition> {
   const loaded = await loadModuleExport<unknown>(path, ['groups'])
   if (typeof loaded !== 'object' || loaded === null || Array.isArray(loaded)) {
     throw new Error(
-      `[rbac] ${path} must export a GroupsDefinition object (as \`groups\` or the default export).`,
+      `[kyroguard] ${path} must export a GroupsDefinition object (as \`groups\` or the default export).`,
     )
   }
   return loaded as GroupsDefinition

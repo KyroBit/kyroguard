@@ -1,6 +1,6 @@
 # Core API
 
-Reference for `@kyrobit/rbac`, the framework-agnostic core. Integrations live at subpaths: [Fastify](/reference/fastify), [Express](/reference/express), [Drizzle](/reference/drizzle), [Prisma](/reference/prisma), [Mongoose](/reference/mongoose), [Cache](/reference/cache), [Testing](/reference/testing).
+Reference for `@kyrobit/kyroguard`, the framework-agnostic core. Integrations live at subpaths: [Fastify](/reference/fastify), [Express](/reference/express), [Drizzle](/reference/drizzle), [Prisma](/reference/prisma), [Mongoose](/reference/mongoose), [Cache](/reference/cache), [Testing](/reference/testing).
 
 ## createRbac()
 
@@ -24,8 +24,8 @@ function createRbac(options: CreateRbacOptions): Rbac
 | `onCacheEvent` | `CacheHook` | — | Fires on cache hits, misses and invalidations. |
 
 ```ts
-import { createRbac, Policy, Scope } from '@kyrobit/rbac'
-import { memoryAdapter } from '@kyrobit/rbac/testing'
+import { createRbac, Policy, Scope } from '@kyrobit/kyroguard'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 const rbac = createRbac({
   adapter: memoryAdapter(),
@@ -59,7 +59,7 @@ The instance returned by `createRbac()`.
 | `adapter` | The adapter passed to `createRbac()`. |
 | `resources` | The resource definitions, including the `policies` shorthand. |
 | `resourceForPolicy` | Unqualified policy name → the resource that defines it. Guards resolve their filter target through it — see [`storeFilterFor`](#storefilterfor). |
-| `sync()` | Load the `createRbac` policies and seed its groups. Same as [`rbac sync`](/reference/cli). |
+| `sync()` | Load the `createRbac` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
 | `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
@@ -247,7 +247,7 @@ Functions:
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
 - `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
 - `mergeGrants(grants)` — merge grant rows into a `PolicyMap` (`Map<string, string[] | null>`). An unrestricted grant from anywhere wins the whole policy; otherwise the value is every granted scope name, deduped. Scopes OR on both paths: `authorize()` passes when any scope passes, `filterFor()` combines their fragments.
-- `defineConfig(config)` — returns `config` unchanged, with types. Use it in `rbac.config.ts`. See [Configuration](/reference/configuration).
+- `defineConfig(config)` — returns `config` unchanged, with types. Use it in `kyroguard.config.ts`. See [Configuration](/reference/configuration).
 - `createId()` — random string id generator (cuid2). Used by generated schemas.
 
 Classes:

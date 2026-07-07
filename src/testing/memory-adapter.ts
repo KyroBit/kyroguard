@@ -85,7 +85,7 @@ export function memoryAdapter(): StorageAdapter {
 
   const requireGroup = (name: string): StoredGroup => {
     const group = groups.get(name)
-    if (!group) throw new Error(`[rbac] Group "${name}" not found.`)
+    if (!group) throw new Error(`[kyroguard] Group "${name}" not found.`)
     return group
   }
 

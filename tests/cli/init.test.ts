@@ -70,7 +70,7 @@ const PRISMA_MODELS = [
   'RbacResourceOwner',
 ]
 
-describe('rbac init --yes', () => {
+describe('kyroguard init --yes', () => {
   test('fastify + drizzle-orm + pg project gets config, policies, groups, wiring and the pg schema', async () => {
     const cwd = await projectDir({ fastify: '^5.0.0', 'drizzle-orm': '^0.36.0', pg: '^8.13.0' })
     const lines = await runInitQuiet(cwd)
@@ -81,7 +81,7 @@ describe('rbac init --yes', () => {
     expect(lines.join('\n')).toContain('dialect:   pg')
 
     // All five files land.
-    const config = await readFile(join(cwd, 'rbac.config.ts'), 'utf8')
+    const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     const policies = await readFile(join(cwd, 'src', 'rbac', 'policies.ts'), 'utf8')
     const groups = await readFile(join(cwd, 'src', 'rbac', 'groups.ts'), 'utf8')
     const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
@@ -118,7 +118,7 @@ describe('rbac init --yes', () => {
     // Simulate the user having customized two of the files.
     const configMarker = '// customized-by-user config\n'
     const schemaMarker = '// customized-by-user schema\n'
-    await writeFile(join(cwd, 'rbac.config.ts'), configMarker, 'utf8')
+    await writeFile(join(cwd, 'kyroguard.config.ts'), configMarker, 'utf8')
     await writeFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), schemaMarker, 'utf8')
 
     const lines = await runInitQuiet(cwd)
@@ -128,7 +128,7 @@ describe('rbac init --yes', () => {
     expect(skipped.length).toBe(5)
     expect(lines.some(line => line.includes('wrote'))).toBe(false)
 
-    expect(await readFile(join(cwd, 'rbac.config.ts'), 'utf8')).toBe(configMarker)
+    expect(await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')).toBe(configMarker)
     expect(await readFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), 'utf8')).toBe(schemaMarker)
   })
 
@@ -137,13 +137,13 @@ describe('rbac init --yes', () => {
     await runInitQuiet(cwd)
 
     const configMarker = '// keep me\n'
-    await writeFile(join(cwd, 'rbac.config.ts'), configMarker, 'utf8')
+    await writeFile(join(cwd, 'kyroguard.config.ts'), configMarker, 'utf8')
     await rm(join(cwd, 'src', 'rbac', 'groups.ts'))
 
     const lines = await runInitQuiet(cwd)
     expect(lines.some(line => line.includes('wrote') && line.includes('groups.ts'))).toBe(true)
     expect(existsSync(join(cwd, 'src', 'rbac', 'groups.ts'))).toBe(true)
-    expect(await readFile(join(cwd, 'rbac.config.ts'), 'utf8')).toBe(configMarker)
+    expect(await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')).toBe(configMarker)
   })
 
   test('express + mongoose project gets the mongoose config, express wiring and NO schema file', async () => {
@@ -153,7 +153,7 @@ describe('rbac init --yes', () => {
     expect(lines.join('\n')).toContain('framework: express')
     expect(lines.join('\n')).toContain('orm:       mongoose')
 
-    const config = await readFile(join(cwd, 'rbac.config.ts'), 'utf8')
+    const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('mongooseAdapter')
     expect(config).not.toContain('drizzleAdapter')
     expect(config).toContain("name: 'admin'")
@@ -185,9 +185,9 @@ describe('rbac init --yes', () => {
     expect(lines.join('\n')).toContain('dialect:   pg')
 
     // Prisma config variant with the lazy adapter factory.
-    const config = await readFile(join(cwd, 'rbac.config.ts'), 'utf8')
+    const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain("await import('@prisma/client')")
-    expect(config).toContain("await import('@kyrobit/rbac/prisma')")
+    expect(config).toContain("await import('@kyrobit/kyroguard/prisma')")
     expect(config).toContain('prismaAdapter(new PrismaClient())')
     expect(config).not.toContain('drizzleAdapter')
     expect(config).toContain("name: 'admin'")
@@ -210,7 +210,7 @@ describe('rbac init --yes', () => {
 
     // Next steps mention the migration flow.
     expect(lines.join('\n')).toContain('prisma migrate dev')
-    expect(lines.join('\n')).toContain('rbac sync')
+    expect(lines.join('\n')).toContain('kyroguard sync')
   })
 
   test('re-running init on a prisma project skips every existing file', async () => {
@@ -254,7 +254,7 @@ describe('rbac init --yes', () => {
 
     expect(lines.join('\n')).toContain('orm:       drizzle')
 
-    const config = await readFile(join(cwd, 'rbac.config.ts'), 'utf8')
+    const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('drizzleAdapter')
     expect(config).not.toContain('prismaAdapter')
 
@@ -267,7 +267,7 @@ describe('rbac init --yes', () => {
     const cwd = await projectDir({})
     await runInitQuiet(cwd)
 
-    const config = await readFile(join(cwd, 'rbac.config.ts'), 'utf8')
+    const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('drizzleAdapter')
     const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
     expect(wiring).toContain('rbacFastify')

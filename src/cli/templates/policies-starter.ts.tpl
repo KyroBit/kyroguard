@@ -1,7 +1,7 @@
-import { Policy, Scope } from '@kyrobit/rbac'
-import type { ResourceDefinition } from '@kyrobit/rbac'
+import { Policy, Scope } from '@kyrobit/kyroguard'
+import type { ResourceDefinition } from '@kyrobit/kyroguard'
 
-// Starter resources — replace with your own, then run `rbac sync`.
+// Starter resources — replace with your own, then run `kyroguard sync`.
 // Policy names are UNQUALIFIED: the domain prefix is added automatically.
 export const resources: ResourceDefinition[] = [
   {

@@ -1,11 +1,11 @@
 # Prisma
 
-Reference for `@kyrobit/rbac/prisma`. Requires `@prisma/client` 5 or 6 and a schema containing the six rbac models. Setup walkthrough: [Prisma](/databases/prisma).
+Reference for `@kyrobit/kyroguard/prisma`. Requires `@prisma/client` 5 or 6 and a schema containing the six rbac models. Setup walkthrough: [Prisma](/databases/prisma).
 
 ## prismaAdapter()
 
 ```ts
-import { prismaAdapter } from '@kyrobit/rbac/prisma'
+import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 
 function prismaAdapter(client: PrismaClientLike): StorageAdapter
 ```
@@ -16,8 +16,8 @@ function prismaAdapter(client: PrismaClientLike): StorageAdapter
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { createRbac } from '@kyrobit/rbac'
-import { prismaAdapter } from '@kyrobit/rbac/prisma'
+import { createRbac } from '@kyrobit/kyroguard'
+import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 
 const rbac = createRbac({ adapter: prismaAdapter(new PrismaClient()) })
 ```
@@ -26,7 +26,7 @@ The returned adapter:
 
 - `id`: `'prisma'`.
 - `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false, listFiltering: true }`.
-- Does not create tables. Run `prisma migrate` before `rbac sync`.
+- Does not create tables. Run `prisma migrate` before `kyroguard sync`.
 - Does not call `$disconnect()`. You own the client lifecycle.
 - Multi-step writes run in `$transaction`. Concurrent duplicate assignments are safe.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
@@ -50,7 +50,7 @@ There is no portable "match nothing" predicate in Prisma, so short-circuit `kind
 ## rbacPrismaExtension()
 
 ```ts
-import { rbacPrismaExtension } from '@kyrobit/rbac/prisma'
+import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
 
 function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPrismaExtension
 ```
@@ -64,7 +64,7 @@ Client extension that records ownership when your app creates rows, and filters 
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { rbacPrismaExtension } from '@kyrobit/rbac/prisma'
+import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
 import { rbac } from './rbac.js'
 
 const client = new PrismaClient()
@@ -97,12 +97,12 @@ Raw SQL, nested writes through relations, `createManyAndReturn`, `updateMany` an
 ## prismaSchemaSnippet
 
 ```ts
-import { prismaSchemaSnippet } from '@kyrobit/rbac/prisma'
+import { prismaSchemaSnippet } from '@kyrobit/kyroguard/prisma'
 
 const prismaSchemaSnippet: string
 ```
 
-The six rbac models as a Prisma schema string. `rbac init` scaffolds `prisma/rbac.prisma` from it. It validates for the `postgresql`, `mysql` and `sqlite` providers.
+The six rbac models as a Prisma schema string. `kyroguard init` scaffolds `prisma/rbac.prisma` from it. It validates for the `postgresql`, `mysql` and `sqlite` providers.
 
 | Model | Table |
 | --- | --- |

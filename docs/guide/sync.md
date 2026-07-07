@@ -3,13 +3,13 @@
 Your definitions live in two files. `src/rbac/policies.ts` says what users can do. `src/rbac/groups.ts` maps job titles to policies. One command loads both:
 
 ```sh
-npx rbac sync
+npx kyroguard sync
 ```
 
 ```
-[rbac] Synced 4 policies.
-[rbac] Seeded 2 groups.
-[rbac] Wrote /home/you/app/rbac.d.ts
+[kyroguard] Synced 4 policies.
+[kyroguard] Seeded 2 groups.
+[kyroguard] Wrote /home/you/app/kyroguard.d.ts
 ```
 
 One run does five things:
@@ -18,9 +18,9 @@ One run does five things:
 2. Deletes policies you removed from code.
 3. Adds declared dependencies to every group that needs them ([how scopes carry over](/guide/groups#dependencies-are-filled-in)).
 4. Seeds your groups from `groups.ts`.
-5. Writes `rbac.d.ts` so policy names autocomplete.
+5. Writes `kyroguard.d.ts` so policy names autocomplete.
 
-Your code is the source of truth. The database follows it. Every domain in [`rbac.config.ts`](/reference/configuration) is synced in one run.
+Your code is the source of truth. The database follows it. Every domain in [`kyroguard.config.ts`](/reference/configuration) is synced in one run.
 
 No files? `createRbac({ policies, groups })` plus `await rbac.sync()` runs the same pipeline.
 
@@ -31,7 +31,7 @@ Run it after every edit to `policies.ts` or `groups.ts`. Run it on every deploy,
 ## Removing a policy
 
 ```
-[rbac] Removed 1 orphaned policies: grades.finalize
+[kyroguard] Removed 1 orphaned policies: grades.finalize
 ```
 
 ::: danger Deleting a policy deletes its grants
@@ -45,16 +45,16 @@ A policies file that exports an empty array is skipped. Sync never wipes everyth
 Sync writes rows. It does not create tables. Run your migrations first, or sync stops with a hint:
 
 ```
-$ npx rbac sync
-[rbac] sync failed: relation "rbac_policies" does not exist
-[rbac] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
+$ npx kyroguard sync
+[kyroguard] sync failed: relation "rbac_policies" does not exist
+[kyroguard] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
 ```
 
 ## CI and deploys
 
 ```sh
 npx drizzle-kit migrate   # or: npx prisma migrate deploy
-npx rbac sync
+npx kyroguard sync
 node dist/server.js
 ```
 
@@ -63,13 +63,13 @@ Migrate, sync, start. Always in that order. Sync exits with code 1 on failure, s
 ## Types without a database
 
 ```sh
-npx rbac generate
+npx kyroguard generate
 ```
 
-`generate` writes `rbac.d.ts` from your policy files only. It never opens a database connection. Use it in CI typechecks and on fresh checkouts.
+`generate` writes `kyroguard.d.ts` from your policy files only. It never opens a database connection. Use it in CI typechecks and on fresh checkouts.
 
 ## Next steps
 
 - [CLI](/reference/cli) — all commands and flags
-- [Configuration](/reference/configuration) — the `rbac.config.ts` schema
-- [TypeScript](/guide/typescript) — how `rbac.d.ts` types your guards
+- [Configuration](/reference/configuration) — the `kyroguard.config.ts` schema
+- [TypeScript](/guide/typescript) — how `kyroguard.d.ts` types your guards

@@ -29,7 +29,7 @@ export async function seedGroups(
   for (const [name, def] of Object.entries(groups)) {
     if (def.policies === 'all' && !allPolicies) {
       throw new Error(
-        `[rbac] seedGroups: group "${name}" uses policies: 'all' but no allPolicies array was passed as the third argument.`,
+        `[kyroguard] seedGroups: group "${name}" uses policies: 'all' but no allPolicies array was passed as the third argument.`,
       )
     }
 
@@ -63,7 +63,7 @@ function validateScopes(
     if (!declared.some(option => option.name === scope)) {
       const known = declared.map(option => option.name).join(', ') || '(none)'
       throw new Error(
-        `[rbac] seedGroups: group "${group}" grants policy "${policyName}" with unknown scope "${scope}" — declared scopeOptions: ${known}.`,
+        `[kyroguard] seedGroups: group "${group}" grants policy "${policyName}" with unknown scope "${scope}" — declared scopeOptions: ${known}.`,
       )
     }
   }

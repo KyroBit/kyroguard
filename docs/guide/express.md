@@ -1,14 +1,14 @@
 # Express
 
-Wire `@kyrobit/rbac` into Express 4 or 5. This is a complete setup:
+Wire `@kyrobit/kyroguard` into Express 4 or 5. This is a complete setup:
 
 ```ts
 // app.ts
 import express from 'express'
-import { createRbac } from '@kyrobit/rbac'
-import { rbacExpress } from '@kyrobit/rbac/express'
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
-import * as schema from './db/rbac-schema.js' // written by `rbac init`
+import { createRbac } from '@kyrobit/kyroguard'
+import { rbacExpress } from '@kyrobit/kyroguard/express'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
+import * as schema from './db/rbac-schema.js' // written by `kyroguard init`
 import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'

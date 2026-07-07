@@ -53,7 +53,7 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
 
   async function requireGroup(groupName: string): Promise<Types.ObjectId> {
     const group = await models.policyGroup.findOne({ name: groupName }).lean()
-    if (!group) throw new Error(`[rbac] Policy group "${groupName}" not found.`)
+    if (!group) throw new Error(`[kyroguard] Policy group "${groupName}" not found.`)
     return group._id
   }
 

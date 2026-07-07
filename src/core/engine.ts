@@ -231,7 +231,7 @@ export class RbacEngine {
         if (!scope) {
           this.warnOnce(
             `unknown-scope:${scopeName}`,
-            `[rbac] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
+            `[kyroguard] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
           )
           continue
         }
@@ -266,7 +266,7 @@ export class RbacEngine {
     if (!support) {
       this.warnOnce(
         `unfilterable:${this.adapter.id}`,
-        `[rbac] Adapter "${this.adapter.id}" has no listFilters — cannot OR-combine ${fragments.length} scope fragments; the list is empty.`,
+        `[kyroguard] Adapter "${this.adapter.id}" has no listFilters — cannot OR-combine ${fragments.length} scope fragments; the list is empty.`,
       )
       this.emitDecision(subject, policy, 'deny', 'scope-denied', fragmentScopes.join(','), cacheHit, startedAt, 'list')
       return { kind: 'none', reason: 'unfilterable' }

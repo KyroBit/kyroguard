@@ -7,18 +7,18 @@ Works with the `postgresql`, `mysql` and `sqlite` providers. Setup is five steps
 Run init in your project root:
 
 ```bash
-npx rbac init
+npx kyroguard init
 ```
 
 It detects Prisma and writes the starter files:
 
 ```
-[rbac] Detected stack:
+[kyroguard] Detected stack:
   framework: fastify
   orm:       prisma
   dialect:   pg
 
-  wrote   rbac.config.ts
+  wrote   kyroguard.config.ts
   wrote   src/rbac/policies.ts
   wrote   src/rbac/groups.ts
   wrote   src/rbac/wiring.ts
@@ -40,7 +40,7 @@ Prisma has to see the six models. Pick one:
 npx prisma migrate dev
 ```
 
-This creates the six rbac tables. `npx prisma db push` also works during development. Migrate before you sync. `rbac sync` writes rows, it never creates tables.
+This creates the six rbac tables. `npx prisma db push` also works during development. Migrate before you sync. `kyroguard sync` writes rows, it never creates tables.
 
 ## 4. Wire the adapter
 
@@ -49,8 +49,8 @@ Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createRbac`:
 ```ts
 // src/rbac/instance.ts
 import { PrismaClient } from '@prisma/client'
-import { createRbac } from '@kyrobit/rbac'
-import { prismaAdapter } from '@kyrobit/rbac/prisma'
+import { createRbac } from '@kyrobit/kyroguard'
+import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 import { resources } from './policies.js'
 
 export const client = new PrismaClient()
@@ -58,15 +58,15 @@ export const adapter = prismaAdapter(client)
 export const rbac = createRbac({ adapter, resources })
 ```
 
-Any client generated from a schema that includes the rbac models works. You own the client, so call `$disconnect()` on shutdown. `rbac.config.ts` contains the same wiring for the CLI.
+Any client generated from a schema that includes the rbac models works. You own the client, so call `$disconnect()` on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
 
 ## 5. Sync
 
 ```bash
-npx rbac sync
+npx kyroguard sync
 ```
 
-This writes your policies and groups into the rbac tables. It also generates `rbac.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
+This writes your policies and groups into the rbac tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
 
 ## Track ownership with `rbacPrismaExtension`
 
@@ -74,7 +74,7 @@ Policies with `Scope.owned()` check who created each row. The extension records 
 
 ```ts
 // src/db.ts
-import { rbacPrismaExtension } from '@kyrobit/rbac/prisma'
+import { rbacPrismaExtension } from '@kyrobit/kyroguard/prisma'
 import { client, rbac } from './rbac/instance.js'
 
 export const db = client.$extends(

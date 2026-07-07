@@ -4,7 +4,7 @@
  * Every storage backend (Drizzle pg/mysql/sqlite, Mongoose, in-memory test
  * adapter, future backends) implements this interface. The numbered clauses
  * S1–S23 below are the normative semantics; each clause maps 1:1 to a case in
- * the contract test suite (`@kyrobit/rbac/testing`,
+ * the contract test suite (`@kyrobit/kyroguard/testing`,
  * runStorageAdapterContractSuite). An adapter is conforming exactly when it
  * passes that suite.
  *
@@ -57,7 +57,7 @@
  * S17 ensureSchema (if implemented) is idempotent and safe to call on every
  *     sync run.
  * S18 All methods reject with an Error (never silently no-op) when the
- *     backing tables/collections are missing, so `rbac sync` can tell users
+ *     backing tables/collections are missing, so `kyroguard sync` can tell users
  *     to run migrations.
  * S19 Policies carry their `domain` ('' sentinel) as a stored column, set at
  *     sync time. Orphan cleanup filters on domain equality — never on
@@ -158,7 +158,7 @@ export interface AdapterCapabilities {
 
 export class UnknownPolicyError extends Error {
   constructor(policyName: string) {
-    super(`[rbac] Policy "${policyName}" not found — run \`rbac sync\` first.`)
+    super(`[kyroguard] Policy "${policyName}" not found — run \`kyroguard sync\` first.`)
     this.name = 'UnknownPolicyError'
   }
 }
@@ -166,18 +166,18 @@ export class UnknownPolicyError extends Error {
 export class UnknownScopeError extends Error {
   constructor(policyName: string, scope: string) {
     super(
-      `[rbac] Scope "${scope}" is not among the scopeOptions of policy "${policyName}" — declare it on the policy and re-sync.`,
+      `[kyroguard] Scope "${scope}" is not among the scopeOptions of policy "${policyName}" — declare it on the policy and re-sync.`,
     )
     this.name = 'UnknownScopeError'
   }
 }
 
 export interface StorageAdapter {
-  /** Identifies the adapter in diagnostics (`rbac status`) and CLI dispatch. */
+  /** Identifies the adapter in diagnostics (`kyroguard status`) and CLI dispatch. */
   readonly id: string
   readonly capabilities: AdapterCapabilities
 
-  /** Optional DDL/index hook, run by `rbac sync` before writing (S17). */
+  /** Optional DDL/index hook, run by `kyroguard sync` before writing (S17). */
   ensureSchema?(): Promise<void>
   /** Release connections. Called by the CLI after sync. */
   close?(): Promise<void>

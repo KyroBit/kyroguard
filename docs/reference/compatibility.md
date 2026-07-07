@@ -1,6 +1,6 @@
 # Compatibility
 
-Supported runtimes and version ranges for `@kyrobit/rbac` v1.
+Supported runtimes and version ranges for `@kyrobit/kyroguard` v1.
 
 | Dependency | Supported range | Notes |
 | --- | --- | --- |
@@ -13,15 +13,15 @@ Supported runtimes and version ranges for `@kyrobit/rbac` v1.
 | @prisma/client | `^5.0.0 \|\| ^6.0.0` | Any client generated from the six rbac models. |
 | mongoose | `^8.0.0` | Multiple connections per process are supported. |
 
-All framework and ORM packages are optional peer dependencies. Install only what you use. Each integration lives at its own subpath, so importing `@kyrobit/rbac/fastify` never loads Express or an ORM.
+All framework and ORM packages are optional peer dependencies. Install only what you use. Each integration lives at its own subpath, so importing `@kyrobit/kyroguard/fastify` never loads Express or an ORM.
 
 ## ESM only
 
-The package ships ES modules only. `import` works everywhere in the supported range. `require('@kyrobit/rbac')` from CommonJS also works, because Node supports `require()` of ES modules from 20.19 onward. That is why the floor is 20.19.
+The package ships ES modules only. `import` works everywhere in the supported range. `require('@kyrobit/kyroguard')` from CommonJS also works, because Node supports `require()` of ES modules from 20.19 onward. That is why the floor is 20.19.
 
 ## moduleResolution
 
-Subpath imports like `@kyrobit/rbac/fastify` need a resolver that reads the package `exports` map:
+Subpath imports like `@kyrobit/kyroguard/fastify` need a resolver that reads the package `exports` map:
 
 ```jsonc
 // tsconfig.json — one of:
@@ -29,7 +29,7 @@ Subpath imports like `@kyrobit/rbac/fastify` need a resolver that reads the pack
 { "compilerOptions": { "moduleResolution": "nodenext" } }  // node ESM projects
 ```
 
-The legacy `"node"` setting fails with TS2307 on every subpath import. Also keep the generated `rbac.d.ts` inside your `include` globs.
+The legacy `"node"` setting fails with TS2307 on every subpath import. Also keep the generated `kyroguard.d.ts` inside your `include` globs.
 
 ## Semver
 

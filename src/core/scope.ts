@@ -49,7 +49,7 @@ export class Scope {
   ) {
     // 'all' is the reserved unrestricted-grant marker — a scope by that name could never be granted.
     if (name === 'all') {
-      throw new Error(`[rbac] Scope: the name 'all' is reserved — it marks an unrestricted grant.`)
+      throw new Error(`[kyroguard] Scope: the name 'all' is reserved — it marks an unrestricted grant.`)
     }
   }
 

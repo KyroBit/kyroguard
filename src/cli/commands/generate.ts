@@ -16,9 +16,9 @@ export async function run(config: RbacConfig, baseDir: string): Promise<void> {
     })
   }
 
-  const output = resolve(baseDir, config.typegen?.output ?? './rbac.d.ts')
+  const output = resolve(baseDir, config.typegen?.output ?? './kyroguard.d.ts')
   await generateTypes(domains, output)
-  console.log(`[rbac] Wrote ${output}`)
+  console.log(`[kyroguard] Wrote ${output}`)
 }
 
 export async function loadDomainResources(
@@ -29,7 +29,7 @@ export async function loadDomainResources(
   const loaded = await loadModuleExport<unknown>(path, ['resources', 'policies'])
   if (!Array.isArray(loaded)) {
     throw new Error(
-      `[rbac] ${path} must export a ResourceDefinition[] or Policy[] (as \`resources\`, \`policies\` or the default export).`,
+      `[kyroguard] ${path} must export a ResourceDefinition[] or Policy[] (as \`resources\`, \`policies\` or the default export).`,
     )
   }
   if (loaded.length > 0 && loaded.every(isPolicyLike)) {
@@ -39,7 +39,7 @@ export async function loadDomainResources(
     loaded.some(entry => typeof entry !== 'object' || entry === null || !Array.isArray((entry as ResourceDefinition).policies))
   ) {
     throw new Error(
-      `[rbac] ${path} must export a ResourceDefinition[] or Policy[] (as \`resources\`, \`policies\` or the default export).`,
+      `[kyroguard] ${path} must export a ResourceDefinition[] or Policy[] (as \`resources\`, \`policies\` or the default export).`,
     )
   }
   return loaded as ResourceDefinition[]

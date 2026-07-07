@@ -1,6 +1,6 @@
-// RBAC tables for @kyrobit/rbac (drizzle, sqlite) — mirrors @kyrobit/rbac/drizzle/schema/sqlite.
-// Add this file to your drizzle-kit schema paths and migrate before `rbac sync`.
-import { createId } from '@kyrobit/rbac'
+// RBAC tables for @kyrobit/kyroguard (drizzle, sqlite) — mirrors @kyrobit/kyroguard/drizzle/schema/sqlite.
+// Add this file to your drizzle-kit schema paths and migrate before `kyroguard sync`.
+import { createId } from '@kyrobit/kyroguard'
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const dialect = 'sqlite' as const

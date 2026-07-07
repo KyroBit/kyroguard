@@ -14,17 +14,17 @@ const packOutput = execFileSync('npm', ['pack', '--json'], { cwd: root, encoding
 const tarball = join(root, JSON.parse(packOutput)[0].filename)
 console.log(`[smoke] packed ${tarball}`)
 
-const fixture = await mkdtemp(join(tmpdir(), 'rbac-smoke-'))
+const fixture = await mkdtemp(join(tmpdir(), 'kyroguard-smoke-'))
 try {
   await writeFile(
     join(fixture, 'package.json'),
     JSON.stringify(
       {
-        name: 'rbac-smoke-fixture',
+        name: 'kyroguard-smoke-fixture',
         private: true,
         type: 'module',
         dependencies: {
-          '@kyrobit/rbac': `file:${tarball}`,
+          '@kyrobit/kyroguard': `file:${tarball}`,
           express: '^5.1.0',
           fastify: '^5.0.0',
         },

@@ -4,7 +4,7 @@ Groups are job titles — what other systems call roles. Define them in one file
 
 ```ts
 // src/rbac/groups.ts
-import type { GroupsDefinition } from '@kyrobit/rbac'
+import type { GroupsDefinition } from '@kyrobit/kyroguard'
 
 export const groups: GroupsDefinition = {
   teacher: {
@@ -28,7 +28,7 @@ export const groups: GroupsDefinition = {
 
 The why is in the data. A teacher updates only the grades they entered. The coordinator updates any grade in the school.
 
-Export the object as `groups`. Point [`rbac.config.ts`](/reference/configuration) at this file. `npx rbac sync` seeds it into the database ([Sync](/guide/sync)).
+Export the object as `groups`. Point [`kyroguard.config.ts`](/reference/configuration) at this file. `npx kyroguard sync` seeds it into the database ([Sync](/guide/sync)).
 
 Assign a group and the user holds every policy in it:
 

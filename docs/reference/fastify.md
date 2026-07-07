@@ -1,11 +1,11 @@
 # Fastify
 
-Reference for `@kyrobit/rbac/fastify`. Requires Fastify 5.x. For a walkthrough, see [Fastify](/guide/fastify).
+Reference for `@kyrobit/kyroguard/fastify`. Requires Fastify 5.x. For a walkthrough, see [Fastify](/guide/fastify).
 
 ## rbacFastify()
 
 ```ts
-import { rbacFastify } from '@kyrobit/rbac/fastify'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
 
 function rbacFastify(rbac: Rbac, options?: RbacFastifyOptions): FastifyPluginAsync
 ```
@@ -19,7 +19,7 @@ The plugin opens the request context on every request and decorates the app with
 
 ```ts
 import Fastify from 'fastify'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
 import { rbac } from './rbac.js'
 
 const app = Fastify()

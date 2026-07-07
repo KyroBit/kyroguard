@@ -1,6 +1,6 @@
-import type { GroupsDefinition } from '@kyrobit/rbac'
+import type { GroupsDefinition } from '@kyrobit/kyroguard'
 
-// Seeded by `rbac sync` (replace-all per group). Policy names are UNQUALIFIED —
+// Seeded by `kyroguard sync` (replace-all per group). Policy names are UNQUALIFIED —
 // the domain prefix is added automatically. Scope values: 'all' = no restriction,
 // 'owned' = only rows the subject created, 'in-tenant' = rows in the request's tenant.
 export const groups: GroupsDefinition = {

@@ -1,6 +1,6 @@
 # Introduction
 
-@kyrobit/rbac answers one question on every request: is this user allowed to do this?
+@kyrobit/kyroguard answers one question on every request: is this user allowed to do this?
 
 The docs run one example: a school management system. RBAC governs teachers and office staff. Students never log in.
 
@@ -8,9 +8,9 @@ Here is the whole library in one file:
 
 ```ts
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/rbac'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
-import { memoryAdapter } from '@kyrobit/rbac/testing' // in-memory store, no database
+import { createRbac, Policy } from '@kyrobit/kyroguard'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing' // in-memory store, no database
 
 // A policy is a named permission — one thing a user can do
 const policies = [new Policy('grades.view')]

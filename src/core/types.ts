@@ -1,7 +1,7 @@
 export type Awaitable<T> = T | Promise<T>
 
 /**
- * Augmented from user projects via the CLI-generated rbac.d.ts. Must stay
+ * Augmented from user projects via the CLI-generated kyroguard.d.ts. Must stay
  * empty: augmentation ADDS members, TypeScript rejects re-declaring one.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

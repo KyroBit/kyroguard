@@ -33,7 +33,7 @@ const config = {
   domains: [
     { name: 'admin', policies: './src/rbac/policies.ts', groups: './src/rbac/groups.ts' },
   ],
-  typegen: { output: './types/rbac.d.ts' },
+  typegen: { output: './types/kyroguard.d.ts' },
 }
 export default config
 `
@@ -59,9 +59,9 @@ async function rejectionOf(promise: Promise<unknown>): Promise<Error> {
 }
 
 describe('loadConfig', () => {
-  test('valid rbac.config.ts loads under Bun via explicit path', async () => {
+  test('valid kyroguard.config.ts loads under Bun via explicit path', async () => {
     const dir = await fixtureDir()
-    const path = await writeConfig(dir, 'rbac.config.ts', VALID_TS_CONFIG)
+    const path = await writeConfig(dir, 'kyroguard.config.ts', VALID_TS_CONFIG)
 
     const result = await loadConfig(path)
     expect(result.path).toBe(path)
@@ -69,23 +69,23 @@ describe('loadConfig', () => {
     expect(result.config.domains).toHaveLength(1)
     expect(result.config.domains[0]?.name).toBe('admin')
     expect(result.config.domains[0]?.policies).toBe('./src/rbac/policies.ts')
-    expect(result.config.typegen?.output).toBe('./types/rbac.d.ts')
+    expect(result.config.typegen?.output).toBe('./types/kyroguard.d.ts')
   })
 
-  test('rbac.config.ts is discovered from the cwd without --config', async () => {
+  test('kyroguard.config.ts is discovered from the cwd without --config', async () => {
     const dir = await fixtureDir()
-    const path = await writeConfig(dir, 'rbac.config.ts', VALID_TS_CONFIG)
+    const path = await writeConfig(dir, 'kyroguard.config.ts', VALID_TS_CONFIG)
 
     const result = await withCwd(dir, () => loadConfig())
     expect(result.path).toBe(path)
     expect(result.config.domains[0]?.name).toBe('admin')
   })
 
-  test('rbac.config.mjs also loads', async () => {
+  test('kyroguard.config.mjs also loads', async () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
-      'rbac.config.mjs',
+      'kyroguard.config.mjs',
       `export default {
         adapter: async () => ({ id: 'stub-mjs' }),
         domains: [{ policies: './policies.mjs' }],
@@ -108,19 +108,19 @@ describe('loadConfig', () => {
     const dir = await fixtureDir()
     const error = await withCwd(dir, () => rejectionOf(loadConfig()))
 
-    expect(error.message).toContain('[rbac]')
+    expect(error.message).toContain('[kyroguard]')
     // Names all searched basenames…
-    expect(error.message).toContain('rbac.config.{ts,mts,mjs,js}')
+    expect(error.message).toContain('kyroguard.config.{ts,mts,mjs,js}')
     // …and where it looked…
     expect(error.message).toContain(dir)
     // …and how to fix it.
-    expect(error.message).toContain('rbac init')
+    expect(error.message).toContain('kyroguard init')
     expect(error.message).toContain('--config')
   })
 
   test('explicit --config path that does not exist → error naming that path', async () => {
     const dir = await fixtureDir()
-    const missing = join(dir, 'nope', 'rbac.config.ts')
+    const missing = join(dir, 'nope', 'kyroguard.config.ts')
     const error = await rejectionOf(loadConfig(missing))
     expect(error.message).toContain('Config file not found')
     expect(error.message).toContain(missing)
@@ -129,9 +129,9 @@ describe('loadConfig', () => {
   test('relative explicit path resolves against the cwd', async () => {
     const dir = await fixtureDir()
     await mkdir(join(dir, 'config'), { recursive: true })
-    const path = await writeConfig(join(dir, 'config'), 'rbac.config.ts', VALID_TS_CONFIG)
+    const path = await writeConfig(join(dir, 'config'), 'kyroguard.config.ts', VALID_TS_CONFIG)
 
-    const result = await withCwd(dir, () => loadConfig(join('config', 'rbac.config.ts')))
+    const result = await withCwd(dir, () => loadConfig(join('config', 'kyroguard.config.ts')))
     expect(result.path).toBe(path)
   })
 
@@ -139,7 +139,7 @@ describe('loadConfig', () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
-      'rbac.config.ts',
+      'kyroguard.config.ts',
       `export default { domains: [{ policies: './p.ts' }] }`,
     )
     const error = await rejectionOf(loadConfig(path))
@@ -151,7 +151,7 @@ describe('loadConfig', () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
-      'rbac.config.ts',
+      'kyroguard.config.ts',
       `export default { adapter: { id: 'not-a-factory' }, domains: [] }`,
     )
     const error = await rejectionOf(loadConfig(path))
@@ -162,7 +162,7 @@ describe('loadConfig', () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
-      'rbac.config.ts',
+      'kyroguard.config.ts',
       `export default { adapter: async () => ({ id: 'stub' }) }`,
     )
     const error = await rejectionOf(loadConfig(path))
@@ -174,7 +174,7 @@ describe('loadConfig', () => {
     const dir = await fixtureDir()
     const path = await writeConfig(
       dir,
-      'rbac.config.ts',
+      'kyroguard.config.ts',
       `export default {
         adapter: async () => ({ id: 'stub' }),
         domains: [
@@ -190,7 +190,7 @@ describe('loadConfig', () => {
 
   test('non-object default export → must-default-export error', async () => {
     const dir = await fixtureDir()
-    const path = await writeConfig(dir, 'rbac.config.ts', `export default 42`)
+    const path = await writeConfig(dir, 'kyroguard.config.ts', `export default 42`)
     const error = await rejectionOf(loadConfig(path))
     expect(error.message).toContain('must default-export a config object')
     expect(error.message).toContain('defineConfig')

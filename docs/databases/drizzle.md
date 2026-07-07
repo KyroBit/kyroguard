@@ -7,18 +7,18 @@ Works with PostgreSQL, MySQL and SQLite. Setup is four steps: scaffold, migrate,
 Run init in your project root:
 
 ```bash
-npx rbac init
+npx kyroguard init
 ```
 
 It detects Drizzle and your dialect, then writes the starter files:
 
 ```
-[rbac] Detected stack:
+[kyroguard] Detected stack:
   framework: fastify
   orm:       drizzle
   dialect:   pg
 
-  wrote   rbac.config.ts
+  wrote   kyroguard.config.ts
   wrote   src/rbac/policies.ts
   wrote   src/rbac/groups.ts
   wrote   src/rbac/wiring.ts
@@ -50,7 +50,7 @@ npx drizzle-kit generate
 npx drizzle-kit migrate
 ```
 
-`npx drizzle-kit push` also works during development. Migrate before you sync. `rbac sync` writes rows, it never creates tables.
+`npx drizzle-kit push` also works during development. Migrate before you sync. `kyroguard sync` writes rows, it never creates tables.
 
 ## 3. Wire the adapter
 
@@ -58,8 +58,8 @@ Pass your Drizzle db and the scaffolded schema module to `drizzleAdapter`:
 
 ```ts
 // src/rbac/instance.ts
-import { createRbac } from '@kyrobit/rbac'
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
+import { createRbac } from '@kyrobit/kyroguard'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from '../db/rbac-schema.js'
 import { rawDb } from '../db/index.js'
 import { resources } from './policies.js'
@@ -68,15 +68,15 @@ export const adapter = drizzleAdapter(rawDb, { schema })
 export const rbac = createRbac({ adapter, resources })
 ```
 
-`rbac.config.ts` contains the same wiring for the CLI. Finish its TODO so it imports your db. The scaffolded schema file mirrors `@kyrobit/rbac/drizzle/schema/pg` (and `mysql`, `sqlite`). Either module works as the `schema` option.
+`kyroguard.config.ts` contains the same wiring for the CLI. Finish its TODO so it imports your db. The scaffolded schema file mirrors `@kyrobit/kyroguard/drizzle/schema/pg` (and `mysql`, `sqlite`). Either module works as the `schema` option.
 
 ## 4. Sync
 
 ```bash
-npx rbac sync
+npx kyroguard sync
 ```
 
-This writes your policies and groups into the rbac tables. It also generates `rbac.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
+This writes your policies and groups into the rbac tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
 ## 5. Track ownership (optional)
 
@@ -84,7 +84,7 @@ Policies with `Scope.owned()` check who created each row. `trackedDb` records th
 
 ```ts
 // src/rbac/instance.ts
-import { trackedDb } from '@kyrobit/rbac/drizzle'
+import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 
 export const db = trackedDb(rawDb, { rbac, resources })
 ```
@@ -92,9 +92,9 @@ export const db = trackedDb(rawDb, { rbac, resources })
 Link each resource to its table in `src/rbac/policies.ts`:
 
 ```ts
-import { Policy, Scope } from '@kyrobit/rbac'
+import { Policy, Scope } from '@kyrobit/kyroguard'
 import { grades } from '../db/schema.js'
-import type { ResourceDefinition } from '@kyrobit/rbac'
+import type { ResourceDefinition } from '@kyrobit/kyroguard'
 
 export const resources: ResourceDefinition[] = [
   {

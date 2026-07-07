@@ -1,4 +1,4 @@
-/** @kyrobit/rbac/testing — memoryAdapter, scope-parity helper and the runner-injected contract suites. */
+/** @kyrobit/kyroguard/testing — memoryAdapter, scope-parity helper and the runner-injected contract suites. */
 
 export { memoryAdapter } from './memory-adapter.js'
 export type { MemoryWhere } from './memory-adapter.js'

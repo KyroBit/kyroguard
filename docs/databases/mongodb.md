@@ -7,18 +7,18 @@ Works with MongoDB through Mongoose. There are no migrations. Setup is three ste
 Run init in your project root:
 
 ```bash
-npx rbac init
+npx kyroguard init
 ```
 
 It detects Mongoose and writes the starter files:
 
 ```
-[rbac] Detected stack:
+[kyroguard] Detected stack:
   framework: fastify
   orm:       mongoose
   dialect:   not detected
 
-  wrote   rbac.config.ts
+  wrote   kyroguard.config.ts
   wrote   src/rbac/policies.ts
   wrote   src/rbac/groups.ts
   wrote   src/rbac/wiring.ts
@@ -33,8 +33,8 @@ Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createRb
 ```ts
 // src/rbac/instance.ts
 import { createConnection } from 'mongoose'
-import { createRbac } from '@kyrobit/rbac'
-import { mongooseAdapter } from '@kyrobit/rbac/mongoose'
+import { createRbac } from '@kyrobit/kyroguard'
+import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 import { resources } from './policies.js'
 
 export const connection = await createConnection(process.env.MONGODB_URI!).asPromise()
@@ -42,15 +42,15 @@ export const adapter = mongooseAdapter(connection)
 export const rbac = createRbac({ adapter, resources })
 ```
 
-You own the connection, so close it on shutdown. `rbac.config.ts` contains the same wiring for the CLI.
+You own the connection, so close it on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
 
 ## 3. Sync
 
 ```bash
-npx rbac sync
+npx kyroguard sync
 ```
 
-Run this before first traffic — it creates the MongoDB indexes. It also writes your policies and groups, and generates `rbac.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
+Run this before first traffic — it creates the MongoDB indexes. It also writes your policies and groups, and generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
 ## Track ownership with `rbacMongoosePlugin`
 
@@ -59,7 +59,7 @@ Policies with `Scope.owned()` check who created each document. The plugin record
 ```ts
 // src/models/grade.ts
 import { Schema, model } from 'mongoose'
-import { rbacMongoosePlugin } from '@kyrobit/rbac/mongoose'
+import { rbacMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
 import { rbac } from '../rbac/instance.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })

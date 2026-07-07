@@ -3,7 +3,7 @@
 A policy is one permission.
 
 ```ts
-import { Policy } from '@kyrobit/rbac'
+import { Policy } from '@kyrobit/kyroguard'
 
 new Policy('grades.enter')
 ```
@@ -68,7 +68,7 @@ A dependency must name a policy you defined. Sync fails if it does not.
 ## Scopes
 
 ```ts
-import { Scope } from '@kyrobit/rbac'
+import { Scope } from '@kyrobit/kyroguard'
 
 new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned()] })
 ```
@@ -81,8 +81,8 @@ The list is enforced. Granting a scope the policy does not declare fails, at syn
 
 ```ts
 // src/rbac/policies.ts
-import { Policy, Scope } from '@kyrobit/rbac'
-import type { ResourceDefinition } from '@kyrobit/rbac'
+import { Policy, Scope } from '@kyrobit/kyroguard'
+import type { ResourceDefinition } from '@kyrobit/kyroguard'
 
 export const resources: ResourceDefinition[] = [
   {
@@ -105,7 +105,7 @@ export const resources: ResourceDefinition[] = [
 ]
 ```
 
-Export the array as `resources`. Point [`rbac.config.ts`](/reference/configuration) at this file. Run `npx rbac sync` to push it to the database.
+Export the array as `resources`. Point [`kyroguard.config.ts`](/reference/configuration) at this file. Run `npx kyroguard sync` to push it to the database.
 
 `type` names the resource for scoped checks and ownership. `table` is optional — set it to record who entered each row ([Ownership](/guide/ownership)). Reads on guarded routes are then filtered automatically ([Scopes](/guide/scopes#automatic-filtering)).
 

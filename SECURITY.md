@@ -1,6 +1,6 @@
 # Security Policy
 
-@kyrobit/rbac is an authorization library: bugs in it can become data leaks in
+@kyrobit/kyroguard is an authorization library: bugs in it can become data leaks in
 every application that uses it. Treat any suspected isolation failure
 (a subject seeing another domain's or tenant's data, a policy check passing
 that should not) as a security issue, not a regular bug.

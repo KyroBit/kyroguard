@@ -1,11 +1,11 @@
 # Express
 
-Reference for `@kyrobit/rbac/express`. Works on Express 4.18+ and Express 5. For a walkthrough, see [Express](/guide/express).
+Reference for `@kyrobit/kyroguard/express`. Works on Express 4.18+ and Express 5. For a walkthrough, see [Express](/guide/express).
 
 ## rbacExpress()
 
 ```ts
-import { rbacExpress } from '@kyrobit/rbac/express'
+import { rbacExpress } from '@kyrobit/kyroguard/express'
 
 function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 ```
@@ -26,7 +26,7 @@ function rbacExpress(rbac: Rbac, options?: ExpressRbacOptions): ExpressRbac
 
 ```ts
 import express from 'express'
-import { rbacExpress } from '@kyrobit/rbac/express'
+import { rbacExpress } from '@kyrobit/kyroguard/express'
 import { rbac } from './rbac.js'
 
 const app = express()

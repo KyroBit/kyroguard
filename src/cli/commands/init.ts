@@ -32,7 +32,7 @@ const CONFIG_TEMPLATES: Record<Answers['orm'], string> = {
   mongoose: 'rbac-config-mongoose.ts.tpl',
 }
 
-const PRISMA_SNIPPET_HEADER = `// @kyrobit/rbac tables — scaffolded by \`rbac init\`.
+const PRISMA_SNIPPET_HEADER = `// @kyrobit/kyroguard tables — scaffolded by \`kyroguard init\`.
 //
 // Include these models in your Prisma schema, either by:
 //   1. enabling multi-file schemas (the \`prismaSchemaFolder\` preview feature;
@@ -60,7 +60,7 @@ export async function run(options: InitOptions): Promise<void> {
   }
 
   const plan: PlannedFile[] = [
-    { dest: 'rbac.config.ts', template: CONFIG_TEMPLATES[answers.orm] },
+    { dest: 'kyroguard.config.ts', template: CONFIG_TEMPLATES[answers.orm] },
     { dest: join('src', 'rbac', 'policies.ts'), template: 'policies-starter.ts.tpl' },
     { dest: join('src', 'rbac', 'groups.ts'), template: 'groups-starter.ts.tpl' },
     {
@@ -104,21 +104,21 @@ export async function run(options: InitOptions): Promise<void> {
   }
 
   console.log('')
-  console.log('[rbac] Next steps:')
+  console.log('[kyroguard] Next steps:')
   if (answers.orm === 'drizzle') {
     console.log('  1. Add src/db/rbac-schema.ts to your drizzle config schema paths.')
     console.log('  2. Run your migrations (drizzle-kit generate && drizzle-kit migrate, or push).')
-    console.log('  3. Finish the TODOs in rbac.config.ts and src/rbac/wiring.ts.')
-    console.log('  4. Run `rbac sync`.')
+    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  4. Run `kyroguard sync`.')
   } else if (prismaSchemaDest !== null) {
     console.log(`  1. Include ${prismaSchemaDest} in your Prisma schema — enable multi-file`)
     console.log('     schemas (prismaSchemaFolder) or paste its models into schema.prisma.')
     console.log('  2. Run your migrations (npx prisma migrate dev, or prisma db push).')
-    console.log('  3. Finish the TODOs in rbac.config.ts and src/rbac/wiring.ts.')
-    console.log('  4. Run `rbac sync`.')
+    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  4. Run `kyroguard sync`.')
   } else {
-    console.log('  1. Finish the TODOs in rbac.config.ts and src/rbac/wiring.ts.')
-    console.log('  2. Run `rbac sync` (creates the MongoDB indexes via ensureSchema).')
+    console.log('  1. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  2. Run `kyroguard sync` (creates the MongoDB indexes via ensureSchema).')
   }
 }
 
@@ -131,7 +131,7 @@ function prismaSnippetDest(cwd: string): string {
 
 function printDetected(detected: DetectedStack): void {
   const show = (value: string | null) => value ?? 'not detected'
-  console.log('[rbac] Detected stack:')
+  console.log('[kyroguard] Detected stack:')
   console.log(`  framework: ${show(detected.framework)}`)
   console.log(`  orm:       ${show(detected.orm)}`)
   console.log(`  dialect:   ${show(detected.dialect)}`)

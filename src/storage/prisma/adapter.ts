@@ -62,7 +62,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
   const requireGroupId = async (ex: PrismaRbacModelDelegates, name: string): Promise<string> => {
     const id = await findGroupId(ex, name)
-    if (id === null) throw new Error(`[rbac] Policy group "${name}" not found — seed groups first.`)
+    if (id === null) throw new Error(`[kyroguard] Policy group "${name}" not found — seed groups first.`)
     return id
   }
 
@@ -103,7 +103,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     if (rows.length >= PRISMA_ID_LIST_CAP && !warnedIdListCap) {
       warnedIdListCap = true
       console.warn(
-        `[rbac] Prisma list filter for "${resource.type}" hit the ${PRISMA_ID_LIST_CAP}-id ceiling — ` +
+        `[kyroguard] Prisma list filter for "${resource.type}" hit the ${PRISMA_ID_LIST_CAP}-id ceiling — ` +
           'results may be truncated. Denormalize an owner column and ship a custom scope filter.',
       )
     }

@@ -32,8 +32,8 @@ Greenwood's people are not one crowd. A **domain** is one kind of user's app —
 This declares the five front doors, each with its own policies and groups:
 
 ```ts
-// rbac.config.ts
-import { defineConfig } from '@kyrobit/rbac'
+// kyroguard.config.ts
+import { defineConfig } from '@kyrobit/kyroguard'
 
 export default defineConfig({
   adapter: () => import('./src/db.js').then(m => m.adapter),
@@ -119,7 +119,7 @@ This is the "my child only" rule — a check half for one row, a filter half for
 
 ```ts
 // parents/scopes.ts
-import { Scope } from '@kyrobit/rbac'
+import { Scope } from '@kyrobit/kyroguard'
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '../db.js'
 import { grades, parentChildren } from '../db/schema.js'

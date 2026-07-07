@@ -72,13 +72,13 @@ function reportUntracked(t: InsertTracking): void {
   if (t.strictTracking === 'off') return
   if (t.strictTracking === 'error') {
     throw new MisconfiguredError(
-      `[rbac] Cannot track ownership for "${t.resourceType}": no ids in values() and no .returning() — add .returning() or use db.untracked.`,
+      `[kyroguard] Cannot track ownership for "${t.resourceType}": no ids in values() and no .returning() — add .returning() or use db.untracked.`,
     )
   }
   if (t.warned.has(t.resourceType)) return
   t.warned.add(t.resourceType)
   console.warn(
-    `[rbac] Ownership not tracked for "${t.resourceType}": no ids in values() and no .returning(). Add .returning(), pass ids in values(), or use db.untracked to silence.`,
+    `[kyroguard] Ownership not tracked for "${t.resourceType}": no ids in values() and no .returning(). Add .returning(), pass ids in values(), or use db.untracked to silence.`,
   )
 }
 

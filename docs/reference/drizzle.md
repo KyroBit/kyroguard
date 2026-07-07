@@ -1,11 +1,11 @@
 # Drizzle
 
-Reference for `@kyrobit/rbac/drizzle`. Supports PostgreSQL, MySQL and SQLite with `drizzle-orm` >=0.36.0. Setup walkthrough: [Drizzle](/databases/drizzle).
+Reference for `@kyrobit/kyroguard/drizzle`. Supports PostgreSQL, MySQL and SQLite with `drizzle-orm` >=0.36.0. Setup walkthrough: [Drizzle](/databases/drizzle).
 
 ## drizzleAdapter()
 
 ```ts
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 
 function drizzleAdapter(db: unknown, options: { schema: DrizzleRbacSchema }): DrizzleStorageAdapter
 ```
@@ -13,12 +13,12 @@ function drizzleAdapter(db: unknown, options: { schema: DrizzleRbacSchema }): Dr
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `db` | `unknown` | A Drizzle database handle for the matching dialect. |
-| `options.schema` | `DrizzleRbacSchema` | The whole schema module: `import * as schema from '@kyrobit/rbac/drizzle/schema/pg'`. |
+| `options.schema` | `DrizzleRbacSchema` | The whole schema module: `import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'`. |
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
-import * as schema from '@kyrobit/rbac/drizzle/schema/pg'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
+import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'
 
 const db = drizzle(process.env.DATABASE_URL!)
 const adapter = drizzleAdapter(db, { schema })
@@ -28,7 +28,7 @@ The returned adapter:
 
 - `id`: `'drizzle-pg'`, `'drizzle-mysql'` or `'drizzle-sqlite'`, from the schema's dialect.
 - `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true, listFiltering: true }`.
-- Does not create tables. Run your Drizzle Kit migrations before `rbac sync`.
+- Does not create tables. Run your Drizzle Kit migrations before `kyroguard sync`.
 - Does not close the connection. You own the connection lifecycle.
 - Multi-step writes run in a transaction.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
@@ -50,7 +50,7 @@ The correlated id column is the resource's `fields.id` mapping when set, otherwi
 ## trackedDb()
 
 ```ts
-import { trackedDb } from '@kyrobit/rbac/drizzle'
+import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
@@ -65,7 +65,7 @@ Wraps your Drizzle database. Inserts into registered resource tables record owne
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { trackedDb } from '@kyrobit/rbac/drizzle'
+import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 import { rbac, resources } from './rbac.js'
 
 const rawDb = drizzle(process.env.DATABASE_URL!)
@@ -92,9 +92,9 @@ Selects run unfiltered when no guard activated a filter for the resource — ung
 ## Schema subpaths
 
 ```ts
-import * as schema from '@kyrobit/rbac/drizzle/schema/pg'     // PostgreSQL
-import * as schema from '@kyrobit/rbac/drizzle/schema/mysql'  // MySQL
-import * as schema from '@kyrobit/rbac/drizzle/schema/sqlite' // SQLite
+import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'     // PostgreSQL
+import * as schema from '@kyrobit/kyroguard/drizzle/schema/mysql'  // MySQL
+import * as schema from '@kyrobit/kyroguard/drizzle/schema/sqlite' // SQLite
 ```
 
 Each module exports the same names. Pass the whole module to `drizzleAdapter` as `schema`.

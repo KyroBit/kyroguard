@@ -149,5 +149,5 @@ export function rbacPrismaExtension(options: RbacPrismaExtensionOptions): RbacPr
     )
   }
 
-  return { name: '@kyrobit/rbac', query }
+  return { name: '@kyrobit/kyroguard', query }
 }

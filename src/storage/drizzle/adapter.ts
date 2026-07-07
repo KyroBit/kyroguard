@@ -16,7 +16,7 @@ import type { ResourceRef, SubjectRef } from '../../core/types.js'
 
 export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
 
-/** The `tables` barrel exported by `@kyrobit/rbac/drizzle/schema/{pg,mysql,sqlite}`. */
+/** The `tables` barrel exported by `@kyrobit/kyroguard/drizzle/schema/{pg,mysql,sqlite}`. */
 export interface DrizzleRbacTables {
   policies: unknown
   policyGroups: unknown
@@ -26,7 +26,7 @@ export interface DrizzleRbacTables {
   resourceOwners: unknown
 }
 
-/** Pass the whole schema module: `import * as schema from '@kyrobit/rbac/drizzle/schema/pg'`. */
+/** Pass the whole schema module: `import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'`. */
 export interface DrizzleRbacSchema {
   dialect: DrizzleDialect
   tables: DrizzleRbacTables
@@ -90,7 +90,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
 
   const requireGroupId = async (ex: Db, name: string): Promise<string> => {
     const id = await findGroupId(ex, name)
-    if (id === null) throw new Error(`[rbac] Policy group "${name}" not found — seed groups first.`)
+    if (id === null) throw new Error(`[kyroguard] Policy group "${name}" not found — seed groups first.`)
     return id
   }
 

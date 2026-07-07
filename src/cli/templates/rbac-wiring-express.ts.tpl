@@ -4,14 +4,14 @@
  * pipeline via next(err): 401 unauthenticated, 403 policy/scope denied,
  * 404 resource not found.
  */
-import { createRbac } from '@kyrobit/rbac'
-import { rbacExpress } from '@kyrobit/rbac/express'
+import { createRbac } from '@kyrobit/kyroguard'
+import { rbacExpress } from '@kyrobit/kyroguard/express'
 import { resources } from './policies.js'
-import type { StorageAdapter } from '@kyrobit/rbac'
+import type { StorageAdapter } from '@kyrobit/kyroguard'
 import type { Express } from 'express'
 
 export function registerRbac(app: Express, adapter: StorageAdapter) {
-  // Reuse your app's adapter/db handle — same construction as rbac.config.ts.
+  // Reuse your app's adapter/db handle — same construction as kyroguard.config.ts.
   const rbac = createRbac({ adapter, resources })
 
   const { context, domain: createDomain, errorHandler } = rbacExpress(rbac)

@@ -8,19 +8,19 @@ import { run as runSync } from './commands/sync.js'
 import { run as runGenerate } from './commands/generate.js'
 import { run as runStatus } from './commands/status.js'
 
-const USAGE = `rbac — policies-as-code sync, typegen and scaffolding for @kyrobit/rbac
+const USAGE = `kyroguard — policies-as-code sync, typegen and scaffolding for @kyrobit/kyroguard
 
 Usage
-  rbac <command> [options]
+  kyroguard <command> [options]
 
 Commands
-  init      Scaffold rbac.config.ts, starter policies/groups and wiring
-  sync      Push policies + groups to storage, then write rbac.d.ts
-  generate  Write rbac.d.ts from your policy files only (no database)
+  init      Scaffold kyroguard.config.ts, starter policies/groups and wiring
+  sync      Push policies + groups to storage, then write kyroguard.d.ts
+  generate  Write kyroguard.d.ts from your policy files only (no database)
   status    Show adapter id, capabilities and stored policy/group counts
 
 Options
-  --config <path>  Path to rbac.config.{ts,mts,mjs,js} (default: search cwd)
+  --config <path>  Path to kyroguard.config.{ts,mts,mjs,js} (default: search cwd)
   --yes            Accept defaults and skip prompts (init)
   --help           Show this help
   --version        Print the CLI version
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
       strict: true,
     }))
   } catch (error) {
-    console.error(`[rbac] ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[kyroguard] ${error instanceof Error ? error.message : String(error)}`)
     console.error(USAGE)
     process.exitCode = 1
     return
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
       break
     }
     default:
-      console.error(`[rbac] Unknown command "${command}".`)
+      console.error(`[kyroguard] Unknown command "${command}".`)
       console.error(USAGE)
       process.exitCode = 1
   }
@@ -106,6 +106,6 @@ function readVersion(): string {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
-  console.error(message.startsWith('[rbac]') ? message : `[rbac] ${message}`)
+  console.error(message.startsWith('[kyroguard]') ? message : `[kyroguard] ${message}`)
   process.exitCode = 1
 })

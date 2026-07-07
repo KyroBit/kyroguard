@@ -22,8 +22,8 @@ Each server caches on its own. Connect them with `redisBus` so a revocation on o
 
 ```ts
 import { Redis } from 'ioredis'
-import { createRbac } from '@kyrobit/rbac'
-import { redisBus } from '@kyrobit/rbac/cache'
+import { createRbac } from '@kyrobit/kyroguard'
+import { redisBus } from '@kyrobit/kyroguard/cache'
 
 const publisher = new Redis(process.env.REDIS_URL!)
 const subscriber = new Redis(process.env.REDIS_URL!)
@@ -63,14 +63,14 @@ const rbac = createRbac({
 
 ## Health check
 
-`rbac status` confirms the app can reach its policy tables:
+`kyroguard status` confirms the app can reach its policy tables:
 
 ```
-$ npx rbac status
+$ npx kyroguard status
 adapter:      drizzle-pg
 capabilities: autoOwnershipTracking=true queryScoping=true
 policies:     7
 groups:       2
 ```
 
-Zero policies after a deploy means `rbac sync` has not run. See [Sync](/guide/sync).
+Zero policies after a deploy means `kyroguard sync` has not run. See [Sync](/guide/sync).

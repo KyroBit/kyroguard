@@ -8,9 +8,9 @@ A full test file for a guarded route:
 // grades.test.ts
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/rbac'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
-import { memoryAdapter } from '@kyrobit/rbac/testing'
+import { createRbac, Policy } from '@kyrobit/kyroguard'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 const policies = [new Policy('grades.view')]
 const groups = {

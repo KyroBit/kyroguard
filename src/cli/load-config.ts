@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { RbacConfig } from '../core/config.js'
 
-const CONFIG_BASENAMES = ['rbac.config.ts', 'rbac.config.mts', 'rbac.config.mjs', 'rbac.config.js']
+const CONFIG_BASENAMES = ['kyroguard.config.ts', 'kyroguard.config.mts', 'kyroguard.config.mjs', 'kyroguard.config.js']
 
 export async function loadConfig(explicitPath?: string): Promise<{ config: RbacConfig; path: string }> {
   const path = resolveConfigPath(explicitPath)
@@ -17,7 +17,7 @@ export async function loadConfig(explicitPath?: string): Promise<{ config: RbacC
 export async function loadModuleExport<T = unknown>(path: string, candidates: string[]): Promise<T> {
   const absolute = isAbsolute(path) ? path : resolve(path)
   if (!existsSync(absolute)) {
-    throw new Error(`[rbac] Module not found: ${absolute}`)
+    throw new Error(`[kyroguard] Module not found: ${absolute}`)
   }
   const mod = await importModule(absolute)
   for (const name of candidates) {
@@ -26,7 +26,7 @@ export async function loadModuleExport<T = unknown>(path: string, candidates: st
   }
   if (mod.default !== undefined) return mod.default as T
   throw new Error(
-    `[rbac] ${path} exports none of: ${candidates.join(', ')} (and has no default export).`,
+    `[kyroguard] ${path} exports none of: ${candidates.join(', ')} (and has no default export).`,
   )
 }
 
@@ -44,7 +44,7 @@ function resolveConfigPath(explicitPath?: string): string {
   if (explicitPath) {
     const absolute = isAbsolute(explicitPath) ? explicitPath : resolve(process.cwd(), explicitPath)
     if (!existsSync(absolute)) {
-      throw new Error(`[rbac] Config file not found: ${absolute}`)
+      throw new Error(`[kyroguard] Config file not found: ${absolute}`)
     }
     return absolute
   }
@@ -53,32 +53,32 @@ function resolveConfigPath(explicitPath?: string): string {
     if (existsSync(candidate)) return candidate
   }
   throw new Error(
-    `[rbac] No rbac.config.{ts,mts,mjs,js} found in ${process.cwd()} — run \`rbac init\` or pass --config <path>.`,
+    `[kyroguard] No kyroguard.config.{ts,mts,mjs,js} found in ${process.cwd()} — run \`kyroguard init\` or pass --config <path>.`,
   )
 }
 
 function assertConfigShape(config: unknown, path: string): asserts config is RbacConfig {
   if (typeof config !== 'object' || config === null) {
     throw new Error(
-      `[rbac] ${path} must default-export a config object — use \`export default defineConfig({ ... })\`.`,
+      `[kyroguard] ${path} must default-export a config object — use \`export default defineConfig({ ... })\`.`,
     )
   }
   const candidate = config as Record<string, unknown>
   if (typeof candidate.adapter !== 'function') {
     throw new Error(
-      `[rbac] ${path} is missing "adapter" — expected a function returning a StorageAdapter, e.g. \`adapter: async () => drizzleAdapter(db)\`.`,
+      `[kyroguard] ${path} is missing "adapter" — expected a function returning a StorageAdapter, e.g. \`adapter: async () => drizzleAdapter(db)\`.`,
     )
   }
   if (!Array.isArray(candidate.domains)) {
     throw new Error(
-      `[rbac] ${path} is missing "domains" — expected an array of { name?, policies, groups? }.`,
+      `[kyroguard] ${path} is missing "domains" — expected an array of { name?, policies, groups? }.`,
     )
   }
   candidate.domains.forEach((domain: unknown, index: number) => {
     const entry = domain as { policies?: unknown } | null
     if (typeof entry !== 'object' || entry === null || typeof entry.policies !== 'string') {
       throw new Error(
-        `[rbac] ${path}: domains[${index}] is missing "policies" — expected a path to the module exporting your ResourceDefinition[].`,
+        `[kyroguard] ${path}: domains[${index}] is missing "policies" — expected a path to the module exporting your ResourceDefinition[].`,
       )
     }
   })

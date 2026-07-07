@@ -1,6 +1,6 @@
-// RBAC tables for @kyrobit/rbac (drizzle, mysql) — mirrors @kyrobit/rbac/drizzle/schema/mysql.
-// Add this file to your drizzle-kit schema paths and migrate before `rbac sync`.
-import { createId } from '@kyrobit/rbac'
+// RBAC tables for @kyrobit/kyroguard (drizzle, mysql) — mirrors @kyrobit/kyroguard/drizzle/schema/mysql.
+// Add this file to your drizzle-kit schema paths and migrate before `kyroguard sync`.
+import { createId } from '@kyrobit/kyroguard'
 import {
   boolean,
   index,

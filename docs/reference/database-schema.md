@@ -1,6 +1,6 @@
 # Database schema
 
-`@kyrobit/rbac` stores everything in six tables.
+`@kyrobit/kyroguard` stores everything in six tables.
 
 | Table | Stores |
 | --- | --- |
@@ -11,7 +11,7 @@
 | [`rbac_user_policies`](#rbac_user_policies) | Direct policy grants to users. |
 | [`rbac_resource_owners`](#rbac_resource_owners) | Who owns which of your app's rows. No foreign keys into your tables. |
 
-The Drizzle schemas ship at `@kyrobit/rbac/drizzle/schema/{pg,mysql,sqlite}`. The Prisma models ship as `prismaSchemaSnippet` and are scaffolded to `prisma/rbac.prisma`. Mongoose creates matching collections and indexes when `rbac sync` runs.
+The Drizzle schemas ship at `@kyrobit/kyroguard/drizzle/schema/{pg,mysql,sqlite}`. The Prisma models ship as `prismaSchemaSnippet` and are scaffolded to `prisma/rbac.prisma`. Mongoose creates matching collections and indexes when `kyroguard sync` runs.
 
 Types below are PostgreSQL. The MySQL, SQLite and MongoDB equivalents ship in the packaged schemas, with the same names and constraints. Two notes if you ever write rows by hand:
 
@@ -132,7 +132,7 @@ Who may touch which of your app's rows. This backs `Scope.owned()`, `Scope.grant
 | `rbac_ro_resource_idx` (`resource_type`, `resource_id`) | Fast ownership checks. |
 | `rbac_ro_owner_idx` (`resource_type`, `owner_id`) | Fast list filters — the EXISTS probe. |
 
-Rows written before the `relation` column existed count as `'owner'` rows. On MongoDB, `rbac sync` backfills them; on SQL the column default does it.
+Rows written before the `relation` column existed count as `'owner'` rows. On MongoDB, `kyroguard sync` backfills them; on SQL the column default does it.
 
 ## Ids and timestamps
 

@@ -1,6 +1,6 @@
 # TypeScript
 
-`rbac sync` writes an `rbac.d.ts` file. It turns your policy names into types.
+`kyroguard sync` writes an `kyroguard.d.ts` file. It turns your policy names into types.
 
 Without it, any string compiles:
 
@@ -20,11 +20,11 @@ admin.requirePolicy('reprts.view')
 Both CLI commands write it:
 
 ```bash
-npx rbac sync       # pushes policies to storage, then writes rbac.d.ts
-npx rbac generate   # writes rbac.d.ts only — no database needed
+npx kyroguard sync       # pushes policies to storage, then writes kyroguard.d.ts
+npx kyroguard generate   # writes kyroguard.d.ts only — no database needed
 ```
 
-The output path defaults to `./rbac.d.ts`. Change it in `rbac.config.ts` — see [Configuration](/reference/configuration).
+The output path defaults to `./kyroguard.d.ts`. Change it in `kyroguard.config.ts` — see [Configuration](/reference/configuration).
 
 Commit the file. It changes only when your policies change, and everyone gets the same types.
 
@@ -34,7 +34,7 @@ The file must be part of your TypeScript program:
 
 ```json
 {
-  "include": ["src", "rbac.d.ts"]
+  "include": ["src", "kyroguard.d.ts"]
 }
 ```
 

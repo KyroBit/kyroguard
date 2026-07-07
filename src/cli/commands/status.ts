@@ -14,7 +14,7 @@ export async function run(config: RbacConfig): Promise<void> {
     console.log(`policies:     ${policies.length}`)
     console.log(`groups:       ${groups.length}`)
   } catch (error) {
-    console.error(`[rbac] status failed: ${error instanceof Error ? error.message : String(error)}`)
+    console.error(`[kyroguard] status failed: ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
   } finally {
     await adapter?.close?.().catch(() => {})

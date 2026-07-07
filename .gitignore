@@ -4,4 +4,4 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 .npmrc
 dist/
-rbac.d.ts
+kyroguard.d.ts

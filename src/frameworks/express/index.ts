@@ -67,7 +67,7 @@ function createDomain<P extends string>(
     const store = rbac.engine.store.get()
     if (!store) {
       throw new MisconfiguredError(
-        `[rbac] No request context for domain "${name}" — register rbacExpress(rbac).context() before its guards.`,
+        `[kyroguard] No request context for domain "${name}" — register rbacExpress(rbac).context() before its guards.`,
       )
     }
     if (store.domainSubjects.has(name)) {
@@ -143,7 +143,7 @@ function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
   const resource = rbac.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[rbac] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
     )
   }
   return resource
@@ -160,7 +160,7 @@ function guard(run: (req: Request) => Promise<void>): RequestHandler {
     run(req).then(
       () => next(),
       (error: unknown) =>
-        next(error ?? new MisconfiguredError('[rbac] Guard rejected without an error value')),
+        next(error ?? new MisconfiguredError('[kyroguard] Guard rejected without an error value')),
     )
   }
 }

@@ -24,7 +24,7 @@ export async function assertScopeParity(options: AssertScopeParityOptions): Prom
   const definition = rbac.resources.find(candidate => candidate.type === resource)
   if (!definition) {
     throw new MisconfiguredError(
-      `[rbac] assertScopeParity: resource type "${resource}" is not registered on this rbac instance.`,
+      `[kyroguard] assertScopeParity: resource type "${resource}" is not registered on this rbac instance.`,
     )
   }
 
@@ -52,7 +52,7 @@ export async function assertScopeParity(options: AssertScopeParityOptions): Prom
 
   if (violations.length > 0) {
     throw new Error(
-      `[rbac] Scope parity violated for policy "${policy}" on resource "${resource}" ` +
+      `[kyroguard] Scope parity violated for policy "${policy}" on resource "${resource}" ` +
         `(filter kind: ${filter.kind}):\n  - ${violations.join('\n  - ')}`,
     )
   }

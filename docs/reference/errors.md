@@ -10,7 +10,7 @@ import {
   ScopeDeniedError,
   ResourceNotFoundError,
   MisconfiguredError,
-} from '@kyrobit/rbac'
+} from '@kyrobit/kyroguard'
 ```
 
 Guards throw these errors. Express sends the bodies below from `rbacExpress(rbac).errorHandler()`. Fastify serializes the same `code` and status through its standard error shape. Both integrations accept a `formatError` option to change the body.
@@ -80,7 +80,7 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 **Status 500.**
 
 ```json
-{ "message": "[rbac] No request context for domain \"admin\" — register rbacExpress(rbac).context() before its guards.", "code": "RBAC_MISCONFIGURED" }
+{ "message": "[kyroguard] No request context for domain \"admin\" — register rbacExpress(rbac).context() before its guards.", "code": "RBAC_MISCONFIGURED" }
 ```
 
 **When.** The library is wired incorrectly. A guard ran without the plugin (Fastify) or before the context middleware (Express), or a tracked insert could not be attributed with `strictTracking: 'error'`.
@@ -92,15 +92,15 @@ Two denials share status 403, and messages are deliberately generic. The `code` 
 Not an HTTP error. It is thrown from assignment calls, not guards, and has no `statusCode`.
 
 ```
-[rbac] Policy "admin.reports.view" not found — run `rbac sync` first.
+[kyroguard] Policy "admin.reports.view" not found — run `kyroguard sync` first.
 ```
 
 **When.** `assignPolicy` named a policy that is not in the database. Assignments reference synced policies.
 
-**Fix.** Run `rbac sync`. Prefer the domain assignment methods, which add the domain prefix for you. Catch it with `instanceof UnknownPolicyError` where you expose assignment endpoints.
+**Fix.** Run `kyroguard sync`. Prefer the domain assignment methods, which add the domain prefix for you. Catch it with `instanceof UnknownPolicyError` where you expose assignment endpoints.
 
 ```ts
-import { UnknownPolicyError } from '@kyrobit/rbac'
+import { UnknownPolicyError } from '@kyrobit/kyroguard'
 
 try {
   await admin.assignPolicy(userId, policyName)
@@ -118,9 +118,9 @@ try {
 Not an HTTP error either. Thrown from `assignPolicy` before anything is written.
 
 ```
-[rbac] Scope "granted" is not among the scopeOptions of policy "admin.reports.view" — declare it on the policy and re-sync.
+[kyroguard] Scope "granted" is not among the scopeOptions of policy "admin.reports.view" — declare it on the policy and re-sync.
 ```
 
 **When.** The grant carries a scope the policy does not declare in its `scopeOptions`. `seedGroups` rejects the same mistake at sync time, naming the group and the declared options.
 
-**Fix.** Add the scope to the policy's `scopeOptions` and run `rbac sync`, or grant one of the declared scopes. Catch it with `instanceof UnknownScopeError` next to `UnknownPolicyError` where you expose assignment endpoints.
+**Fix.** Add the scope to the policy's `scopeOptions` and run `kyroguard sync`, or grant one of the declared scopes. Catch it with `instanceof UnknownScopeError` next to `UnknownPolicyError` where you expose assignment endpoints.

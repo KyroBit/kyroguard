@@ -9,7 +9,7 @@ The example: the grades API of a school.
 ```sh
 mkdir rbac-demo && cd rbac-demo
 npm init -y && npm pkg set type=module
-npm install @kyrobit/rbac fastify
+npm install @kyrobit/kyroguard fastify
 ```
 
 ## 2. Create the server
@@ -18,9 +18,9 @@ Paste this into `server.ts`:
 
 ```ts
 import Fastify from 'fastify'
-import { createRbac, Policy } from '@kyrobit/rbac'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
-import { memoryAdapter } from '@kyrobit/rbac/testing'
+import { createRbac, Policy } from '@kyrobit/kyroguard'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 // What teachers can do
 const policies = [new Policy('grades.view'), new Policy('grades.enter')]
@@ -32,7 +32,7 @@ const groups = {
 
 const rbac = createRbac({ adapter: memoryAdapter(), policies, groups })
 
-// Loads policies + groups — with a real database you run: npx rbac sync
+// Loads policies + groups — with a real database you run: npx kyroguard sync
 await rbac.sync()
 
 const app = Fastify()
@@ -62,7 +62,7 @@ await app.listen({ port: 3000 })
 console.log('listening on http://localhost:3000')
 ```
 
-In a real project the definitions live in files and `npx rbac sync` loads them ([Sync](/guide/sync)).
+In a real project the definitions live in files and `npx kyroguard sync` loads them ([Sync](/guide/sync)).
 
 Run it. `npx` downloads `tsx` on first use:
 

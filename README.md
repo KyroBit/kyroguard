@@ -1,4 +1,4 @@
-# @kyrobit/rbac
+# KyroGuard
 
 Policy-based access control for Node.js and Bun services. Define permissions
 in code, group them into roles, assign them to users per domain and per
@@ -22,16 +22,16 @@ TypeScript types in sync.
 ## Install
 
 ```bash
-npm install @kyrobit/rbac
-npx rbac init   # detects your stack, scaffolds schema + config + wiring
+npm install @kyrobit/kyroguard
+npx kyroguard init   # detects your stack, scaffolds schema + config + wiring
 ```
 
 ## At a glance
 
 ```ts
 // rbac.ts
-import { createRbac } from '@kyrobit/rbac'
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
+import { createRbac } from '@kyrobit/kyroguard'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/rbac-schema'
 import { db } from './db'
 
@@ -84,5 +84,5 @@ bun test tests/
 
 Storage adapters must pass `runStorageAdapterContractSuite`; framework
 integrations must pass `runFrameworkContractSuite` (both exported from
-`@kyrobit/rbac/testing`). See [CONTRIBUTING.md](./CONTRIBUTING.md) and
+`@kyrobit/kyroguard/testing`). See [CONTRIBUTING.md](./CONTRIBUTING.md) and
 [SECURITY.md](./SECURITY.md).

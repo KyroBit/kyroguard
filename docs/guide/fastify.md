@@ -1,14 +1,14 @@
 # Fastify
 
-Wire `@kyrobit/rbac` into Fastify 5. This is a complete setup:
+Wire `@kyrobit/kyroguard` into Fastify 5. This is a complete setup:
 
 ```ts
 // app.ts
 import Fastify from 'fastify'
-import { createRbac } from '@kyrobit/rbac'
-import { rbacFastify } from '@kyrobit/rbac/fastify'
-import { drizzleAdapter } from '@kyrobit/rbac/drizzle'
-import * as schema from './db/rbac-schema.js' // written by `rbac init`
+import { createRbac } from '@kyrobit/kyroguard'
+import { rbacFastify } from '@kyrobit/kyroguard/fastify'
+import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
+import * as schema from './db/rbac-schema.js' // written by `kyroguard init`
 import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'
@@ -51,7 +51,7 @@ Guards throw. Fastify turns the thrown error into a JSON response. Your error ha
 
 The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors).
 
-Because guards throw, `setErrorHandler` sees the error like any other. `error instanceof PolicyDeniedError` works there. Import `PolicyDeniedError` from `@kyrobit/rbac`.
+Because guards throw, `setErrorHandler` sees the error like any other. `error instanceof PolicyDeniedError` works there. Import `PolicyDeniedError` from `@kyrobit/kyroguard`.
 
 ## formatError
 

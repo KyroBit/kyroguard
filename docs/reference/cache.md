@@ -1,11 +1,11 @@
 # Cache
 
-Reference for `@kyrobit/rbac/cache`: cache and bus implementations, key helpers, and the interfaces for custom caches. For usage guidance, see [Production](/guide/production).
+Reference for `@kyrobit/kyroguard/cache`: cache and bus implementations, key helpers, and the interfaces for custom caches. For usage guidance, see [Production](/guide/production).
 
 ## memoryCache()
 
 ```ts
-import { memoryCache } from '@kyrobit/rbac/cache'
+import { memoryCache } from '@kyrobit/kyroguard/cache'
 
 function memoryCache(options: MemoryCacheOptions): PolicyCache
 ```
@@ -18,8 +18,8 @@ function memoryCache(options: MemoryCacheOptions): PolicyCache
 An in-memory cache with a size limit and per-entry TTL. `createRbac()` builds one by default (`maxEntries: 10_000`, `ttlMs: 30_000`). Pass your own to change the limits:
 
 ```ts
-import { createRbac } from '@kyrobit/rbac'
-import { memoryCache } from '@kyrobit/rbac/cache'
+import { createRbac } from '@kyrobit/kyroguard'
+import { memoryCache } from '@kyrobit/kyroguard/cache'
 
 const rbac = createRbac({
   adapter,
@@ -30,7 +30,7 @@ const rbac = createRbac({
 ## inProcessBus()
 
 ```ts
-import { inProcessBus } from '@kyrobit/rbac/cache'
+import { inProcessBus } from '@kyrobit/kyroguard/cache'
 
 function inProcessBus(): InvalidationBus
 ```
@@ -40,7 +40,7 @@ The default bus. It delivers invalidation events inside one process. Running sev
 ## redisBus()
 
 ```ts
-import { redisBus } from '@kyrobit/rbac/cache'
+import { redisBus } from '@kyrobit/kyroguard/cache'
 
 function redisBus(
   publisher: RedisPublisherLike,
@@ -59,8 +59,8 @@ Cross-instance invalidation over Redis pub/sub. The module never imports a Redis
 
 ```ts
 import { Redis } from 'ioredis'
-import { createRbac } from '@kyrobit/rbac'
-import { redisBus } from '@kyrobit/rbac/cache'
+import { createRbac } from '@kyrobit/kyroguard'
+import { redisBus } from '@kyrobit/kyroguard/cache'
 
 const publisher = new Redis(process.env.REDIS_URL!)
 const subscriber = new Redis(process.env.REDIS_URL!)
@@ -96,7 +96,7 @@ interface RedisSubscriberLike {
 ## Key helpers
 
 ```ts
-import { policyCacheKey, subjectKeyPrefix } from '@kyrobit/rbac/cache'
+import { policyCacheKey, subjectKeyPrefix } from '@kyrobit/kyroguard/cache'
 
 function policyCacheKey(subjectId: string, domain: string, tenantId: string): PolicyCacheKey
 function subjectKeyPrefix(subjectId: string): string

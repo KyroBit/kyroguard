@@ -58,7 +58,7 @@ export function rbacFastify(rbac: Rbac, options?: RbacFastifyOptions): FastifyPl
     app.decorate('rbac', decoration)
   }
 
-  return fp(plugin, { name: '@kyrobit/rbac', fastify: '5.x' })
+  return fp(plugin, { name: '@kyrobit/kyroguard', fastify: '5.x' })
 }
 
 function createDomain<P extends string>(
@@ -160,7 +160,7 @@ function filterResource(rbac: Rbac, policy: string): ResourceDefinition {
   const resource = rbac.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[rbac] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createRbac({ resources }).`,
     )
   }
   return resource

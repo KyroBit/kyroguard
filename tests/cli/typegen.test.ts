@@ -44,7 +44,7 @@ interface ParsedDeclaration {
  * (or the file stops parsing), so round-tripping every hostile name through
  * the AST is the strongest injection assertion available. */
 function parseDeclaration(text: string): ParsedDeclaration {
-  const source = ts.createSourceFile('rbac.d.ts', text, ts.ScriptTarget.Latest, true)
+  const source = ts.createSourceFile('kyroguard.d.ts', text, ts.ScriptTarget.Latest, true)
   const modules = source.statements.filter(ts.isModuleDeclaration)
   expect(modules).toHaveLength(1)
   const moduleDecl = modules[0]!
@@ -102,7 +102,7 @@ function unionLiterals(node: ts.TypeNode): string[] {
 }
 
 describe('generateTypes', () => {
-  test('plain names: valid TS augmenting @kyrobit/rbac RbacTypes', async () => {
+  test('plain names: valid TS augmenting @kyrobit/kyroguard RbacTypes', async () => {
     const text = await generate([
       { name: 'admin', policyNames: ['posts.read', 'posts.create'] },
       { name: 'customer', policyNames: ['posts.read'] },
@@ -111,10 +111,10 @@ describe('generateTypes', () => {
     expect(syntaxErrors(text)).toHaveLength(0)
     // `export {}` keeps the file a module so `declare module` AUGMENTS the package.
     expect(text).toContain('export {}')
-    expect(text).toContain("declare module '@kyrobit/rbac'")
+    expect(text).toContain("declare module '@kyrobit/kyroguard'")
 
     const parsed = parseDeclaration(text)
-    expect(parsed.moduleName).toBe('@kyrobit/rbac')
+    expect(parsed.moduleName).toBe('@kyrobit/kyroguard')
     expect(parsed.interfaceName).toBe('RbacTypes')
     expect(parsed.memberNames).toEqual(['Domain', 'PolicyName', 'DomainPolicies'])
     expect(parsed.domainUnion.toSorted()).toEqual(['admin', 'customer'])
@@ -144,7 +144,7 @@ describe('generateTypes', () => {
     expect(syntaxErrors(text)).toHaveLength(0)
     const parsed = parseDeclaration(text)
     expect(parsed.moduleCount).toBe(1)
-    expect(parsed.moduleName).toBe('@kyrobit/rbac')
+    expect(parsed.moduleName).toBe('@kyrobit/kyroguard')
     expect(parsed.memberNames).toEqual(['Domain', 'PolicyName', 'DomainPolicies'])
 
     // Every hostile name round-trips through the AST byte-for-byte.

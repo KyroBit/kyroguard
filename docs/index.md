@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: "@kyrobit/rbac"
+  name: "KyroGuard"
   text: Permissions for your Node app.
   tagline: Define them in code, assign them to users, enforce them on routes.
   actions:

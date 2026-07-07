@@ -1,4 +1,4 @@
-/** @kyrobit/rbac — framework-agnostic core entry; integrations live at subpaths. */
+/** @kyrobit/kyroguard — framework-agnostic core entry; integrations live at subpaths. */
 
 import { RbacEngine } from './core/engine.js'
 import { MisconfiguredError } from './core/errors.js'
@@ -54,7 +54,7 @@ export interface Rbac {
   /** UNQUALIFIED policy name → owning resource; guards resolve the filter target through this. */
   readonly resourceForPolicy: ReadonlyMap<string, ResourceDefinition>
 
-  /** Programmatic `npx rbac sync`. The explicit resources form does not touch groups. */
+  /** Programmatic `npx kyroguard sync`. The explicit resources form does not touch groups. */
   sync(): Promise<void>
   sync(domain: string): Promise<void>
   sync(resources: ResourceDefinition[], domain?: string): Promise<void>
@@ -218,7 +218,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       revoke: async (userId, resource, relation) => {
         if (!options.adapter.removeAccess) {
           throw new MisconfiguredError(
-            `[rbac] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use rbac.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use rbac.access.`,
           )
         }
         await options.adapter.removeAccess(userId, resource, relation)
@@ -226,7 +226,7 @@ export function createRbac(options: CreateRbacOptions): Rbac {
       list: async resource => {
         if (!options.adapter.getAccess) {
           throw new MisconfiguredError(
-            `[rbac] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use rbac.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use rbac.access.`,
           )
         }
         return options.adapter.getAccess(resource)
