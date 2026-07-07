@@ -61,5 +61,6 @@ To turn the bypass off globally — some deployments want no superusers at all �
 ## Next steps
 
 - [Multi-tenancy](/guide/multi-tenancy) — domains and tenants, where per-school ownership lives.
+- [Multi-tenant SaaS](/guide/multi-tenant-saas) — the owner at work in a full platform.
 - [Assigning access](/guide/assigning-access) — hiring staff into roles.
 - [Production](/guide/production) — the audit hook that records super bypasses.

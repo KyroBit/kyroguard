@@ -70,3 +70,5 @@ A school can also have an owner — the principal, who passes every check in tha
 Rows carry the tenant too: the `in-tenant` scope limits a grant to the request's school ([Scopes](/guide/scopes#the-built-in-scopes)).
 
 One thing to watch: omitting `tenantId` when assigning does not make a grant global. It makes a grant for requests that carry no school. To make Amina a coordinator in three schools, assign three times. Assignment details are in [Assigning access](/guide/assigning-access).
+
+To see domains, tenants, owners, and scopes run one product together, read [Building a multi-tenant SaaS](/guide/multi-tenant-saas).

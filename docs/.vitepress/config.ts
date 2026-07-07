@@ -33,6 +33,7 @@ export default defineConfig({
           { text: 'Express', link: '/guide/express' },
           { text: 'Protecting routes', link: '/guide/protecting-routes' },
           { text: 'Multi-tenancy', link: '/guide/multi-tenancy' },
+          { text: 'Multi-tenant SaaS', link: '/guide/multi-tenant-saas' },
           { text: 'Assigning access', link: '/guide/assigning-access' },
           { text: 'Owners and superusers', link: '/guide/owners' },
           { text: 'Scopes', link: '/guide/scopes' },
