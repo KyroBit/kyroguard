@@ -1,6 +1,6 @@
 # Sync
 
-Your definitions live in two files. `src/kyroguard/policies.ts` says what users can do. `src/kyroguard/groups.ts` maps job titles to policies. One command loads both:
+Your definitions live in the kyroguard directory. `policies/<domain>.ts` says what users can do, `groups/<domain>.ts` maps job titles to policies (single-app setups use flat `policies.ts` and `groups.ts`). One command loads everything:
 
 ```sh
 npx kyroguard sync

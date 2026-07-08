@@ -12,12 +12,8 @@ export default defineConfig({
     ).asPromise()
     return mongooseAdapter(connection)
   },
-  domains: [
-    {
-      name: '{{DOMAIN}}',
-      policies: './src/kyroguard/policies.ts',
-      groups: './src/kyroguard/groups.ts',
-    },
-  ],
+  // Scanned by convention: policies/<domain>.ts is a domain, groups/<domain>.ts
+  // attaches to it. Adding a domain is adding a file.
+  domains: './src/kyroguard',
   typegen: { output: './kyroguard.d.ts' },
 })

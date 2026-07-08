@@ -6,7 +6,13 @@ import type { StorageAdapter } from '../storage/contract.js'
  */
 export interface GuardConfig {
   adapter: () => Promise<StorageAdapter> | StorageAdapter
-  domains: DomainConfig[]
+  /**
+   * Explicit domain entries, or a directory to scan by convention:
+   * flat `policies.ts` / `groups.ts` for a single (unnamed) domain, or
+   * `policies/<name>.ts` per domain with `groups/<name>.ts` attached when
+   * present. Adding a domain is adding a file.
+   */
+  domains: DomainConfig[] | string
   typegen?: {
     /** Output path for the generated declaration file. Default './kyroguard.d.ts'. */
     output?: string

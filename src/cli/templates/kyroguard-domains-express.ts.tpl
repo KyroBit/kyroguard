@@ -15,7 +15,7 @@
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain, kyroguardExpress } from '@kyrobit/kyroguard/express'
 {{ADAPTER_IMPORTS}}
-import { resources } from './policies.js'
+import { resources } from './policies/{{DOMAIN}}.js'
 
 {{ADAPTER_CREATE}}
 

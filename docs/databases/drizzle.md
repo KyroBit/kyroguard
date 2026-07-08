@@ -19,8 +19,8 @@ It detects Drizzle and your dialect, then writes the starter files:
   dialect:   pg
 
   wrote   kyroguard.config.ts
-  wrote   src/kyroguard/policies.ts
-  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/policies/admin.ts
+  wrote   src/kyroguard/groups/admin.ts
   wrote   src/kyroguard/domains.ts
   wrote   src/db/kyroguard-schema.ts
 ```
@@ -89,7 +89,7 @@ import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 export const db = trackedDb(rawDb, { guard, resources })
 ```
 
-Link each resource to its table in `src/kyroguard/policies.ts`:
+Link each resource to its table in its policies file:
 
 ```ts
 import { Policy, Scope } from '@kyrobit/kyroguard'

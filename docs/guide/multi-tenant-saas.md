@@ -29,7 +29,7 @@ const [greenwood] = await db.insert(schools)
 
 Greenwood's people are not one crowd. A **domain** is one kind of user's app — teachers get one, parents get another; you get the admin one ([Domains](/guide/domains)).
 
-This declares the five front doors, each with its own policies and groups:
+Five files declare the five front doors — `src/kyroguard/policies/{teachers,students,parents,school,admin}.ts`, each with a matching groups file. The config just points at the directory:
 
 ```ts
 // kyroguard.config.ts
@@ -37,13 +37,8 @@ import { defineConfig } from '@kyrobit/kyroguard'
 
 export default defineConfig({
   adapter: () => import('./src/db.js').then(m => m.adapter),
-  domains: [
-    { name: 'teachers', policies: './src/kyroguard/teachers/policies.ts', groups: './src/kyroguard/teachers/groups.ts' }, // the teacher app
-    { name: 'students', policies: './src/kyroguard/students/policies.ts', groups: './src/kyroguard/students/groups.ts' }, // the student app
-    { name: 'parents',  policies: './src/kyroguard/parents/policies.ts',  groups: './src/kyroguard/parents/groups.ts' },  // the parent portal
-    { name: 'school',   policies: './src/kyroguard/school/policies.ts',   groups: './src/kyroguard/school/groups.ts' },   // the school office
-    { name: 'admin',    policies: './src/kyroguard/admin/policies.ts',    groups: './src/kyroguard/admin/groups.ts' },    // YOUR back office
-  ],
+  // One file per domain: src/kyroguard/policies/<name>.ts (+ groups/<name>.ts)
+  domains: './src/kyroguard',
 })
 ```
 

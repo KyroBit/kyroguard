@@ -243,3 +243,68 @@ describe('loadDomainResources', () => {
     expect(error.message).toContain('ResourceDefinition[] or Policy[]')
   })
 })
+
+describe('loadConfig — domains directory convention', () => {
+  const DIR_CONFIG = `export default {
+  adapter: async () => ({}),
+  domains: './kyroguard',
+}`
+
+  test('policies/<name>.ts becomes a domain; groups/<name>.ts attaches', async () => {
+    const dir = await fixtureDir()
+    await mkdir(join(dir, 'kyroguard', 'policies'), { recursive: true })
+    await mkdir(join(dir, 'kyroguard', 'groups'), { recursive: true })
+    await writeFile(join(dir, 'kyroguard', 'policies', 'admin.ts'), 'export const resources = []', 'utf8')
+    await writeFile(join(dir, 'kyroguard', 'policies', 'branch.ts'), 'export const resources = []', 'utf8')
+    await writeFile(join(dir, 'kyroguard', 'groups', 'admin.ts'), 'export const groups = {}', 'utf8')
+    const path = await writeConfig(dir, 'kyroguard.config.ts', DIR_CONFIG)
+
+    const { config } = await loadConfig(path)
+    expect(config.domains).toEqual([
+      {
+        name: 'admin',
+        policies: join(dir, 'kyroguard', 'policies', 'admin.ts'),
+        groups: join(dir, 'kyroguard', 'groups', 'admin.ts'),
+      },
+      { name: 'branch', policies: join(dir, 'kyroguard', 'policies', 'branch.ts') },
+    ])
+  })
+
+  test('flat policies.ts + groups.ts is the single unnamed domain', async () => {
+    const dir = await fixtureDir()
+    await mkdir(join(dir, 'kyroguard'), { recursive: true })
+    await writeFile(join(dir, 'kyroguard', 'policies.ts'), 'export const resources = []', 'utf8')
+    await writeFile(join(dir, 'kyroguard', 'groups.ts'), 'export const groups = {}', 'utf8')
+    const path = await writeConfig(dir, 'kyroguard.config.ts', DIR_CONFIG)
+
+    const { config } = await loadConfig(path)
+    expect(config.domains).toEqual([
+      {
+        name: '',
+        policies: join(dir, 'kyroguard', 'policies.ts'),
+        groups: join(dir, 'kyroguard', 'groups.ts'),
+      },
+    ])
+  })
+
+  test('both flat policies.ts AND policies/ dir → readable error', async () => {
+    const dir = await fixtureDir()
+    await mkdir(join(dir, 'kyroguard', 'policies'), { recursive: true })
+    await writeFile(join(dir, 'kyroguard', 'policies.ts'), 'export const resources = []', 'utf8')
+    await writeFile(join(dir, 'kyroguard', 'policies', 'admin.ts'), 'export const resources = []', 'utf8')
+    const path = await writeConfig(dir, 'kyroguard.config.ts', DIR_CONFIG)
+
+    const error = await rejectionOf(loadConfig(path))
+    expect(error.message).toContain('BOTH')
+  })
+
+  test('empty directory → error naming both accepted shapes', async () => {
+    const dir = await fixtureDir()
+    await mkdir(join(dir, 'kyroguard'), { recursive: true })
+    const path = await writeConfig(dir, 'kyroguard.config.ts', DIR_CONFIG)
+
+    const error = await rejectionOf(loadConfig(path))
+    expect(error.message).toContain('policies.ts')
+    expect(error.message).toContain('policies/<name>.ts')
+  })
+})

@@ -80,7 +80,7 @@ The list is enforced. Granting a scope the policy does not declare fails, at syn
 ## A complete policies.ts
 
 ```ts
-// src/kyroguard/policies.ts
+// src/kyroguard/policies/admin.ts
 import { Policy, Scope } from '@kyrobit/kyroguard'
 import type { ResourceDefinition } from '@kyrobit/kyroguard'
 

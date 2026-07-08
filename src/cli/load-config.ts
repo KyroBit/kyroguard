@@ -1,16 +1,21 @@
-import { existsSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { GuardConfig } from '../core/config.js'
+import type { DomainConfig, GuardConfig } from '../core/config.js'
+
+/** A GuardConfig whose `domains` directory form has been expanded to entries. */
+export type ResolvedGuardConfig = GuardConfig & { domains: DomainConfig[] }
 
 const CONFIG_BASENAMES = ['kyroguard.config.ts', 'kyroguard.config.mts', 'kyroguard.config.mjs', 'kyroguard.config.js']
 
-export async function loadConfig(explicitPath?: string): Promise<{ config: GuardConfig; path: string }> {
+export async function loadConfig(explicitPath?: string): Promise<{ config: ResolvedGuardConfig; path: string }> {
   const path = resolveConfigPath(explicitPath)
   const mod = await importModule(path)
   const loaded = (mod.default ?? mod) as unknown
   assertConfigShape(loaded, path)
-  return { config: loaded, path }
+  const domains =
+    typeof loaded.domains === 'string' ? expandDomainsDir(dirname(path), loaded.domains) : loaded.domains
+  return { config: { ...loaded, domains }, path }
 }
 
 /** Returns the first defined export among `candidates`, falling back to the default export. */
@@ -38,6 +43,70 @@ async function importModule(absolutePath: string): Promise<Record<string, unknow
   const { createJiti } = await import('jiti')
   const jiti = createJiti(import.meta.url, { interopDefault: true })
   return await jiti.import<Record<string, unknown>>(absolutePath)
+}
+
+const MODULE_EXTS = ['.ts', '.mts', '.mjs', '.js']
+
+function moduleName(file: string): string | null {
+  if (file.endsWith('.d.ts')) return null
+  for (const ext of MODULE_EXTS) {
+    if (file.endsWith(ext)) return file.slice(0, -ext.length)
+  }
+  return null
+}
+
+function findModule(dir: string, base: string): string | null {
+  for (const ext of MODULE_EXTS) {
+    const candidate = join(dir, base + ext)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * Convention scan for `domains: '<dir>'`. Two shapes:
+ * - single domain: `<dir>/policies.ts` (+ optional `<dir>/groups.ts`) — the unnamed domain;
+ * - multi-domain:  `<dir>/policies/<name>.ts` per domain, with `<dir>/groups/<name>.ts`
+ *   attached when present. Adding a domain is adding a file.
+ */
+function expandDomainsDir(configDir: string, dir: string): DomainConfig[] {
+  const root = isAbsolute(dir) ? dir : resolve(configDir, dir)
+  if (!existsSync(root)) {
+    throw new Error(`[kyroguard] domains directory not found: ${root}`)
+  }
+  const policiesDir = join(root, 'policies')
+  const flat = findModule(root, 'policies')
+  const hasPoliciesDir = existsSync(policiesDir) && statSync(policiesDir).isDirectory()
+
+  if (hasPoliciesDir && flat) {
+    throw new Error(
+      `[kyroguard] ${root} has BOTH a policies/ directory and a flat policies module — keep one: flat for a single domain, policies/<name>.ts per domain.`,
+    )
+  }
+
+  if (hasPoliciesDir) {
+    const groupsDir = join(root, 'groups')
+    const domains: DomainConfig[] = []
+    for (const file of readdirSync(policiesDir).sort()) {
+      const name = moduleName(file)
+      if (name === null) continue
+      const groups = findModule(groupsDir, name)
+      domains.push({ name, policies: join(policiesDir, file), ...(groups ? { groups } : {}) })
+    }
+    if (domains.length === 0) {
+      throw new Error(`[kyroguard] ${policiesDir} has no policy modules — add <domain>.ts per domain.`)
+    }
+    return domains
+  }
+
+  if (flat) {
+    const groups = findModule(root, 'groups')
+    return [{ name: '', policies: flat, ...(groups ? { groups } : {}) }]
+  }
+
+  throw new Error(
+    `[kyroguard] ${root} has no policies — add policies.ts (single domain) or policies/<name>.ts (one per domain), or list domains explicitly.`,
+  )
 }
 
 function resolveConfigPath(explicitPath?: string): string {
@@ -69,9 +138,15 @@ function assertConfigShape(config: unknown, path: string): asserts config is Gua
       `[kyroguard] ${path} is missing "adapter" — expected a function returning a StorageAdapter, e.g. \`adapter: async () => drizzleAdapter(db)\`.`,
     )
   }
+  if (typeof candidate.domains === 'string') {
+    if (candidate.domains === '') {
+      throw new Error(`[kyroguard] ${path}: "domains" must not be an empty string — pass the directory holding your *.policies.ts files.`)
+    }
+    return
+  }
   if (!Array.isArray(candidate.domains)) {
     throw new Error(
-      `[kyroguard] ${path} is missing "domains" — expected an array of { name?, policies, groups? }.`,
+      `[kyroguard] ${path} is missing "domains" — expected an array of { name?, policies, groups? } or a directory to scan.`,
     )
   }
   candidate.domains.forEach((domain: unknown, index: number) => {

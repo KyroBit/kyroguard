@@ -11,12 +11,8 @@ export default defineConfig({
     // in your schema and run `prisma migrate dev` before `kyroguard sync`.
     return prismaAdapter(new PrismaClient())
   },
-  domains: [
-    {
-      name: '{{DOMAIN}}',
-      policies: './src/kyroguard/policies.ts',
-      groups: './src/kyroguard/groups.ts',
-    },
-  ],
+  // Scanned by convention: policies/<domain>.ts is a domain, groups/<domain>.ts
+  // attaches to it. Adding a domain is adding a file.
+  domains: './src/kyroguard',
   typegen: { output: './kyroguard.d.ts' },
 })

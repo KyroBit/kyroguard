@@ -94,10 +94,18 @@ export async function run(options: InitOptions): Promise<void> {
     '{{ADAPTER_CREATE}}': ADAPTER_WIRING[answers.orm].create,
   }
 
+  // Convention layout: policies/<domain>.ts + groups/<domain>.ts — the config
+  // points at the directory and the CLI derives the domains from file names.
   const plan: PlannedFile[] = [
     { dest: 'kyroguard.config.ts', template: CONFIG_TEMPLATES[answers.orm] },
-    { dest: join('src', 'kyroguard', 'policies.ts'), template: 'policies-starter.ts.tpl' },
-    { dest: join('src', 'kyroguard', 'groups.ts'), template: 'groups-starter.ts.tpl' },
+    {
+      dest: join('src', 'kyroguard', 'policies', `${answers.domain}.ts`),
+      template: 'policies-starter.ts.tpl',
+    },
+    {
+      dest: join('src', 'kyroguard', 'groups', `${answers.domain}.ts`),
+      template: 'groups-starter.ts.tpl',
+    },
     {
       dest: join('src', 'kyroguard', 'domains.ts'),
       template:

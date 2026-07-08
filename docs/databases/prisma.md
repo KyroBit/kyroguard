@@ -19,8 +19,8 @@ It detects Prisma and writes the starter files:
   dialect:   pg
 
   wrote   kyroguard.config.ts
-  wrote   src/kyroguard/policies.ts
-  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/policies/admin.ts
+  wrote   src/kyroguard/groups/admin.ts
   wrote   src/kyroguard/domains.ts
   wrote   prisma/kyroguard.prisma
 ```

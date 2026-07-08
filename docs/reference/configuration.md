@@ -15,14 +15,9 @@ export default defineConfig({
     const { db } = await import('./src/db/index.js')
     return drizzleAdapter(db, { schema })
   },
-  // One entry per domain. Single-app setups use one entry with no name.
-  domains: [
-    {
-      name: 'teachers', // the teacher portal
-      policies: './src/kyroguard/policies.ts',
-      groups: './src/kyroguard/groups.ts',
-    },
-  ],
+  // Scanned by convention: policies/<name>.ts is a domain, groups/<name>.ts
+  // attaches to it. Adding a domain is adding a file.
+  domains: './src/kyroguard',
   // Where `sync` and `generate` write the type declarations.
   typegen: { output: './kyroguard.d.ts' },
 })
@@ -35,8 +30,17 @@ export default defineConfig({
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `adapter` | `() => Promise<StorageAdapter> \| StorageAdapter` | yes | Factory returning a connected adapter. Called only by `sync` and `status`. |
-| `domains` | `DomainConfig[]` | yes | One entry per domain. |
+| `domains` | `string \| DomainConfig[]` | yes | A directory to scan by convention, or explicit entries. |
 | `typegen.output` | `string` | no | Output path for the generated types. Default `'./kyroguard.d.ts'`. |
+
+## The domains directory
+
+Passing a directory derives the domains from file names:
+
+- `policies/<name>.ts` — one file per domain, named after it. A sibling `groups/<name>.ts` is attached when present.
+- Flat `policies.ts` (+ optional `groups.ts`) — a single-app setup with the unnamed domain.
+
+Mixing both shapes in one directory is an error. Explicit entries remain available for layouts the convention cannot express:
 
 Each domain entry:
 
@@ -53,7 +57,7 @@ Paths resolve relative to the config file, not the working directory. `kyroguard
 The `policies` module exports a `ResourceDefinition[]` as `resources`, `policies`, or the default export. The `groups` module exports a `GroupsDefinition` as `groups` or the default export.
 
 ```ts
-// src/kyroguard/policies.ts
+// src/kyroguard/policies/admin.ts
 import { Policy, Scope } from '@kyrobit/kyroguard'
 import type { ResourceDefinition } from '@kyrobit/kyroguard'
 
@@ -71,7 +75,7 @@ export const resources: ResourceDefinition[] = [
 ```
 
 ```ts
-// src/kyroguard/groups.ts
+// src/kyroguard/groups/admin.ts
 import type { GroupsDefinition } from '@kyrobit/kyroguard'
 
 export const groups: GroupsDefinition = {

@@ -10,9 +10,10 @@ A domain is one named area of your app, with its own policies and its own idea o
 // src/kyroguard/domains.ts
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain } from '@kyrobit/kyroguard/fastify'
-import { resources } from './policies.js'
+import { resources as adminResources } from './policies/admin.js'
+import { resources as teacherResources } from './policies/teachers.js'
 
-export const guard = createGuard({ adapter, resources })
+export const guard = createGuard({ adapter, resources: [...adminResources, ...teacherResources] })
 
 export const admin = createDomain(guard, 'admin', {
   getSubject: req => getOfficeSession(req),
@@ -38,44 +39,43 @@ A grant on one domain never works on another. Give someone `grades.view` on `tea
 
 ## Policy names carry the domain
 
-Each domain has its own policy names. `admin.requirePolicy('reports.view')` checks `admin.reports.view`. The `teachers` guard checks `teachers.grades.view`. They are different policies, from different policy files — one entry per domain in [`kyroguard.config.ts`](/reference/configuration):
+Each domain has its own policy names. `admin.requirePolicy('reports.view')` checks `admin.reports.view`. The `teachers` guard checks `teachers.grades.view`. They are different policies, from different policy files — the file name is the domain. Point [`kyroguard.config.ts`](/reference/configuration) at the directory once:
 
 ```ts
-domains: [
-  { name: 'admin', policies: './src/kyroguard/admin/policies.ts' },
-  { name: 'teachers', policies: './src/kyroguard/teachers/policies.ts' },
-]
+domains: './src/kyroguard'
 ```
 
 Write names without the prefix — domains add theirs for you. See [Policies](/guide/policies).
 
-## Splitting by module
+## One file per domain
 
-Routes split into modules? Policies split the same way. Each module owns its definitions next to its routes, and the policies file becomes an aggregator:
+Policies stay in one auditable place — the kyroguard directory. One file per domain; adding a domain is adding a file, with no config change:
 
 ```
-src/
-├── kyroguard/
-│   ├── domains.ts        # guard + domains — one module, like your db client
-│   └── policies.ts       # aggregates the modules
-└── modules/
-    ├── blog/
-    │   ├── policies.ts   # export const blogResources = [ ... ]
-    │   └── routes.ts
-    └── team/
-        ├── policies.ts   # export const teamResources = [ ... ]
-        └── routes.ts
+src/kyroguard/
+├── domains.ts        # guard + domains — one module, like your db client
+├── policies/
+│   ├── admin.ts      # domain 'admin'
+│   └── teachers.ts   # domain 'teachers'
+└── groups/
+    ├── admin.ts      # picked up automatically
+    └── teachers.ts
 ```
+
+`kyroguard sync` derives the domains from the file names. At runtime, `domains.ts` gives the guard the union:
 
 ```ts
-// src/kyroguard/policies.ts
-import { blogResources } from '../modules/blog/policies.js'
-import { teamResources } from '../modules/team/policies.js'
+// src/kyroguard/domains.ts
+import { resources as adminResources } from './policies/admin.js'
+import { resources as teacherResources } from './policies/teachers.js'
 
-export const resources = [...blogResources, ...teamResources]
+export const guard = createGuard({
+  adapter,
+  resources: [...adminResources, ...teacherResources],
+})
 ```
 
-Nothing else changes. `kyroguard.config.ts` still points at the one policies file, `kyroguard sync` sees every module's policies, and each route file imports its domain:
+Route modules never define policies — they import their domain and guard their routes:
 
 ```ts
 // src/modules/blog/routes.ts

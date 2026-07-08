@@ -82,14 +82,14 @@ describe('kyroguard init --yes', () => {
 
     // All five files land.
     const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
-    const policies = await readFile(join(cwd, 'src', 'kyroguard', 'policies.ts'), 'utf8')
-    const groups = await readFile(join(cwd, 'src', 'kyroguard', 'groups.ts'), 'utf8')
+    const policies = await readFile(join(cwd, 'src', 'kyroguard', 'policies', 'admin.ts'), 'utf8')
+    const groups = await readFile(join(cwd, 'src', 'kyroguard', 'groups', 'admin.ts'), 'utf8')
     const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
     const schema = await readFile(join(cwd, 'src', 'db', 'kyroguard-schema.ts'), 'utf8')
 
     // Drizzle config variant with substitutions applied (no leftover markers).
     expect(config).toContain('drizzleAdapter')
-    expect(config).toContain("name: 'admin'")
+    expect(config).toContain("domains: './src/kyroguard'")
     expect(config).not.toContain('{{DOMAIN}}')
     expect(config).not.toContain('{{DIALECT}}')
 
@@ -138,11 +138,11 @@ describe('kyroguard init --yes', () => {
 
     const configMarker = '// keep me\n'
     await writeFile(join(cwd, 'kyroguard.config.ts'), configMarker, 'utf8')
-    await rm(join(cwd, 'src', 'kyroguard', 'groups.ts'))
+    await rm(join(cwd, 'src', 'kyroguard', 'groups', 'admin.ts'))
 
     const lines = await runInitQuiet(cwd)
-    expect(lines.some(line => line.includes('wrote') && line.includes('groups.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
+    expect(lines.some(line => line.includes('wrote') && line.includes(join('groups', 'admin.ts')))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups', 'admin.ts'))).toBe(true)
     expect(await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')).toBe(configMarker)
   })
 
@@ -156,7 +156,7 @@ describe('kyroguard init --yes', () => {
     const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('mongooseAdapter')
     expect(config).not.toContain('drizzleAdapter')
-    expect(config).toContain("name: 'admin'")
+    expect(config).toContain("domains: './src/kyroguard'")
 
     const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
     expect(domains).toContain('kyroguardExpress')
@@ -167,8 +167,8 @@ describe('kyroguard init --yes', () => {
     expect(existsSync(join(cwd, 'src', 'db'))).toBe(false)
 
     // Starter policies/groups are ORM-independent and still written.
-    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies', 'admin.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups', 'admin.ts'))).toBe(true)
   })
 
   test('fastify + prisma project gets the prisma config, prisma/kyroguard.prisma and NO drizzle schema', async () => {
@@ -190,7 +190,7 @@ describe('kyroguard init --yes', () => {
     expect(config).toContain("await import('@kyrobit/kyroguard/prisma')")
     expect(config).toContain('prismaAdapter(new PrismaClient())')
     expect(config).not.toContain('drizzleAdapter')
-    expect(config).toContain("name: 'admin'")
+    expect(config).toContain("domains: './src/kyroguard'")
     expect(config).not.toContain('{{DOMAIN}}')
 
     // The snippet lands in prisma/ with all six models mapped to the kyroguard tables.
@@ -202,8 +202,8 @@ describe('kyroguard init --yes', () => {
     expect(snippet).toContain('prisma migrate dev')
 
     // Starter policies/groups/wiring still land; no drizzle schema file.
-    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies', 'admin.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups', 'admin.ts'))).toBe(true)
     const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
     expect(domains).toContain('kyroguardFastify')
     expect(existsSync(join(cwd, 'src', 'db'))).toBe(false)
