@@ -15,6 +15,10 @@ kyroguard <command> [options]
 
 Every command except `init` loads your [`kyroguard.config.ts`](/reference/configuration). TypeScript configs work without a build step, on Node and Bun. The CLI loads `.env` from the working directory first, so `DATABASE_URL` is available inside your config.
 
+::: tip Invoking from scripts
+The package is scoped but the binary is `kyroguard`, and a runner that misses the bare name locally falls back to the public registry and 404s. In scripts, use a package.json script (`"kyroguard:sync": "kyroguard sync"`), the package-name form (`npx @kyrobit/kyroguard sync`, `bunx --bun @kyrobit/kyroguard sync`), or the explicit bin path (`node_modules/.bin/kyroguard`). Details: [Running sync from scripts](/guide/sync#running-sync-from-scripts).
+:::
+
 ## kyroguard init
 
 ```sh
