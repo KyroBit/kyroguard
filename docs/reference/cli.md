@@ -15,9 +15,6 @@ kyroguard <command> [options]
 
 Every command except `init` loads your [`kyroguard.config.ts`](/reference/configuration). TypeScript configs work without a build step, on Node and Bun. The CLI loads `.env` from the working directory first, so `DATABASE_URL` is available inside your config.
 
-::: tip Invoking from scripts
-The package is scoped but the binary is `kyroguard`, and a runner that misses the bare name locally falls back to the public registry and 404s. In scripts, use a package.json script (`"kyroguard:sync": "kyroguard sync"`), the package-name form (`npx @kyrobit/kyroguard sync`, `bunx --bun @kyrobit/kyroguard sync`), or the explicit bin path (`node_modules/.bin/kyroguard`). Details: [Running sync from scripts](/guide/sync#running-sync-from-scripts).
-:::
 
 ## kyroguard init
 
@@ -142,4 +139,4 @@ Adapter ids: `drizzle-pg`, `drizzle-mysql`, `drizzle-sqlite`, `prisma`, `mongoos
 | `0` | Command completed. |
 | `1` | Unknown command or flag, no command given, config missing or invalid, or any command failure. |
 
-Failures print one `[kyroguard] ...` line to stderr. `sync` and `status` call the adapter's `close()` before exiting, even on failure. The CLI then terminates explicitly: your config and policy modules run inside the CLI process and may hold handles it cannot see (a shared db client, a poller) — those must never keep `kyroguard sync` from exiting.
+Failures print one `[kyroguard] ...` line to stderr. `sync` and `status` close the database connection before exiting, even on failure — the CLI always terminates, even when your config opens connections of its own.

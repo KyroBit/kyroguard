@@ -52,11 +52,17 @@ with a regression test named after the defect they fix.
 
 Linking an app to this checkout exposes the app's TypeScript to the
 checkout's devDependency copies of the framework peers (fastify, express).
-TypeScript only merges `declare module` augmentations across two package
-copies when name **and version** match — keep the app's fastify on the same
-version this checkout pins, or set a `paths` override in the app's tsconfig.
-Details and the consumer-facing fix live in
-[docs/guide/fastify.md](docs/guide/fastify.md#type-errors-under-npm-link--bun-link).
+TypeScript only merges `declare module` augmentations (the one that adds
+`app.kyroguard`) across two package copies when name **and version** match —
+version drift produces `Property 'kyroguard' is missing in type
+'FastifyInstance'`. Two fixes, either works:
+
+- pin the app's fastify to the exact version in this checkout's lockfile, or
+- force a single copy in the app's tsconfig:
+  `{ "compilerOptions": { "paths": { "fastify": ["./node_modules/fastify"] } } }`
+
+Registry installs are never affected — the published tarball ships only
+`dist/` with no nested `node_modules`, so exactly one fastify resolves.
 
 ## Releases
 

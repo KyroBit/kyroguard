@@ -76,24 +76,3 @@ app.register(async scope => {
 ```
 
 `subjectHook()` resolves the user without guarding. You need it on unguarded routes that record ownership, so the library knows which teacher entered the row. See [Ownership](/guide/ownership). Register it inside a scoped plugin, not app-wide.
-
-## Type errors under `npm link` / `bun link`
-
-`fastify` is an optional peer dependency: the published package never installs its own copy — your app's fastify is the one the integration types against, and the `declare module 'fastify'` augmentation that adds `app.kyroguard` merges into it. The fastify inside a kyroguard *checkout* is a devDependency, used only to compile and test the library itself.
-
-Linking your app against a checkout (`bun link` / `npm link`) puts **two** fastify installations on disk: yours and the checkout's. TypeScript treats two installations as the same module only when their package name *and version* match. When they drift (say your app resolves `5.10.0` and the checkout pins `5.9.0`), the augmentation no longer reaches your copy and you get:
-
-```
-Property 'kyroguard' is missing in type 'FastifyInstance<...>'
-```
-
-Two fixes, either works:
-
-- Pin your app's `fastify` to the exact version in the checkout's lockfile, or
-- Force a single copy in your app's `tsconfig.json`:
-
-  ```json
-  { "compilerOptions": { "paths": { "fastify": ["./node_modules/fastify"] } } }
-  ```
-
-Installs from the registry are never affected — the published tarball ships only `dist/`, with no nested `node_modules`, so there is exactly one fastify to resolve.

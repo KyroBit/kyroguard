@@ -62,29 +62,16 @@ Migrate, sync, start. Always in that order. Sync exits with code 1 on failure, s
 
 ## Running sync from scripts
 
-Seed scripts and package runners sometimes need more than the bare command. The package is scoped (`@kyrobit/kyroguard`) while the binary is named `kyroguard` — when a runner cannot find the bare name in a local `node_modules/.bin`, it falls back to asking the **public npm registry for a package named `kyroguard`**, which does not exist, and fails with a 404. Whether the bare name resolves locally depends on the tool and your workspace layout, so scripts should use one of the forms that always works.
-
-A package.json script is the most portable — the script's PATH always includes every `.bin` up the tree:
+`npx kyroguard sync` and `bunx kyroguard sync` can fail with a registry 404 in monorepos and seed scripts — the bare bin name does not always resolve. These forms always work:
 
 ```jsonc
+// package.json
 { "scripts": { "kyroguard:sync": "kyroguard sync" } }
 ```
 
 ```sh
-bun run kyroguard:sync    # or: npm run kyroguard:sync
-```
-
-Calling a runner directly, pass the package name, not the bin name:
-
-```sh
-npx @kyrobit/kyroguard sync
-bunx --bun @kyrobit/kyroguard sync
-```
-
-Shelling out from code (a seed script), the explicit bin path is immune to every resolution quirk:
-
-```ts
-execSync('bun node_modules/.bin/kyroguard sync', { stdio: 'inherit' })
+bun run kyroguard:sync              # or: npm run kyroguard:sync
+bunx --bun @kyrobit/kyroguard sync  # or: npx @kyrobit/kyroguard sync
 ```
 
 ## Types without a database
