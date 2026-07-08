@@ -49,6 +49,43 @@ domains: [
 
 Write names without the prefix — domains add theirs for you. See [Policies](/guide/policies).
 
+## Splitting by module
+
+Routes split into modules? Policies split the same way. Each module owns its definitions next to its routes, and the policies file becomes an aggregator:
+
+```
+src/
+├── kyroguard/
+│   ├── domains.ts        # guard + domains — one module, like your db client
+│   └── policies.ts       # aggregates the modules
+└── modules/
+    ├── blog/
+    │   ├── policies.ts   # export const blogResources = [ ... ]
+    │   └── routes.ts
+    └── team/
+        ├── policies.ts   # export const teamResources = [ ... ]
+        └── routes.ts
+```
+
+```ts
+// src/kyroguard/policies.ts
+import { blogResources } from '../modules/blog/policies.js'
+import { teamResources } from '../modules/team/policies.js'
+
+export const resources = [...blogResources, ...teamResources]
+```
+
+Nothing else changes. `kyroguard.config.ts` still points at the one policies file, `kyroguard sync` sees every module's policies, and each route file imports its domain:
+
+```ts
+// src/modules/blog/routes.ts
+import { admin } from '../../kyroguard/domains.js'
+
+app.get('/blogs', { preHandler: admin.requirePolicy('blog.read') }, listBlogs)
+```
+
+`domains.ts` stays the one shared module on purpose — the guard and its domains are process-wide singletons, exactly like your database client.
+
 ## Single-area apps
 
 One app means no domains. Skip the name and policies stay unprefixed:
