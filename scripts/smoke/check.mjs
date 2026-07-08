@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
 
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { kyroguardExpress } from '@kyrobit/kyroguard/express'
@@ -20,7 +20,7 @@ async function seededGuard() {
   await adapter.upsertGroup({ name: 'editors', label: 'Editors' })
   await adapter.setGroupPolicies('editors', [{ policyName: 'admin.posts.read', scope: null }])
   await adapter.assignGroup({ subjectId: 'u1', domain: 'admin', tenantId: '' }, 'editors')
-  return createKyroguard({ adapter })
+  return createGuard({ adapter })
 }
 
 // ── Fastify ───────────────────────────────────────────────────────────────────
