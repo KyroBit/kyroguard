@@ -44,18 +44,18 @@ This creates the six kyroguard tables. `npx prisma db push` also works during de
 
 ## 4. Wire the adapter
 
-Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createKyroguard`:
+Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createGuard`:
 
 ```ts
 // src/kyroguard/instance.ts
 import { PrismaClient } from '@prisma/client'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 import { resources } from './policies.js'
 
 export const client = new PrismaClient()
 export const adapter = prismaAdapter(client)
-export const guard = createKyroguard({ adapter, resources })
+export const guard = createGuard({ adapter, resources })
 ```
 
 Any client generated from a schema that includes the kyroguard models works. You own the client at runtime — call `$disconnect()` (or `adapter.close()`, which does the same) on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI, which closes the client it opened before exiting.
@@ -68,17 +68,17 @@ npx kyroguard sync
 
 This writes your policies and groups into the kyroguard tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
 
-## Track ownership with `kyroguardPrismaExtension`
+## Track ownership with `trackingExtension`
 
 Policies with `Scope.owned()` check who created each row. The extension records that for you. Extend your client once and use the extended handle in request handlers:
 
 ```ts
 // src/db.ts
-import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { trackingExtension } from '@kyrobit/kyroguard/prisma'
 import { client, guard } from './kyroguard/instance.js'
 
 export const db = client.$extends(
-  kyroguardPrismaExtension({
+  trackingExtension({
     guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),

@@ -148,7 +148,7 @@ export interface ListFilters {
 }
 
 export interface AdapterCapabilities {
-  /** trackedDb (Drizzle) / kyroguardMongoosePlugin (Mongoose) available. */
+  /** trackedDb (Drizzle) / trackingPlugin (Mongoose) available. */
   autoOwnershipTracking: boolean
   /** listFilters implemented for this backend. Absent means false. */
   listFiltering?: boolean

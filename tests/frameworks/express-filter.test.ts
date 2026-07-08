@@ -8,10 +8,10 @@ import { describe, expect, test } from 'bun:test'
 import express from 'express'
 import { createServer } from 'node:http'
 import { kyroguardExpress } from '../../src/frameworks/express/index.js'
-import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../../src/index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName } from '../../src/index.js'
 import type { AddressInfo } from 'node:net'
 import type { Request } from 'express'
-import type { FilterResult, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -30,7 +30,7 @@ const makeResources = (): ResourceDefinition[] => [
 
 const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
-async function seed(rbac: Kyroguard): Promise<void> {
+async function seed(rbac: Guard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
@@ -61,7 +61,7 @@ interface Harness {
 }
 
 async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
-  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+  const rbac = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
   try {
     await seed(rbac)
     const app = express()

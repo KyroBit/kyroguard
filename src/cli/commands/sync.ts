@@ -6,11 +6,11 @@ import { loadModuleExport } from '../load-config.js'
 import { generateTypes } from '../typegen.js'
 import { loadDomainResources } from './generate.js'
 import type { DomainTypeInfo } from '../typegen.js'
-import type { KyroguardConfig } from '../../core/config.js'
+import type { GuardConfig } from '../../core/config.js'
 import type { GroupsDefinition } from '../../core/seed-groups.js'
 import type { StorageAdapter } from '../../storage/contract.js'
 
-export async function run(config: KyroguardConfig, baseDir: string): Promise<void> {
+export async function run(config: GuardConfig, baseDir: string): Promise<void> {
   let adapter: StorageAdapter | undefined
   try {
     adapter = await config.adapter()

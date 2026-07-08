@@ -5,7 +5,7 @@
 Grants are cached in memory for 30 seconds by default. That cuts the database out of most requests. The cost: a revoked permission can outlive revocation by up to 30 seconds on other servers.
 
 ```ts
-const guard = createKyroguard({
+const guard = createGuard({
   adapter,
   policies,
   groups,
@@ -22,13 +22,13 @@ Each server caches on its own. Connect them with `redisBus` so a revocation on o
 
 ```ts
 import { Redis } from 'ioredis'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { redisBus } from '@kyrobit/kyroguard/cache'
 
 const publisher = new Redis(process.env.REDIS_URL!)
 const subscriber = new Redis(process.env.REDIS_URL!)
 
-const guard = createKyroguard({
+const guard = createGuard({
   adapter,
   policies,
   groups,
@@ -43,7 +43,7 @@ Redis needs one connection for publishing and one for subscribing, so pass two c
 `onDecision` fires after every allow and deny. Ship it to your logger:
 
 ```ts
-const guard = createKyroguard({
+const guard = createGuard({
   adapter,
   policies,
   groups,

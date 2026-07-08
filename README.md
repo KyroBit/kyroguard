@@ -30,12 +30,12 @@ npx kyroguard init   # detects your stack, scaffolds schema + config + policies 
 
 ```ts
 // guard.ts
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/kyroguard-schema'
 import { db } from './db'
 
-export const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }) })
+export const guard = createGuard({ adapter: drizzleAdapter(db, { schema }) })
 ```
 
 ```ts

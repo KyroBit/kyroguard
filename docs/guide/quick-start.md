@@ -18,7 +18,7 @@ Paste this into `server.ts`:
 
 ```ts
 import Fastify from 'fastify'
-import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { createGuard, Policy } from '@kyrobit/kyroguard'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
@@ -30,7 +30,7 @@ const groups = {
   teacher: { label: 'Teacher', policies: ['grades.view', 'grades.enter'] },
 }
 
-const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
+const guard = createGuard({ adapter: memoryAdapter(), policies, groups })
 
 // Loads policies + groups — with a real database you run: npx kyroguard sync
 await guard.sync()

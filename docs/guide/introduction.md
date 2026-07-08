@@ -8,7 +8,7 @@ Here is the whole library in one file:
 
 ```ts
 import Fastify from 'fastify'
-import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { createGuard, Policy } from '@kyrobit/kyroguard'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing' // in-memory store, no database
 
@@ -19,7 +19,7 @@ const policies = [new Policy('grades.view')]
 const groups = { teacher: { label: 'Teacher', policies: ['grades.view'] } }
 
 // One kyroguard instance for the whole app
-const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
+const guard = createGuard({ adapter: memoryAdapter(), policies, groups })
 await guard.sync() // loads the policies and the groups
 
 const app = Fastify()

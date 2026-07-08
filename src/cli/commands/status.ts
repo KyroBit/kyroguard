@@ -1,8 +1,8 @@
 import { closeAdapter } from './close-adapter.js'
-import type { KyroguardConfig } from '../../core/config.js'
+import type { GuardConfig } from '../../core/config.js'
 import type { StorageAdapter } from '../../storage/contract.js'
 
-export async function run(config: KyroguardConfig): Promise<void> {
+export async function run(config: GuardConfig): Promise<void> {
   let adapter: StorageAdapter | undefined
   try {
     adapter = await config.adapter()

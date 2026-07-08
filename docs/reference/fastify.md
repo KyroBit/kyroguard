@@ -7,13 +7,13 @@ Reference for `@kyrobit/kyroguard/fastify`. Requires Fastify 5.x. For a walkthro
 ```ts
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 
-function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOptions): FastifyPluginAsync
+function kyroguardFastify(guard: Guard, options?: FastifyGuardOptions): FastifyPluginAsync
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
-| `options.formatError` | `(error: KyroguardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
+| `guard` | `Guard` | The instance from [`createGuard()`](/reference/core-api#createguard). |
+| `options.formatError` | `(error: GuardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 The plugin opens the request context on every request and decorates the app with `app.kyroguard`. Register it once. It is visible to the whole app, not only the registration scope.
 
@@ -37,36 +37,31 @@ app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async 
 })
 ```
 
-## kyroguardFastifyDomains()
+## createDomain()
 
 ```ts
-import { kyroguardFastifyDomains } from '@kyrobit/kyroguard/fastify'
+import { createDomain } from '@kyrobit/kyroguard/fastify'
 
-function kyroguardFastifyDomains(
-  guard: Kyroguard,
-  options?: KyroguardFastifyOptions,
-): Pick<FastifyKyroguardDecoration, 'domain'>
+function createDomain(guard: Guard, name: string, options): FastifyDomain
+function createDomain(guard: Guard, options): FastifyDomain<''>
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
-| `options.formatError` | `(error: KyroguardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
+| `guard` | `Guard` | The instance from [`createGuard()`](/reference/core-api#createguard). |
+| `name` | `string` | Domain name. Omit it for single-area apps — policies stay unprefixed. |
+| `options.getSubject` | `(req: FastifyRequest) => SubjectInput \| null` | Resolves the authenticated user. `null` → 401. |
+| `options.formatError` | `(error: GuardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
-**Returns** `{ domain }` — the same factory as [`app.kyroguard.domain`](#app-kyroguard), hook-free. It needs no app instance, so domains become plain values a module exports and any route file imports. Use it when route files should import domains directly; use `app.kyroguard.domain` when the app is already in hand. Both produce identical [domain instances](#domain-instance).
-
-This is the pattern `kyroguard init` scaffolds in `src/kyroguard/domains.ts`:
+Creates the same [domain instance](#domain-instance) as [`app.kyroguard.domain`](#app-kyroguard), without needing the app — so domains are plain values a module exports and any route file imports. This is the pattern `kyroguard init` scaffolds in `src/kyroguard/domains.ts`:
 
 ```ts
 // src/kyroguard/domains.ts
-import { createKyroguard } from '@kyrobit/kyroguard'
-import { kyroguardFastifyDomains } from '@kyrobit/kyroguard/fastify'
+import { createGuard } from '@kyrobit/kyroguard'
+import { createDomain } from '@kyrobit/kyroguard/fastify'
 
-export const guard = createKyroguard({ adapter, resources })
-
-const { domain } = kyroguardFastifyDomains(guard)
-
-export const admin = domain('admin', { getSubject })
+export const guard = createGuard({ adapter, resources })
+export const admin = createDomain(guard, 'admin', { getSubject })
 ```
 
 ```ts
@@ -114,7 +109,7 @@ const admin = app.kyroguard.domain('admin', { getSubject }) // multi-area app
 
 ## Error responses
 
-A denied guard throws the `KyroguardError` through Fastify's own error pipeline. Your `setErrorHandler`, `onSend` hooks and CORS headers keep running. The default serializer produces:
+A denied guard throws the `GuardError` through Fastify's own error pipeline. Your `setErrorHandler`, `onSend` hooks and CORS headers keep running. The default serializer produces:
 
 ```json
 // 403 — policy not granted
@@ -144,5 +139,5 @@ await app.register(
 `onSend` hooks and CORS headers still run on formatted responses.
 
 ::: warning
-`formatError` only sees `KyroguardError` denials. An error thrown by your own `getSubject` goes to Fastify's error handler unchanged. Handle it there.
+`formatError` only sees `GuardError` denials. An error thrown by your own `getSubject` goes to Fastify's error handler unchanged. Handle it there.
 :::

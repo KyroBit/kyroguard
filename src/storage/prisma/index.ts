@@ -1,9 +1,9 @@
 export { prismaAdapter, PRISMA_ID_LIST_CAP } from './adapter.js'
-export { kyroguardPrismaExtension } from './extension.js'
+export { trackingExtension } from './extension.js'
 export type {
-  KyroguardPrismaExtension,
-  KyroguardPrismaExtensionOptions,
-  KyroguardPrismaResourceRegistration,
+  TrackingExtension,
+  TrackingExtensionOptions,
+  TrackingResourceRegistration,
 } from './extension.js'
 export type {
   PrismaClientLike,

@@ -15,13 +15,13 @@ function memoryCache(options: MemoryCacheOptions): PolicyCache
 | `maxEntries` | `number` | Size limit. Least recently used entries are evicted first. |
 | `ttlMs` | `number` | Lifetime per entry. |
 
-An in-memory cache with a size limit and per-entry TTL. `createKyroguard()` builds one by default (`maxEntries: 10_000`, `ttlMs: 30_000`). Pass your own to change the limits:
+An in-memory cache with a size limit and per-entry TTL. `createGuard()` builds one by default (`maxEntries: 10_000`, `ttlMs: 30_000`). Pass your own to change the limits:
 
 ```ts
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { memoryCache } from '@kyrobit/kyroguard/cache'
 
-const guard = createKyroguard({
+const guard = createGuard({
   adapter,
   cache: memoryCache({ maxEntries: 50_000, ttlMs: 10_000 }),
 })
@@ -59,14 +59,14 @@ Cross-instance invalidation over Redis pub/sub. The module never imports a Redis
 
 ```ts
 import { Redis } from 'ioredis'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { redisBus } from '@kyrobit/kyroguard/cache'
 
 const publisher = new Redis(process.env.REDIS_URL!)
 const subscriber = new Redis(process.env.REDIS_URL!)
 
 const bus = redisBus(publisher, subscriber)
-const guard = createKyroguard({ adapter, invalidationBus: bus })
+const guard = createGuard({ adapter, invalidationBus: bus })
 
 // shutdown:
 await bus.close()
@@ -153,4 +153,4 @@ interface CacheEvent {
 type CacheHook = (event: CacheEvent) => void
 ```
 
-Emitted through `onCacheEvent` on [`createKyroguard()`](/reference/core-api#createkyroguard). Errors thrown by the hook are swallowed. Observability never affects authorization.
+Emitted through `onCacheEvent` on [`createGuard()`](/reference/core-api#createguard). Errors thrown by the hook are swallowed. Observability never affects authorization.

@@ -1,10 +1,10 @@
 import { normalizeSentinel } from '../../core/types.js'
 import type { FilterQuery, Query, Schema } from 'mongoose'
-import type { KyroguardEngine } from '../../core/engine.js'
+import type { GuardEngine } from '../../core/engine.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
-export interface KyroguardMongoosePluginOptions {
-  guard: { engine: KyroguardEngine; adapter: StorageAdapter }
+export interface TrackingPluginOptions {
+  guard: { engine: GuardEngine; adapter: StorageAdapter }
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
 }
@@ -23,7 +23,7 @@ function documentId(doc: unknown): string | null {
  * collection ops fire NO document middleware, so they are neither tracked
  * nor filtered — see docs/reference/mongoose.md.
  */
-export function kyroguardMongoosePlugin(schema: Schema, options: KyroguardMongoosePluginOptions): void {
+export function trackingPlugin(schema: Schema, options: TrackingPluginOptions): void {
   const { engine, adapter } = options.guard
 
   async function recordOwnershipFor(docs: unknown[]): Promise<void> {

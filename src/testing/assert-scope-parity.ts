@@ -1,8 +1,8 @@
-import { MisconfiguredError, KyroguardError } from '../index.js'
-import type { FilterResult, QualifiedPolicyName, Kyroguard, Subject } from '../index.js'
+import { MisconfiguredError, GuardError } from '../index.js'
+import type { FilterResult, QualifiedPolicyName, Guard, Subject } from '../index.js'
 
 export interface AssertScopeParityOptions {
-  guard: Kyroguard
+  guard: Guard
   subject: Subject
   policy: QualifiedPolicyName
   /** The registered resource type being listed. */
@@ -39,7 +39,7 @@ export async function assertScopeParity(options: AssertScopeParityOptions): Prom
         resource: () => ({ type: resource, id: row.id }),
       })
     } catch (error) {
-      if (!(error instanceof KyroguardError)) throw error
+      if (!(error instanceof GuardError)) throw error
       allowed = false
     }
     const inList = listed.has(row.id)

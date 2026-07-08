@@ -8,27 +8,25 @@
  *   // ... your routes ...
  *   app.use(errorHandler())   // AFTER your routes
  *
- * Guards forward typed KyroguardErrors to Express's error pipeline via
+ * Guards forward typed GuardErrors to Express's error pipeline via
  * next(err): 401 unauthenticated, 403 policy/scope denied, 404 resource not
  * found.
  */
-import { createKyroguard } from '@kyrobit/kyroguard'
-import { kyroguardExpress } from '@kyrobit/kyroguard/express'
+import { createGuard } from '@kyrobit/kyroguard'
+import { createDomain, kyroguardExpress } from '@kyrobit/kyroguard/express'
 {{ADAPTER_IMPORTS}}
 import { resources } from './policies.js'
 
 {{ADAPTER_CREATE}}
 
-export const guard = createKyroguard({ adapter, resources })
+export const guard = createGuard({ adapter, resources })
 
-const kyroguard = kyroguardExpress(guard)
+const { context, errorHandler } = kyroguardExpress(guard)
+/** context() opens the per-request state — register BEFORE any guarded route.
+ *  errorHandler() turns guard errors into JSON — register AFTER your routes. */
+export { context, errorHandler }
 
-/** Opens the per-request kyroguard context. Register BEFORE any domain guard. */
-export const context = kyroguard.context
-/** Turns kyroguard errors into JSON responses. Register AFTER your routes. */
-export const errorHandler = kyroguard.errorHandler
-
-export const {{DOMAIN_EXPORT}} = kyroguard.domain('{{DOMAIN}}', {
+export const {{DOMAIN_EXPORT}} = createDomain(guard, '{{DOMAIN}}', {
   // Resolved lazily at guard time, memoized per request per domain.
   // Return null when the request is unauthenticated → 401.
   getSubject: async req => {

@@ -43,8 +43,8 @@ export interface AuthorizeOptions {
   resource?: () => Awaitable<ResourceRef | null | undefined>
 }
 
-/** Framework-free engine: authorize() resolves (allow) or throws a typed KyroguardError (deny). */
-export class KyroguardEngine {
+/** Framework-free engine: authorize() resolves (allow) or throws a typed GuardError (deny). */
+export class GuardEngine {
   readonly store = new SubjectStore()
 
   private readonly adapter: StorageAdapter
@@ -115,7 +115,7 @@ export class KyroguardEngine {
     return { map, cacheHit: false }
   }
 
-  /** The decision procedure: resolves on allow, throws a typed KyroguardError on deny. */
+  /** The decision procedure: resolves on allow, throws a typed GuardError on deny. */
   async authorize(
     subject: Subject | null | undefined,
     policy: QualifiedPolicyName,

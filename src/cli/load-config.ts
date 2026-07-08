@@ -1,11 +1,11 @@
 import { existsSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { KyroguardConfig } from '../core/config.js'
+import type { GuardConfig } from '../core/config.js'
 
 const CONFIG_BASENAMES = ['kyroguard.config.ts', 'kyroguard.config.mts', 'kyroguard.config.mjs', 'kyroguard.config.js']
 
-export async function loadConfig(explicitPath?: string): Promise<{ config: KyroguardConfig; path: string }> {
+export async function loadConfig(explicitPath?: string): Promise<{ config: GuardConfig; path: string }> {
   const path = resolveConfigPath(explicitPath)
   const mod = await importModule(path)
   const loaded = (mod.default ?? mod) as unknown
@@ -57,7 +57,7 @@ function resolveConfigPath(explicitPath?: string): string {
   )
 }
 
-function assertConfigShape(config: unknown, path: string): asserts config is KyroguardConfig {
+function assertConfigShape(config: unknown, path: string): asserts config is GuardConfig {
   if (typeof config !== 'object' || config === null) {
     throw new Error(
       `[kyroguard] ${path} must default-export a config object — use \`export default defineConfig({ ... })\`.`,

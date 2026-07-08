@@ -5,7 +5,7 @@ Wire `@kyrobit/kyroguard` into Fastify 5. This is a complete setup:
 ```ts
 // app.ts
 import Fastify from 'fastify'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/kyroguard-schema.js' // written by `kyroguard init`
@@ -13,7 +13,7 @@ import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'
 
-const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }), resources })
+const guard = createGuard({ adapter: drizzleAdapter(db, { schema }), resources })
 
 const app = Fastify()
 await app.register(kyroguardFastify(guard))

@@ -28,18 +28,18 @@ There is no schema file to add. The adapter defines its own Mongoose models.
 
 ## 2. Wire the adapter
 
-Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createKyroguard`:
+Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createGuard`:
 
 ```ts
 // src/kyroguard/instance.ts
 import { createConnection } from 'mongoose'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 import { resources } from './policies.js'
 
 export const connection = await createConnection(process.env.MONGODB_URI!).asPromise()
 export const adapter = mongooseAdapter(connection)
-export const guard = createKyroguard({ adapter, resources })
+export const guard = createGuard({ adapter, resources })
 ```
 
 You own the connection at runtime — close it (or call `adapter.close()`, which does the same) on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI, which closes the connection it opened before exiting.
@@ -52,19 +52,19 @@ npx kyroguard sync
 
 Run this before first traffic — it creates the MongoDB indexes. It also writes your policies and groups, and generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
-## Track ownership with `kyroguardMongoosePlugin`
+## Track ownership with `trackingPlugin`
 
 Policies with `Scope.owned()` check who created each document. The plugin records that for you. Add it to each schema whose documents can be owned:
 
 ```ts
 // src/models/grade.ts
 import { Schema, model } from 'mongoose'
-import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
 import { guard } from '../kyroguard/instance.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(kyroguardMongoosePlugin, { guard, type: 'grade' })
+gradeSchema.plugin(trackingPlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```

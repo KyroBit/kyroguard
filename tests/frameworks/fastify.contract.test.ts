@@ -15,9 +15,9 @@ import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
 import type { FastifyDomain } from '../../src/frameworks/fastify/index.js'
 import { runFrameworkContractSuite } from '../../src/testing/index.js'
 import type { RouteSpec, TestApp, TestAppResponse } from '../../src/testing/index.js'
-import type { Kyroguard, SubjectInput } from '../../src/index.js'
+import type { Guard, SubjectInput } from '../../src/index.js'
 
-async function makeApp(rbac: Kyroguard, routes: RouteSpec[]): Promise<TestApp> {
+async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
   const app = Fastify()
 
   // Per-request getSubject invocation count (harness protocol item 1).

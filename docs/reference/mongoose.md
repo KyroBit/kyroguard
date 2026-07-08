@@ -17,11 +17,11 @@ function mongooseAdapter(connection: Connection): StorageAdapter
 
 ```ts
 import mongoose from 'mongoose'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
 
 const connection = await mongoose.createConnection(process.env.MONGO_URL!).asPromise()
-const guard = createKyroguard({ adapter: mongooseAdapter(connection) })
+const guard = createGuard({ adapter: mongooseAdapter(connection) })
 ```
 
 The returned adapter:
@@ -68,29 +68,29 @@ const teachers = await models.userPolicyGroup.find({ domain: 'teachers' })
 
 The document types (`KyroguardPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
 
-## kyroguardMongoosePlugin()
+## trackingPlugin()
 
 ```ts
-import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
 
-function kyroguardMongoosePlugin(schema: Schema, options: KyroguardMongoosePluginOptions): void
+function trackingPlugin(schema: Schema, options: TrackingPluginOptions): void
 ```
 
 Schema plugin for your own models. It records ownership on save, and filters reads by the grant of the route's guard. Apply it before compiling the model.
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `guard` | `Kyroguard` | Your `createKyroguard` instance. |
+| `guard` | `Guard` | Your `createGuard` instance. |
 | `type` | `string` | Resource type in the ownership store, for example `'grade'`. |
 
 ```ts
 import { Schema, model } from 'mongoose'
-import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
+import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
 import { guard } from './kyroguard/domains.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(kyroguardMongoosePlugin, { guard, type: 'grade' })
+gradeSchema.plugin(trackingPlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```

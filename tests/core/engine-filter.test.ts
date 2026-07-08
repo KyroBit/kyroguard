@@ -1,5 +1,5 @@
 import { describe, test, expect, spyOn, afterEach } from 'bun:test'
-import { KyroguardEngine } from '../../src/core/engine.js'
+import { GuardEngine } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
 import { UnauthenticatedError } from '../../src/core/errors.js'
 import { inProcessBus } from '../../src/cache/bus.js'
@@ -19,9 +19,9 @@ function bareAdapter(): StorageAdapter {
   return { ...memoryAdapter(), listFilters: undefined }
 }
 
-function makeEngine(overrides?: Partial<EngineOptions>): { adapter: StorageAdapter; engine: KyroguardEngine } {
+function makeEngine(overrides?: Partial<EngineOptions>): { adapter: StorageAdapter; engine: GuardEngine } {
   const adapter = overrides?.adapter ?? bareAdapter()
-  const engine = new KyroguardEngine({
+  const engine = new GuardEngine({
     adapter,
     scopes: new Map(),
     cache: null,
@@ -307,7 +307,7 @@ describe('storeFilterFor() — the guard-path entry', () => {
 describe('inAuthz suppression flag', () => {
   test('set while filterFor builds filters, restored after (both outcomes observed in-context)', async () => {
     const observed: boolean[] = []
-    let engineRef: KyroguardEngine
+    let engineRef: GuardEngine
     const scopes = new Map([
       [
         'mine',
@@ -332,7 +332,7 @@ describe('inAuthz suppression flag', () => {
 
   test('condition scopes folded through check() on the list path also run suppressed', async () => {
     const observed: boolean[] = []
-    let engineRef: KyroguardEngine
+    let engineRef: GuardEngine
     const scopes = new Map([
       [
         'open',

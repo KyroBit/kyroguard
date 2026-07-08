@@ -7,13 +7,13 @@ Reference for `@kyrobit/kyroguard/express`. Works on Express 4.18+ and Express 5
 ```ts
 import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 
-function kyroguardExpress(guard: Kyroguard, options?: ExpressKyroguardOptions): ExpressKyroguard
+function kyroguardExpress(guard: Guard, options?: ExpressGuardOptions): ExpressGuard
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
-| `options.formatError` | `(error: KyroguardError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
+| `guard` | `Guard` | The instance from [`createGuard()`](/reference/core-api#createguard). |
+| `options.formatError` | `(error: GuardError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 **Returns** three factories:
 
@@ -57,6 +57,8 @@ const admin = domain('admin', { getSubject }) // multi-area app
 
 `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
+`createDomain(guard, name?, options)` is also exported from the subpath — the same factory without calling `kyroguardExpress` first, for modules that only define domains (`src/kyroguard/domains.ts`).
+
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
@@ -78,7 +80,7 @@ Guards never write responses. A denial travels through `next(err)` into your err
 app.use(errorHandler())
 ```
 
-For a `KyroguardError` it responds with `error.statusCode` and a JSON body. Everything else is passed to `next(error)`, so your own error middleware still applies.
+For a `GuardError` it responds with `error.statusCode` and a JSON body. Everything else is passed to `next(error)`, so your own error middleware still applies.
 
 ```json
 // 403 — policy not granted

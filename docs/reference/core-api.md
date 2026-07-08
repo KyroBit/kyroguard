@@ -2,10 +2,10 @@
 
 Reference for `@kyrobit/kyroguard`, the framework-agnostic core. Integrations live at subpaths: [Fastify](/reference/fastify), [Express](/reference/express), [Drizzle](/reference/drizzle), [Prisma](/reference/prisma), [Mongoose](/reference/mongoose), [Cache](/reference/cache), [Testing](/reference/testing).
 
-## createKyroguard()
+## createGuard()
 
 ```ts
-function createKyroguard(options: CreateKyroguardOptions): Kyroguard
+function createGuard(options: CreateGuardOptions): Guard
 ```
 
 | Option | Type | Default | Description |
@@ -24,10 +24,10 @@ function createKyroguard(options: CreateKyroguardOptions): Kyroguard
 | `onCacheEvent` | `CacheHook` | — | Fires on cache hits, misses and invalidations. |
 
 ```ts
-import { createKyroguard, Policy, Scope } from '@kyrobit/kyroguard'
+import { createGuard, Policy, Scope } from '@kyrobit/kyroguard'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
-const guard = createKyroguard({
+const guard = createGuard({
   adapter: memoryAdapter(),
   policies: [
     new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
@@ -49,17 +49,17 @@ const guard = createKyroguard({
 await guard.sync()
 ```
 
-## Kyroguard
+## Guard
 
-The instance returned by `createKyroguard()`.
+The instance returned by `createGuard()`.
 
 | Member | Description |
 | --- | --- |
-| `engine` | The authorization engine (`KyroguardEngine`). |
-| `adapter` | The adapter passed to `createKyroguard()`. |
+| `engine` | The authorization engine (`GuardEngine`). |
+| `adapter` | The adapter passed to `createGuard()`. |
 | `resources` | The resource definitions, including the `policies` shorthand. |
 | `resourceForPolicy` | Unqualified policy name → the resource that defines it. Guards resolve their filter target through it — see [`storeFilterFor`](#storefilterfor). |
-| `sync()` | Load the `createKyroguard` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
+| `sync()` | Load the `createGuard` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
 | `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
@@ -223,7 +223,7 @@ interface Subject {
 
 ## Error classes
 
-All guards throw subclasses of `KyroguardError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`, plus `reason` on the `ACCESS_DENIED` errors. See [Errors](/reference/errors).
+All guards throw subclasses of `GuardError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`, plus `reason` on the `ACCESS_DENIED` errors. See [Errors](/reference/errors).
 
 | Class | Status | Code | `reason` |
 | --- | --- | --- | --- |
@@ -233,7 +233,7 @@ All guards throw subclasses of `KyroguardError`. Each carries `statusCode` and a
 | `ResourceNotFoundError` | 404 | `NOT_FOUND` | — |
 | `MisconfiguredError` | 500 | `MISCONFIGURED` | — |
 
-`UnknownPolicyError` and `UnknownScopeError` are not `KyroguardError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
+`UnknownPolicyError` and `UnknownScopeError` are not `GuardError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
 
 ## Other exports
 
@@ -242,7 +242,7 @@ Functions:
 - `syncPolicies(adapter, resources, domain?, options?)` — sync one domain's policies into storage. `guard.sync()` calls this. See [Sync](/guide/sync).
 - `seedGroups(adapter, groups, allPolicies?, domain?)` — upsert groups and replace their policies. `guard.seedGroups()` calls this.
 - `backfillGroupDependencies(adapter, resources, domain?, options?)` — add missing policy dependencies to every group.
-- `collectScopes(resources)` — build the scope registry from resource definitions. `createKyroguard()` calls this.
+- `collectScopes(resources)` — build the scope registry from resource definitions. `createGuard()` calls this.
 - `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
 - `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
@@ -252,7 +252,7 @@ Functions:
 
 Classes:
 
-- `KyroguardEngine` — the decision engine behind every guard. Most apps never construct one.
+- `GuardEngine` — the decision engine behind every guard. Most apps never construct one.
 - `SubjectStore` — per-request state holder, for custom framework integrations.
 
 Types:
@@ -260,9 +260,9 @@ Types:
 - Subjects: `Subject`, `SubjectInput`, `SubjectRef`.
 - Policies: `ResourceDefinition`, `PolicyMap`, `ResourceRef`.
 - Groups: `GroupsDefinition`, `GroupDefinition`, `GroupPoliciesInput`.
-- Names: `KyroguardTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
+- Names: `GuardTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
 - Storage contract: `StorageAdapter`, `AdapterCapabilities`, `ListFilters`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`, `OwnershipEntry`. See [Custom adapters](/guide/custom-adapters).
 - Cache: `PolicyCache`, `PolicyCacheKey`, `InvalidationBus`, `InvalidationEvent`, `CacheEvent`, `CacheHook`. See [Cache](/reference/cache).
-- Hooks: `DecisionEvent`, `DecisionHook`, `KyroguardErrorCode`.
+- Hooks: `DecisionEvent`, `DecisionHook`, `GuardErrorCode`.
 - Engine: `EngineOptions`, `AuthorizeOptions`, `FilterResult`, `RequestStore`, `ScopeCheckFn`, `ScopeCheckContext`, `ScopeFilterFn`, `ScopeFilterContext`, `ScopeFilterResult`, `Awaitable`.
-- Config: `KyroguardConfig`, `DomainConfig`.
+- Config: `GuardConfig`, `DomainConfig`.

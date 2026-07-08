@@ -1,22 +1,22 @@
 import { normalizeSentinel } from '../../core/types.js'
-import type { KyroguardEngine } from '../../core/engine.js'
+import type { GuardEngine } from '../../core/engine.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export interface KyroguardPrismaResourceRegistration {
+export interface TrackingResourceRegistration {
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
   /** The Prisma client delegate key, case-exact (`model BlogPost` → `'blogPost'`). */
   model: string
 }
 
-export interface KyroguardPrismaExtensionOptions {
+export interface TrackingExtensionOptions {
   guard: {
-    engine: KyroguardEngine
+    engine: GuardEngine
     adapter: StorageAdapter
   }
-  resources: KyroguardPrismaResourceRegistration[]
+  resources: TrackingResourceRegistration[]
 }
 
 /** The params Prisma passes to a `query` extension hook (structural subset). */
@@ -29,7 +29,7 @@ interface QueryHookParams {
 type QueryHook = (params: QueryHookParams) => Promise<any>
 
 /** The extension object shape for `client.$extends(...)`; structural — src/ never imports `@prisma/client`. */
-export interface KyroguardPrismaExtension {
+export interface TrackingExtension {
   name: string
   query: Record<string, Record<string, QueryHook>>
 }
@@ -64,7 +64,7 @@ function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Re
  * Interception gaps (raw SQL, nested writes, db-generated createMany ids, …)
  * are documented in docs/reference/prisma.md.
  */
-export function kyroguardPrismaExtension(options: KyroguardPrismaExtensionOptions): KyroguardPrismaExtension {
+export function trackingExtension(options: TrackingExtensionOptions): TrackingExtension {
   const { engine, adapter } = options.guard
 
   const extractId = (value: unknown): string | null => {

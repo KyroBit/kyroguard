@@ -100,6 +100,6 @@ The CLI finds the config in this order:
 2. The first of `kyroguard.config.ts`, `kyroguard.config.mts`, `kyroguard.config.mjs`, `kyroguard.config.js` in the working directory.
 3. Otherwise it exits 1 and suggests `kyroguard init`.
 
-## Relationship to createKyroguard
+## Relationship to createGuard
 
-The config file is for the CLI only. Your app builds its own instance with `createKyroguard`. See the [Core API](/reference/core-api) for its options.
+The config file is for the CLI only. Your app builds its own instance with `createGuard`. See the [Core API](/reference/core-api) for its options.

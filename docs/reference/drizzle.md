@@ -59,7 +59,7 @@ Wraps your Drizzle database. Inserts into registered resource tables record owne
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `guard` | `Kyroguard` | required | Your `createKyroguard` instance. |
+| `guard` | `Guard` | required | Your `createGuard` instance. |
 | `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked and filtered. Other tables pass through. |
 | `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 

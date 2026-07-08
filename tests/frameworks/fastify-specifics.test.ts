@@ -8,15 +8,15 @@
 import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { kyroguardFastify, kyroguardFastifyDomains } from '../../src/frameworks/fastify/index.js'
-import type { KyroguardFastifyOptions } from '../../src/frameworks/fastify/index.js'
+import { createDomain, kyroguardFastify } from '../../src/frameworks/fastify/index.js'
+import type { FastifyGuardOptions } from '../../src/frameworks/fastify/index.js'
 import {
   Policy,
   PolicyDeniedError,
-  createKyroguard,
+  createGuard,
   qualifyPolicyName,
 } from '../../src/index.js'
-import type { DecisionEvent, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { DecisionEvent, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 
 const makeResources = (): ResourceDefinition[] => [
@@ -24,7 +24,7 @@ const makeResources = (): ResourceDefinition[] => [
 ]
 
 interface Harness {
-  rbac: Kyroguard
+  rbac: Guard
   app: FastifyInstance
 }
 
@@ -32,12 +32,12 @@ async function withHarness(
   config: {
     domains?: string[]
     onDecision?: (event: DecisionEvent) => void
-    pluginOptions?: KyroguardFastifyOptions
-    setup: (app: FastifyInstance, rbac: Kyroguard) => Promise<void> | void
+    pluginOptions?: FastifyGuardOptions
+    setup: (app: FastifyInstance, rbac: Guard) => Promise<void> | void
   },
   fn: (h: Harness) => Promise<void>,
 ): Promise<void> {
-  const rbac = createKyroguard({
+  const rbac = createGuard({
     adapter: memoryAdapter(),
     resources: makeResources(),
     onDecision: config.onDecision,
@@ -331,8 +331,8 @@ describe('fastify integration specifics', () => {
       },
     ))
 
-  test('(z) kyroguardFastifyDomains: a domain created OUTSIDE the app (domains.ts pattern) guards routes identically', async () => {
-    const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+  test('(z) createDomain: a domain created OUTSIDE the app (domains.ts pattern) guards routes identically', async () => {
+    const rbac = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       await rbac.sync(makeResources(), 'admin')
       await rbac.admin.assignPolicy(
@@ -341,8 +341,7 @@ describe('fastify integration specifics', () => {
       )
 
       // The domains.ts pattern: no app in sight when the domain is created.
-      const { domain } = kyroguardFastifyDomains(rbac)
-      const admin = domain('admin', { getSubject: async req => headerSubject(req) })
+      const admin = createDomain(rbac, 'admin', { getSubject: async req => headerSubject(req) })
 
       const app = Fastify()
       await app.register(kyroguardFastify(rbac))

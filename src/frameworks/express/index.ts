@@ -1,15 +1,15 @@
-import { MisconfiguredError, KyroguardError } from '../../core/errors.js'
+import { MisconfiguredError, GuardError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
-import type { Kyroguard } from '../../index.js'
+import type { Guard } from '../../index.js'
 import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
 
-export interface ExpressKyroguardOptions extends ErrorFormatter<Request> {}
+export interface ExpressGuardOptions extends ErrorFormatter<Request> {}
 
-export interface ExpressKyroguard {
+export interface ExpressGuard {
   /** Opens the per-request ALS context. Register once, before any domain guard. */
   context(): RequestHandler
   /** Hook-free domain factory — registering it never touches app-wide state. */
@@ -19,11 +19,11 @@ export interface ExpressKyroguard {
   ): DomainInstance<Request, RequestHandler, P>
   /** Single-area apps don't need a domain name — policies stay unprefixed. */
   domain(options: DomainOptions<Request>): DomainInstance<Request, RequestHandler, ''>
-  /** Terminal error middleware: renders KyroguardError, delegates everything else. */
+  /** Terminal error middleware: renders GuardError, delegates everything else. */
   errorHandler(): ErrorRequestHandler
 }
 
-export function kyroguardExpress(guard: Kyroguard, options: ExpressKyroguardOptions = {}): ExpressKyroguard {
+export function kyroguardExpress(guard: Guard, options: ExpressGuardOptions = {}): ExpressGuard {
   return {
     context() {
       return (_req, _res, next) => {
@@ -38,12 +38,12 @@ export function kyroguardExpress(guard: Kyroguard, options: ExpressKyroguardOpti
       domainOptions?: DomainOptions<Request>,
     ) =>
       typeof nameOrOptions === 'string'
-        ? createDomain(guard, nameOrOptions, domainOptions!)
-        : createDomain(guard, '', nameOrOptions)) as ExpressKyroguard['domain'],
+        ? buildDomain(guard, nameOrOptions, domainOptions!)
+        : buildDomain(guard, '', nameOrOptions)) as ExpressGuard['domain'],
 
     errorHandler() {
       return (error: unknown, req, res, next) => {
-        if (!(error instanceof KyroguardError) || res.headersSent) {
+        if (!(error instanceof GuardError) || res.headersSent) {
           next(error)
           return
         }
@@ -58,8 +58,33 @@ export function kyroguardExpress(guard: Kyroguard, options: ExpressKyroguardOpti
   }
 }
 
-function createDomain<P extends string>(
-  guard: Kyroguard,
+/**
+ * Create a domain — a plain value you can define in a module
+ * (src/kyroguard/domains.ts), export, and import next to any route.
+ * `kyroguardExpress(guard).context()` must still be registered before any
+ * guarded route; it opens the per-request context the guards run in.
+ */
+export function createDomain<P extends string>(
+  guard: Guard,
+  name: P,
+  options: DomainOptions<Request>,
+): DomainInstance<Request, RequestHandler, P>
+export function createDomain(
+  guard: Guard,
+  options: DomainOptions<Request>,
+): DomainInstance<Request, RequestHandler, ''>
+export function createDomain(
+  guard: Guard,
+  nameOrOptions: string | DomainOptions<Request>,
+  maybeOptions?: DomainOptions<Request>,
+): DomainInstance<Request, RequestHandler, string> {
+  return typeof nameOrOptions === 'string'
+    ? buildDomain(guard, nameOrOptions, maybeOptions!)
+    : buildDomain(guard, '', nameOrOptions)
+}
+
+function buildDomain<P extends string>(
+  guard: Guard,
   name: P,
   options: DomainOptions<Request>,
 ): DomainInstance<Request, RequestHandler, P> {
@@ -139,11 +164,11 @@ function createDomain<P extends string>(
   }
 }
 
-function filterResource(guard: Kyroguard, policy: string): ResourceDefinition {
+function filterResource(guard: Guard, policy: string): ResourceDefinition {
   const resource = guard.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createKyroguard({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createGuard({ resources }).`,
     )
   }
   return resource

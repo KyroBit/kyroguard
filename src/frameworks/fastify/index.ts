@@ -1,40 +1,40 @@
 import fp from 'fastify-plugin'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import { MisconfiguredError, KyroguardError } from '../../core/errors.js'
+import { MisconfiguredError, GuardError } from '../../core/errors.js'
 import { qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
-import type { Kyroguard } from '../../index.js'
+import type { Guard } from '../../index.js'
 import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
 /** Async guard compatible with Fastify's preHandler/onRequest hook slots. */
-export type FastifyKyroguardGuard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>
+export type FastifyGuard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
 export type FastifyDomain<P extends string = string> = DomainInstance<
   FastifyRequest,
-  FastifyKyroguardGuard,
+  FastifyGuard,
   P
 >
 
-export interface FastifyKyroguardDecoration {
+export interface FastifyGuardDecoration {
   domain<P extends string>(name: P, options: DomainOptions<FastifyRequest>): FastifyDomain<P>
   /** Single-area apps don't need a domain name — policies stay unprefixed. */
   domain(options: DomainOptions<FastifyRequest>): FastifyDomain<''>
   setSubject(subject: Subject): void
   addExtra(extra: Record<string, unknown>): void
-  readonly cache: Kyroguard['cache']
+  readonly cache: Guard['cache']
 }
 
 declare module 'fastify' {
   interface FastifyInstance {
-    kyroguard: FastifyKyroguardDecoration
+    kyroguard: FastifyGuardDecoration
   }
 }
 
-export type KyroguardFastifyOptions = ErrorFormatter<FastifyRequest>
+export type FastifyGuardOptions = ErrorFormatter<FastifyRequest>
 
-export function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOptions): FastifyPluginAsync {
+export function kyroguardFastify(guard: Guard, options?: FastifyGuardOptions): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async app => {
     // Callback-style on purpose: under Bun, ALS context does not propagate out
     // of `await new Promise(resolve => store.run(..., resolve))`. Entering the
@@ -43,7 +43,7 @@ export function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOpt
       guard.engine.store.enter(() => done())
     })
 
-    const decoration: FastifyKyroguardDecoration = {
+    const decoration: FastifyGuardDecoration = {
       domain: makeDomainFactory(guard, options),
       setSubject: subject => guard.engine.store.setSubject(subject),
       addExtra: extra => guard.engine.store.addExtra(extra),
@@ -56,35 +56,47 @@ export function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOpt
 }
 
 /**
- * Hook-free domain factory, mirroring `kyroguardExpress(guard).domain`.
- * Domains are plain values bound to the guard — create them in a module
- * (e.g. src/kyroguard/domains.ts), export them, and import them next to any
- * route. The `kyroguardFastify(guard)` plugin must still be registered on the
- * app; it opens the per-request context the guards run in.
+ * Create a domain — a plain value you can define in a module
+ * (src/kyroguard/domains.ts), export, and import next to any route. The
+ * `kyroguardFastify(guard)` plugin must still be registered on the app; it
+ * opens the per-request context the guards run in.
  */
-export function kyroguardFastifyDomains(
-  guard: Kyroguard,
-  options?: KyroguardFastifyOptions,
-): Pick<FastifyKyroguardDecoration, 'domain'> {
-  return { domain: makeDomainFactory(guard, options) }
+export function createDomain<P extends string>(
+  guard: Guard,
+  name: P,
+  options: DomainOptions<FastifyRequest> & FastifyGuardOptions,
+): FastifyDomain<P>
+export function createDomain(
+  guard: Guard,
+  options: DomainOptions<FastifyRequest> & FastifyGuardOptions,
+): FastifyDomain<''>
+export function createDomain(
+  guard: Guard,
+  nameOrOptions: string | (DomainOptions<FastifyRequest> & FastifyGuardOptions),
+  maybeOptions?: DomainOptions<FastifyRequest> & FastifyGuardOptions,
+): FastifyDomain<string> {
+  const [name, all] =
+    typeof nameOrOptions === 'string' ? [nameOrOptions, maybeOptions!] : ['', nameOrOptions]
+  const { formatError, ...options } = all
+  return buildDomain(guard, formatError ? { formatError } : undefined, name, options)
 }
 
 function makeDomainFactory(
-  guard: Kyroguard,
-  pluginOptions: KyroguardFastifyOptions | undefined,
-): FastifyKyroguardDecoration['domain'] {
+  guard: Guard,
+  pluginOptions: FastifyGuardOptions | undefined,
+): FastifyGuardDecoration['domain'] {
   return (<P extends string>(
     nameOrOptions: P | DomainOptions<FastifyRequest>,
     domainOptions?: DomainOptions<FastifyRequest>,
   ) =>
     typeof nameOrOptions === 'string'
-      ? createDomain(guard, pluginOptions, nameOrOptions, domainOptions!)
-      : createDomain(guard, pluginOptions, '', nameOrOptions)) as FastifyKyroguardDecoration['domain']
+      ? buildDomain(guard, pluginOptions, nameOrOptions, domainOptions!)
+      : buildDomain(guard, pluginOptions, '', nameOrOptions)) as FastifyGuardDecoration['domain']
 }
 
-function createDomain<P extends string>(
-  guard: Kyroguard,
-  pluginOptions: KyroguardFastifyOptions | undefined,
+function buildDomain<P extends string>(
+  guard: Guard,
+  pluginOptions: FastifyGuardOptions | undefined,
   name: P,
   options: DomainOptions<FastifyRequest>,
 ): FastifyDomain<P> {
@@ -131,7 +143,7 @@ function createDomain<P extends string>(
           })
           if (filterTarget) await guard.engine.storeFilterFor(subject, qualified, filterTarget)
         } catch (error) {
-          if (error instanceof KyroguardError && pluginOptions?.formatError) {
+          if (error instanceof GuardError && pluginOptions?.formatError) {
             const { status, body } = pluginOptions.formatError(error, req)
             reply.code(status)
             await reply.send(body)
@@ -177,11 +189,11 @@ function createDomain<P extends string>(
   }
 }
 
-function filterResource(guard: Kyroguard, policy: string): ResourceDefinition {
+function filterResource(guard: Guard, policy: string): ResourceDefinition {
   const resource = guard.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createKyroguard({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createGuard({ resources }).`,
     )
   }
   return resource

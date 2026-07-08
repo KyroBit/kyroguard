@@ -22,7 +22,7 @@ One run does five things:
 
 Your code is the source of truth. The database follows it. Every domain in [`kyroguard.config.ts`](/reference/configuration) is synced in one run.
 
-No files? `createKyroguard({ policies, groups })` plus `await guard.sync()` runs the same pipeline.
+No files? `createGuard({ policies, groups })` plus `await guard.sync()` runs the same pipeline.
 
 ## When to run it
 

@@ -1,4 +1,4 @@
-export type KyroguardErrorCode =
+export type GuardErrorCode =
   | 'UNAUTHENTICATED'
   | 'ACCESS_DENIED'
   | 'NOT_FOUND'
@@ -7,16 +7,16 @@ export type KyroguardErrorCode =
 /** Distinguishes the two ACCESS_DENIED denials in error bodies. */
 export type AccessDeniedReason = 'policy' | 'scope'
 
-export interface KyroguardErrorBody {
+export interface GuardErrorBody {
   message: string
-  code: KyroguardErrorCode
+  code: GuardErrorCode
   /** Present only when `code` is ACCESS_DENIED. */
   reason?: AccessDeniedReason
 }
 
-export abstract class KyroguardError extends Error {
+export abstract class GuardError extends Error {
   abstract readonly statusCode: number
-  abstract readonly code: KyroguardErrorCode
+  abstract readonly code: GuardErrorCode
   /** Set only by the ACCESS_DENIED errors. */
   readonly reason?: AccessDeniedReason
 
@@ -26,7 +26,7 @@ export abstract class KyroguardError extends Error {
   }
 
   /** Default response body. Frameworks may override via formatError. */
-  toBody(): KyroguardErrorBody {
+  toBody(): GuardErrorBody {
     return this.code === 'ACCESS_DENIED' && this.reason
       ? { message: this.message, code: this.code, reason: this.reason }
       : { message: this.message, code: this.code }
@@ -34,7 +34,7 @@ export abstract class KyroguardError extends Error {
 }
 
 /** No subject on the request — authentication missing or failed. → 401 */
-export class UnauthenticatedError extends KyroguardError {
+export class UnauthenticatedError extends GuardError {
   readonly statusCode = 401
   readonly code = 'UNAUTHENTICATED'
 
@@ -44,7 +44,7 @@ export class UnauthenticatedError extends KyroguardError {
 }
 
 /** Subject lacks the required policy in this domain + tenant. → 403 */
-export class PolicyDeniedError extends KyroguardError {
+export class PolicyDeniedError extends GuardError {
   readonly statusCode = 403
   readonly code = 'ACCESS_DENIED'
   override readonly reason = 'policy'
@@ -58,7 +58,7 @@ export class PolicyDeniedError extends KyroguardError {
 }
 
 /** Policy granted but the scope check rejected this resource. → 403 */
-export class ScopeDeniedError extends KyroguardError {
+export class ScopeDeniedError extends GuardError {
   readonly statusCode = 403
   readonly code = 'ACCESS_DENIED'
   override readonly reason = 'scope'
@@ -73,7 +73,7 @@ export class ScopeDeniedError extends KyroguardError {
 }
 
 /** Scoped guard could not resolve the target resource. → 404 */
-export class ResourceNotFoundError extends KyroguardError {
+export class ResourceNotFoundError extends GuardError {
   readonly statusCode = 404
   readonly code = 'NOT_FOUND'
 
@@ -83,7 +83,7 @@ export class ResourceNotFoundError extends KyroguardError {
 }
 
 /** Library wired incorrectly (developer error, not a request outcome). → 500 */
-export class MisconfiguredError extends KyroguardError {
+export class MisconfiguredError extends GuardError {
   readonly statusCode = 500
   readonly code = 'MISCONFIGURED'
 }

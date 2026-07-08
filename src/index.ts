@@ -1,6 +1,6 @@
 /** @kyrobit/kyroguard — framework-agnostic core entry; integrations live at subpaths. */
 
-import { KyroguardEngine } from './core/engine.js'
+import { GuardEngine } from './core/engine.js'
 import { MisconfiguredError } from './core/errors.js'
 import { collectScopes } from './core/scope.js'
 import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
@@ -20,7 +20,7 @@ import type { OwnershipEntry, StorageAdapter } from './storage/contract.js'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export interface CreateKyroguardOptions {
+export interface CreateGuardOptions {
   adapter: StorageAdapter
   /** Resource definitions — source of the scope registry and tracking config. */
   resources?: ResourceDefinition[]
@@ -47,8 +47,8 @@ export interface CreateKyroguardOptions {
 }
 
 /** The kyroguard instance apps create once and hand to a framework integration. */
-export interface Kyroguard {
-  readonly engine: KyroguardEngine
+export interface Guard {
+  readonly engine: GuardEngine
   readonly adapter: StorageAdapter
   readonly resources: ResourceDefinition[]
   /** UNQUALIFIED policy name → owning resource; guards resolve the filter target through this. */
@@ -104,7 +104,7 @@ export interface AdminSubjectRef {
   tenantId?: string
 }
 
-export function createKyroguard(options: CreateKyroguardOptions): Kyroguard {
+export function createGuard(options: CreateGuardOptions): Guard {
   const resources = [...(options.resources ?? [])]
   if (options.policies?.length) {
     resources.push({ type: 'policy', policies: options.policies })
@@ -129,7 +129,7 @@ export function createKyroguard(options: CreateKyroguardOptions): Kyroguard {
 
   const bus = options.invalidationBus ?? inProcessBus()
 
-  const engine = new KyroguardEngine({
+  const engine = new GuardEngine({
     adapter: options.adapter,
     scopes,
     cache,
@@ -255,15 +255,15 @@ export type {
   ScopeFilterResult,
 } from './core/scope.js'
 export {
-  KyroguardError,
+  GuardError,
   UnauthenticatedError,
   PolicyDeniedError,
   ScopeDeniedError,
   ResourceNotFoundError,
   MisconfiguredError,
 } from './core/errors.js'
-export type { AccessDeniedReason, KyroguardErrorBody, KyroguardErrorCode } from './core/errors.js'
-export { KyroguardEngine, mergeGrants } from './core/engine.js'
+export type { AccessDeniedReason, GuardErrorBody, GuardErrorCode } from './core/errors.js'
+export { GuardEngine, mergeGrants } from './core/engine.js'
 export type { EngineOptions, AuthorizeOptions } from './core/engine.js'
 export { SubjectStore } from './core/subject-store.js'
 export type { RequestStore } from './core/subject-store.js'
@@ -271,7 +271,7 @@ export { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 export { seedGroups } from './core/seed-groups.js'
 export type { GroupsDefinition, GroupDefinition, GroupPoliciesInput } from './core/seed-groups.js'
 export { defineConfig } from './core/config.js'
-export type { KyroguardConfig, DomainConfig } from './core/config.js'
+export type { GuardConfig, DomainConfig } from './core/config.js'
 export { qualifyPolicyName, toSubjectRef, normalizeSentinel } from './core/types.js'
 export type {
   AnyPolicyName,
@@ -283,7 +283,7 @@ export type {
   DomainName,
   DomainPolicyName,
   QualifiedPolicyName,
-  KyroguardTypes,
+  GuardTypes,
   ResourceRef,
   Subject,
   SubjectInput,

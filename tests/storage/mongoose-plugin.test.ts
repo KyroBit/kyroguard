@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * kyroguardMongoosePlugin behavior on a real mongod (mongodb-memory-server):
+ * trackingPlugin behavior on a real mongod (mongodb-memory-server):
  * automatic ownership tracking through document middleware, ownership cleanup
  * on findOneAndDelete, guard-driven read filtering on find/countDocuments
  * (keyed on the request's activeFilters plan), and the DOCUMENTED gap that
@@ -12,9 +12,9 @@ import mongoose from 'mongoose'
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { inProcessBus } from '../../src/cache/bus.js'
-import { KyroguardEngine } from '../../src/core/engine.js'
+import { GuardEngine } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
-import { mongooseAdapter, kyroguardModels, kyroguardMongoosePlugin } from '../../src/storage/mongoose/index.js'
+import { mongooseAdapter, kyroguardModels, trackingPlugin } from '../../src/storage/mongoose/index.js'
 import { makeConnection, mongoAvailable, stopMongo } from './helpers/mongo.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
 import type { Subject } from '../../src/core/types.js'
@@ -24,7 +24,7 @@ const available = await mongoAvailable()
 afterAll(stopMongo)
 
 if (!available) {
-  test.skip('kyroguardMongoosePlugin suite (mongod unavailable)', () => {})
+  test.skip('trackingPlugin suite (mongod unavailable)', () => {})
 } else {
   const connection = await makeConnection()
   const adapter = mongooseAdapter(connection)
@@ -32,7 +32,7 @@ if (!available) {
   const models = kyroguardModels(connection)
 
   const scopes = new Map<string, Scope>([['owned', Scope.owned()]])
-  const engine = new KyroguardEngine({
+  const engine = new GuardEngine({
     adapter,
     scopes,
     cache: null,
@@ -52,7 +52,7 @@ if (!available) {
     branchId: { type: String, required: true },
   })
   const postResource: ResourceDefinition = { type: 'post', policies: [] }
-  kyroguardMongoosePlugin(postSchema as unknown as mongoose.Schema, {
+  trackingPlugin(postSchema as unknown as mongoose.Schema, {
     guard: { engine, adapter },
     type: 'post',
   })
@@ -125,7 +125,7 @@ if (!available) {
       return found.map(doc => doc.title).sort()
     })
 
-  describe('kyroguardMongoosePlugin', () => {
+  describe('trackingPlugin', () => {
     beforeEach(async () => {
       await Post.deleteMany({})
       await models.resourceOwner.deleteMany({})

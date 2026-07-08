@@ -16,10 +16,10 @@ function prismaAdapter(client: PrismaClientLike): StorageAdapter
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
 
-const guard = createKyroguard({ adapter: prismaAdapter(new PrismaClient()) })
+const guard = createGuard({ adapter: prismaAdapter(new PrismaClient()) })
 ```
 
 The returned adapter:
@@ -47,30 +47,30 @@ The list is capped at `PRISMA_ID_LIST_CAP` (10,000) ids per filter. Hitting the 
 
 There is no portable "match nothing" predicate in Prisma, so short-circuit `kind: 'none'` to `[]` yourself instead of running the query — see [Filtering lists](/guide/scopes#filtering-lists).
 
-## kyroguardPrismaExtension()
+## trackingExtension()
 
 ```ts
-import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { trackingExtension } from '@kyrobit/kyroguard/prisma'
 
-function kyroguardPrismaExtension(options: KyroguardPrismaExtensionOptions): KyroguardPrismaExtension
+function trackingExtension(options: TrackingExtensionOptions): TrackingExtension
 ```
 
 Client extension that records ownership when your app creates rows, and filters reads on registered models by the grant of the route's guard. Apply it with `client.$extends(...)` and use the extended client in request code.
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `guard` | `Kyroguard` | Your `createKyroguard` instance. |
+| `guard` | `Guard` | Your `createGuard` instance. |
 | `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model StudentGrade` is `'studentGrade'`. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
-import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
+import { trackingExtension } from '@kyrobit/kyroguard/prisma'
 import { guard } from './kyroguard/domains.js'
 
 const client = new PrismaClient()
 
 export const db = client.$extends(
-  kyroguardPrismaExtension({
+  trackingExtension({
     guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),

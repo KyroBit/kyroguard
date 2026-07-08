@@ -10,8 +10,8 @@ import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
-import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../../src/index.js'
-import type { FilterResult, Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName } from '../../src/index.js'
+import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -30,7 +30,7 @@ const makeResources = (): ResourceDefinition[] => [
 
 const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 
-async function seed(rbac: Kyroguard): Promise<void> {
+async function seed(rbac: Guard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
     rbac.admin.assignPolicy(
@@ -57,7 +57,7 @@ function render(filter: FilterResult): unknown {
 }
 
 async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<void> {
-  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+  const rbac = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
   try {
     await seed(rbac)
     const app = Fastify()
@@ -159,7 +159,7 @@ describe('fastify domain.filterFor', () => {
     }))
 
   test('policy on no registered resource → 500 MISCONFIGURED', async () => {
-    const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+    const rbac = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       const app = Fastify()
       await app.register(kyroguardFastify(rbac))

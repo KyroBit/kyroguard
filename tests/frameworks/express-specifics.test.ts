@@ -10,12 +10,12 @@ import express, { Router } from 'express'
 import { createServer } from 'node:http'
 import { kyroguardExpress } from '../../src/frameworks/express/index.js'
 import { PolicyDeniedError, ScopeDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
-import { Policy, createKyroguard } from '../../src/index.js'
+import { Policy, createGuard } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { Express, Request, RequestHandler } from 'express'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { Kyroguard, ResourceDefinition, SubjectInput } from '../../src/index.js'
+import type { Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
@@ -23,8 +23,8 @@ const resources = (): ResourceDefinition[] => [
   { type: 'thing', policies: [new Policy('thing.read')] },
 ]
 
-async function makeGuard(domains: string[] = ['admin']): Promise<Kyroguard> {
-  const rbac = createKyroguard({ adapter: memoryAdapter(), resources: resources() })
+async function makeGuard(domains: string[] = ['admin']): Promise<Guard> {
+  const rbac = createGuard({ adapter: memoryAdapter(), resources: resources() })
   for (const domain of domains) await rbac.sync(resources(), domain)
   return rbac
 }
@@ -95,7 +95,7 @@ beforeEach(() => {
 // ── (a) errorHandler ─────────────────────────────────────────────────────────
 
 describe('errorHandler()', () => {
-  test('renders a KyroguardError as its statusCode + toBody() JSON — ACCESS_DENIED bodies carry reason', async () => {
+  test('renders a GuardError as its statusCode + toBody() JSON — ACCESS_DENIED bodies carry reason', async () => {
     const rbac = await makeGuard()
     try {
       const app = express()
@@ -131,7 +131,7 @@ describe('errorHandler()', () => {
     }
   })
 
-  test('delegates non-KyroguardError to the downstream error handler via next(err)', async () => {
+  test('delegates non-GuardError to the downstream error handler via next(err)', async () => {
     const rbac = await makeGuard()
     try {
       const app = express()
@@ -207,7 +207,7 @@ describe('guard error strategy', () => {
         },
       })
       app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
-      // errorHandler forwards non-KyroguardError → express default terminal handler.
+      // errorHandler forwards non-GuardError → express default terminal handler.
       app.use(integration.errorHandler())
       const served = await serve(app)
       try {

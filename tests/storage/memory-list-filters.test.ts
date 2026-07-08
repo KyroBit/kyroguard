@@ -2,13 +2,13 @@
 /**
  * The memory adapter's listFilters over plain row predicates — the shape that
  * makes engine.filterFor testable without a database — plus assertScopeParity
- * driven end-to-end through createKyroguard against the reference adapter.
+ * driven end-to-end through createGuard against the reference adapter.
  */
 
 import { describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createKyroguard } from '../../src/index.js'
-import type { FilterResult, Kyroguard, StorageAdapter } from '../../src/index.js'
+import { Policy, Scope, createGuard } from '../../src/index.js'
+import type { FilterResult, Guard, StorageAdapter } from '../../src/index.js'
 import { assertScopeParity, memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
@@ -88,9 +88,9 @@ describe('memory adapter listFilters — predicate fragments', () => {
 })
 
 describe('assertScopeParity — filterFor end-to-end on the memory adapter', () => {
-  const buildGuard = async (): Promise<{ adapter: StorageAdapter; rbac: Kyroguard }> => {
+  const buildGuard = async (): Promise<{ adapter: StorageAdapter; rbac: Guard }> => {
     const adapter = memoryAdapter()
-    const rbac = createKyroguard({
+    const rbac = createGuard({
       adapter,
       cache: false,
       resources: [

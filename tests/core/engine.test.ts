@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { KyroguardEngine, mergeGrants } from '../../src/core/engine.js'
+import { GuardEngine, mergeGrants } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
 import {
   PolicyDeniedError,
@@ -17,12 +17,12 @@ import type { PolicyGrant, StorageAdapter } from '../../src/storage/contract.js'
 
 interface Harness {
   adapter: StorageAdapter
-  engine: KyroguardEngine
+  engine: GuardEngine
 }
 
 function makeEngine(overrides?: Partial<EngineOptions>): Harness {
   const adapter = overrides?.adapter ?? memoryAdapter()
-  const engine = new KyroguardEngine({
+  const engine = new GuardEngine({
     adapter,
     scopes: new Map(),
     cache: null,
@@ -468,7 +468,7 @@ describe('authorize() inAuthz suppression', () => {
 
   test('set while the resolver and scope checks run, restored after allow', async () => {
     const observed: Record<string, boolean> = {}
-    let engineRef: KyroguardEngine
+    let engineRef: GuardEngine
     const scopes = new Map([
       [
         'probe',

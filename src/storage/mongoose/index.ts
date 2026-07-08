@@ -9,5 +9,5 @@ export type {
   KyroguardUserPolicyDoc,
   KyroguardUserPolicyGroupDoc,
 } from './models.js'
-export { kyroguardMongoosePlugin } from './plugin.js'
-export type { KyroguardMongoosePluginOptions } from './plugin.js'
+export { trackingPlugin } from './plugin.js'
+export type { TrackingPluginOptions } from './plugin.js'

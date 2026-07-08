@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Guard-driven automatic read filtering through kyroguardPrismaExtension against
+ * Guard-driven automatic read filtering through trackingExtension against
  * the real generated client on SQLite: findMany/findFirst/findUnique/count
  * are intercepted for registered models and keyed on the request's
  * activeFilters plan. A route guarded by the 'owned'-scoped void grant reads
@@ -13,8 +13,8 @@
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createKyroguard } from '../../src/index.js'
-import { prismaAdapter, kyroguardPrismaExtension } from '../../src/storage/prisma/index.js'
+import { Policy, Scope, createGuard } from '../../src/index.js'
+import { prismaAdapter, trackingExtension } from '../../src/storage/prisma/index.js'
 import { makePrismaFixture } from './helpers/prisma-fixture/setup.js'
 import type { Subject } from '../../src/core/types.js'
 
@@ -22,7 +22,7 @@ const fixture = await makePrismaFixture('rbac-prisma-autofilter-')
 const { client } = fixture
 const adapter = prismaAdapter(client)
 
-const rbac = createKyroguard({
+const rbac = createGuard({
   adapter,
   cache: false,
   resources: [
@@ -67,7 +67,7 @@ interface ExtendedReadClient {
 }
 
 const extended = client.$extends(
-  kyroguardPrismaExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
+  trackingExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
 ) as ExtendedReadClient
 
 const cashier: Subject = { id: 'cashier' }

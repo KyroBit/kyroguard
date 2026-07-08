@@ -3,9 +3,9 @@
  * protocol is normative in docs/reference/testing.md ("The makeApp contract").
  */
 
-import { Policy, Scope, createKyroguard, qualifyPolicyName } from '../index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName } from '../index.js'
 import { memoryAdapter } from './memory-adapter.js'
-import type { Kyroguard, ResourceDefinition } from '../index.js'
+import type { Guard, ResourceDefinition } from '../index.js'
 import type { SuiteTestApi } from './adapter-suite.js'
 
 export interface RouteSpec {
@@ -34,7 +34,7 @@ export interface TestApp {
 
 export interface FrameworkSuiteOptions {
   name: string
-  makeApp: (guard: Kyroguard, routes: RouteSpec[]) => Promise<TestApp>
+  makeApp: (guard: Guard, routes: RouteSpec[]) => Promise<TestApp>
   test: SuiteTestApi
 }
 
@@ -50,11 +50,11 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     config: {
       routes: RouteSpec[]
       domains?: string[]
-      seed?: (guard: Kyroguard) => Promise<void>
+      seed?: (guard: Guard) => Promise<void>
     },
-    fn: (app: TestApp, guard: Kyroguard) => Promise<void>,
+    fn: (app: TestApp, guard: Guard) => Promise<void>,
   ): Promise<void> => {
-    const guard = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+    const guard = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       for (const domain of config.domains ?? ['admin']) {
         await guard.sync(makeResources(), domain)
@@ -100,7 +100,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   })
 
   const grant = (
-    guard: Kyroguard,
+    guard: Guard,
     subjectId: string,
     policy: string,
     opts: { domain?: string; tenantId?: string; scope?: string } = {},
@@ -265,7 +265,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('12: KyroguardErrors travel the framework pipeline — x-app-hook present on 200/401/403 (reply-hijack regression)', () =>
+    it('12: GuardErrors travel the framework pipeline — x-app-hook present on 200/401/403 (reply-hijack regression)', () =>
       withApp(
         { routes: [route()], seed: guard => grant(guard, 'u1', 'thing.read') },
         async app => {

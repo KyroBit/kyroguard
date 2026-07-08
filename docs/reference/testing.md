@@ -13,10 +13,10 @@ function memoryAdapter(): StorageAdapter
 A complete in-memory storage adapter. No database needed. It is also the reference implementation the contract suite measures other adapters against.
 
 ```ts
-import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { createGuard, Policy } from '@kyrobit/kyroguard'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
-const guard = createKyroguard({
+const guard = createGuard({
   adapter: memoryAdapter(),
   policies: [new Policy('grades.view')],
 })
@@ -90,10 +90,10 @@ function runFrameworkContractSuite(options: FrameworkSuiteOptions): void
 | Option | Description |
 | --- | --- |
 | `name` | Appears in the `describe` title: `framework integration contract: <name>`. |
-| `makeApp` | `(guard: Kyroguard, routes: RouteSpec[]) => Promise<TestApp>`. Builds a running app from route specs. |
+| `makeApp` | `(guard: Guard, routes: RouteSpec[]) => Promise<TestApp>`. Builds a running app from route specs. |
 | `test` | Your test runner's functions. See [SuiteTestApi](#suitetestapi). |
 
-Black-box HTTP contract for framework integrations. The suite builds its own `Kyroguard` on `memoryAdapter()` and seeds grants per case. Your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases cover 401/403/404 responses, domain and tenant isolation, `is_super`, scoped grants, per-request memoization and cache invalidation.
+Black-box HTTP contract for framework integrations. The suite builds its own `Guard` on `memoryAdapter()` and seeds grants per case. Your `makeApp` only translates `RouteSpec[]` into a running app. The 13 cases cover 401/403/404 responses, domain and tenant isolation, `is_super`, scoped grants, per-request memoization and cache invalidation.
 
 ```ts
 // my-framework.contract.test.ts

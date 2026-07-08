@@ -2,11 +2,11 @@ import { resolve } from 'node:path'
 import { loadModuleExport } from '../load-config.js'
 import { generateTypes } from '../typegen.js'
 import type { DomainTypeInfo } from '../typegen.js'
-import type { DomainConfig, KyroguardConfig } from '../../core/config.js'
+import type { DomainConfig, GuardConfig } from '../../core/config.js'
 import type { Policy, ResourceDefinition } from '../../core/policy.js'
 
 /** Typegen only — never calls the adapter, never opens a database. */
-export async function run(config: KyroguardConfig, baseDir: string): Promise<void> {
+export async function run(config: GuardConfig, baseDir: string): Promise<void> {
   const domains: DomainTypeInfo[] = []
   for (const domain of config.domains) {
     const resources = await loadDomainResources(baseDir, domain)

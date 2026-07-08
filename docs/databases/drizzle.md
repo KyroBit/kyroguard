@@ -58,14 +58,14 @@ Pass your Drizzle db and the scaffolded schema module to `drizzleAdapter`:
 
 ```ts
 // src/kyroguard/instance.ts
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from '../db/kyroguard-schema.js'
 import { rawDb } from '../db/index.js'
 import { resources } from './policies.js'
 
 export const adapter = drizzleAdapter(rawDb, { schema })
-export const guard = createKyroguard({ adapter, resources })
+export const guard = createGuard({ adapter, resources })
 ```
 
 `kyroguard.config.ts` contains the same wiring for the CLI. Finish its TODO so it imports your db. The scaffolded schema file mirrors `@kyrobit/kyroguard/drizzle/schema/pg` (and `mysql`, `sqlite`). Either module works as the `schema` option.

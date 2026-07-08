@@ -226,7 +226,7 @@ describe('loadDomainResources', () => {
     )
 
     const resources = await loadDomainResources(dir, { policies: './policies.ts' })
-    // Same wrapping createKyroguard({ policies }) applies.
+    // Same wrapping createGuard({ policies }) applies.
     expect(resources).toHaveLength(1)
     expect(resources[0]?.type).toBe('policy')
     expect(resources[0]?.policies.map(policy => policy.name)).toEqual([

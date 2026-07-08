@@ -20,7 +20,7 @@ import { kyroguardExpress } from '../../src/frameworks/express/index.js'
 import { runFrameworkContractSuite } from '../../src/testing/index.js'
 import type { Request, RequestHandler, Response } from 'express'
 import type { AddressInfo } from 'node:net'
-import type { Kyroguard, SubjectInput } from '../../src/index.js'
+import type { Guard, SubjectInput } from '../../src/index.js'
 import type { RouteSpec, TestApp } from '../../src/testing/index.js'
 
 /** Per-request getSubject invocation counter, attached by the first middleware. */
@@ -38,7 +38,7 @@ function subjectFromHeaders(req: Request): SubjectInput | null {
   return subject
 }
 
-async function makeApp(rbac: Kyroguard, routes: RouteSpec[]): Promise<TestApp> {
+async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
   const app = express()
 
   // Native Express middleware — MUST run for every response, including the
@@ -129,9 +129,9 @@ runFrameworkContractSuite({
 
 describe('express contract harness extras', () => {
   it('x-app-hook and x-getsubject-calls appear even on unmatched routes (404)', async () => {
-    const { createKyroguard, Policy } = await import('../../src/index.js')
+    const { createGuard, Policy } = await import('../../src/index.js')
     const { memoryAdapter } = await import('../../src/testing/index.js')
-    const rbac = createKyroguard({
+    const rbac = createGuard({
       adapter: memoryAdapter(),
       resources: [{ type: 'thing', policies: [new Policy('thing.read')] }],
     })

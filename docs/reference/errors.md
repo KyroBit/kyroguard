@@ -4,7 +4,7 @@ Every denial is a typed error with a stable `code`.
 
 ```ts
 import {
-  KyroguardError,
+  GuardError,
   UnauthenticatedError,
   PolicyDeniedError,
   ScopeDeniedError,
@@ -65,7 +65,7 @@ Messages are deliberately generic. The `code` field is the stable contract; for 
 
 **When.** The policy is granted, but with a scope, and the scope check failed. It also fires when the route has no `resource` resolver, or the scope name is unknown. Missing wiring denies rather than allowing too much.
 
-**Fix.** Add a `resource` resolver to every route whose policy can carry a scope, and pass your `resources` to `createKyroguard`. For `Scope.owned()`, check the ownership rows with `guard.ownership.isOwner()`. See [Scopes](/guide/scopes) and [Ownership](/guide/ownership).
+**Fix.** Add a `resource` resolver to every route whose policy can carry a scope, and pass your `resources` to `createGuard`. For `Scope.owned()`, check the ownership rows with `guard.ownership.isOwner()`. See [Scopes](/guide/scopes) and [Ownership](/guide/ownership).
 
 ## NOT_FOUND
 

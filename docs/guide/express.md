@@ -5,7 +5,7 @@ Wire `@kyrobit/kyroguard` into Express 4 or 5. This is a complete setup:
 ```ts
 // app.ts
 import express from 'express'
-import { createKyroguard } from '@kyrobit/kyroguard'
+import { createGuard } from '@kyrobit/kyroguard'
 import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 import * as schema from './db/kyroguard-schema.js' // written by `kyroguard init`
@@ -13,7 +13,7 @@ import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'
 
-const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }), resources })
+const guard = createGuard({ adapter: drizzleAdapter(db, { schema }), resources })
 const { context, domain, errorHandler } = kyroguardExpress(guard)
 
 const app = express()

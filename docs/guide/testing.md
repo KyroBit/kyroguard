@@ -8,7 +8,7 @@ A full test file for a guarded route:
 // grades.test.ts
 import { describe, expect, it } from 'vitest'
 import Fastify from 'fastify'
-import { createKyroguard, Policy } from '@kyrobit/kyroguard'
+import { createGuard, Policy } from '@kyrobit/kyroguard'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
@@ -18,7 +18,7 @@ const groups = {
 }
 
 async function buildApp() {
-  const guard = createKyroguard({ adapter: memoryAdapter(), policies, groups })
+  const guard = createGuard({ adapter: memoryAdapter(), policies, groups })
   await guard.sync() // loads the policies, seeds the groups
 
   const app = Fastify()
@@ -62,7 +62,7 @@ await teachers.assignGroup('u1', 'teacher')
 await teachers.assignPolicy('u1', 'grades.update', { scope: 'owned' })
 ```
 
-`guard.sync()` must run first. It loads the policies and seeds the groups you gave `createKyroguard`. See [Assigning access](/guide/assigning-access).
+`guard.sync()` must run first. It loads the policies and seeds the groups you gave `createGuard`. See [Assigning access](/guide/assigning-access).
 
 ## Testing your own adapter
 

@@ -7,22 +7,20 @@
  *
  *   await app.register(kyroguardFastify(guard))
  *
- * Guards throw typed KyroguardErrors through Fastify's own error pipeline:
+ * Guards throw typed GuardErrors through Fastify's own error pipeline:
  * 401 unauthenticated, 403 policy/scope denied, 404 resource not found —
  * your error handler and onSend hooks keep working.
  */
-import { createKyroguard } from '@kyrobit/kyroguard'
-import { kyroguardFastifyDomains } from '@kyrobit/kyroguard/fastify'
+import { createGuard } from '@kyrobit/kyroguard'
+import { createDomain } from '@kyrobit/kyroguard/fastify'
 {{ADAPTER_IMPORTS}}
 import { resources } from './policies.js'
 
 {{ADAPTER_CREATE}}
 
-export const guard = createKyroguard({ adapter, resources })
+export const guard = createGuard({ adapter, resources })
 
-const { domain } = kyroguardFastifyDomains(guard)
-
-export const {{DOMAIN_EXPORT}} = domain('{{DOMAIN}}', {
+export const {{DOMAIN_EXPORT}} = createDomain(guard, '{{DOMAIN}}', {
   // Resolved lazily at guard time, memoized per request per domain.
   // Return null when the request is unauthenticated → 401.
   getSubject: async request => {
