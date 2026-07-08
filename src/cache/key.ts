@@ -2,7 +2,7 @@ import type { PolicyCacheKey } from './types.js'
 
 // Bump the version segment whenever the cached PolicyMap value shape changes —
 // a stale-format entry must never be readable (v2: values became scope arrays).
-const PREFIX = 'rbac:v2'
+const PREFIX = 'kyroguard:v2'
 
 const enc = encodeURIComponent
 

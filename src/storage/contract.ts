@@ -61,7 +61,7 @@
  *     to run migrations.
  * S19 Policies carry their `domain` ('' sentinel) as a stored column, set at
  *     sync time. Orphan cleanup filters on domain equality — never on
- *     name-shape heuristics (regression: v0 counted dots in policy names to
+ *     name-shape heuristics (regression: an early draft counted dots in policy names to
  *     guess the domain, which could delete another domain's policies).
  * S20 getSubjectPolicies excludes group grants from groups whose isActive is
  *     false (emergency kill-switch for a whole role). Direct grants are
@@ -150,8 +150,6 @@ export interface ListFilters {
 export interface AdapterCapabilities {
   /** trackedDb (Drizzle) / kyroguardMongoosePlugin (Mongoose) available. */
   autoOwnershipTracking: boolean
-  /** @deprecated Superseded by listFiltering. */
-  queryScoping: boolean
   /** listFilters implemented for this backend. Absent means false. */
   listFiltering?: boolean
 }
@@ -179,7 +177,12 @@ export interface StorageAdapter {
 
   /** Optional DDL/index hook, run by `kyroguard sync` before writing (S17). */
   ensureSchema?(): Promise<void>
-  /** Release connections. Called by the CLI after sync. */
+  /**
+   * Release the connections the adapter holds so the process can exit.
+   * The CLI calls this after every db-touching command; long-lived apps call
+   * it on shutdown. Closing a client shared with the rest of the app is the
+   * integrator's call — nothing in the library invokes close() at runtime.
+   */
   close?(): Promise<void>
 
   upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void>

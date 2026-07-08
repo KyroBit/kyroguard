@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { backfillGroupDependencies, syncPolicies } from '../../core/sync.js'
 import { seedGroups } from '../../core/seed-groups.js'
+import { closeAdapter } from './close-adapter.js'
 import { loadModuleExport } from '../load-config.js'
 import { generateTypes } from '../typegen.js'
 import { loadDomainResources } from './generate.js'
@@ -44,12 +45,12 @@ export async function run(config: KyroguardConfig, baseDir: string): Promise<voi
     console.error(`[kyroguard] sync failed: ${messageOf(error)}`)
     if (isMissingTableError(error)) {
       console.error(
-        '[kyroguard] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).',
+        '[kyroguard] The kyroguard tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).',
       )
     }
     process.exitCode = 1
   } finally {
-    await adapter?.close?.().catch(() => {})
+    await closeAdapter(adapter)
   }
 }
 

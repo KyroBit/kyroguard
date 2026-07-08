@@ -53,7 +53,7 @@ function redisBus(
 | --- | --- |
 | `publisher` | Redis client used to publish. Any ioredis-compatible client works. |
 | `subscriber` | Second Redis client used to subscribe. |
-| `options.channel` | Pub/sub channel name. Default `'rbac:invalidate'`. |
+| `options.channel` | Pub/sub channel name. Default `'kyroguard:invalidate'`. |
 
 Cross-instance invalidation over Redis pub/sub. The module never imports a Redis driver — you pass the clients in.
 
@@ -153,4 +153,4 @@ interface CacheEvent {
 type CacheHook = (event: CacheEvent) => void
 ```
 
-Emitted through `onCacheEvent` on [`createKyroguard()`](/reference/core-api#createrbac). Errors thrown by the hook are swallowed. Observability never affects authorization.
+Emitted through `onCacheEvent` on [`createKyroguard()`](/reference/core-api#createkyroguard). Errors thrown by the hook are swallowed. Observability never affects authorization.

@@ -7,7 +7,7 @@ The example: the grades API of a school.
 ## 1. Install
 
 ```sh
-mkdir rbac-demo && cd rbac-demo
+mkdir kyroguard-demo && cd kyroguard-demo
 npm init -y && npm pkg set type=module
 npm install @kyrobit/kyroguard fastify
 ```

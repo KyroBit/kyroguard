@@ -8,7 +8,7 @@ kyroguard <command> [options]
 
 | Command | What it does |
 | --- | --- |
-| [`init`](#kyroguard-init) | Scaffold config, starter policies, groups and wiring |
+| [`init`](#kyroguard-init) | Scaffold config, starter policies, groups and domains |
 | [`sync`](#kyroguard-sync) | Push policies and groups to the database, then write `kyroguard.d.ts` |
 | [`generate`](#kyroguard-generate) | Write `kyroguard.d.ts` only, no database needed |
 | [`status`](#kyroguard-status) | Show adapter id, capabilities and stored counts |
@@ -35,19 +35,19 @@ $ kyroguard init --yes
   dialect:   pg
 
   wrote   kyroguard.config.ts
-  wrote   src/rbac/policies.ts
-  wrote   src/rbac/groups.ts
-  wrote   src/rbac/wiring.ts
-  wrote   src/db/rbac-schema.ts
+  wrote   src/kyroguard/policies.ts
+  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/domains.ts
+  wrote   src/db/kyroguard-schema.ts
 
 [kyroguard] Next steps:
-  1. Add src/db/rbac-schema.ts to your drizzle config schema paths.
+  1. Add src/db/kyroguard-schema.ts to your drizzle config schema paths.
   2. Run your migrations (drizzle-kit generate && drizzle-kit migrate, or push).
-  3. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.
+  3. Finish the TODOs in kyroguard.config.ts and src/kyroguard/domains.ts.
   4. Run `kyroguard sync`.
 ```
 
-With Prisma it writes `prisma/rbac.prisma` instead of the Drizzle schema file. With Mongoose there is no schema file at all. See the setup pages: [Drizzle](/databases/drizzle), [Prisma](/databases/prisma), [MongoDB](/databases/mongodb).
+With Prisma it writes `prisma/kyroguard.prisma` instead of the Drizzle schema file. With Mongoose there is no schema file at all. See the setup pages: [Drizzle](/databases/drizzle), [Prisma](/databases/prisma), [MongoDB](/databases/mongodb).
 
 ## kyroguard sync
 
@@ -74,8 +74,8 @@ $ kyroguard sync
 
 ```
 $ kyroguard sync
-[kyroguard] sync failed: relation "rbac_policies" does not exist
-[kyroguard] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
+[kyroguard] sync failed: relation "kyroguard_policies" does not exist
+[kyroguard] The kyroguard tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
 ```
 :::
 
@@ -115,7 +115,7 @@ Connects through your config's adapter and prints diagnostics. Use it to confirm
 ```
 $ kyroguard status
 adapter:      drizzle-pg
-capabilities: autoOwnershipTracking=true queryScoping=true
+capabilities: autoOwnershipTracking=true listFiltering=true
 policies:     4
 groups:       2
 ```
@@ -138,4 +138,4 @@ Adapter ids: `drizzle-pg`, `drizzle-mysql`, `drizzle-sqlite`, `prisma`, `mongoos
 | `0` | Command completed. |
 | `1` | Unknown command or flag, no command given, config missing or invalid, or any command failure. |
 
-Failures print one `[kyroguard] ...` line to stderr. `sync` and `status` close the database connection before exiting, even on failure.
+Failures print one `[kyroguard] ...` line to stderr. `sync` and `status` call the adapter's `close()` before exiting, even on failure. The CLI then terminates explicitly: your config and policy modules run inside the CLI process and may hold handles it cannot see (a shared db client, a poller) — those must never keep `kyroguard sync` from exiting.

@@ -60,14 +60,14 @@ interface ExtendedReadClient {
     count(args?: unknown): Promise<number>
     create(args: unknown): Promise<PostRow>
   }
-  rbacResourceOwner: {
+  kyroguardResourceOwner: {
     findMany(args?: unknown): Promise<unknown[]>
     count(args?: unknown): Promise<number>
   }
 }
 
 const extended = client.$extends(
-  kyroguardPrismaExtension({ rbac, resources: [{ type: 'post', model: 'post' }] }),
+  kyroguardPrismaExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
 ) as ExtendedReadClient
 
 const cashier: Subject = { id: 'cashier' }
@@ -108,7 +108,7 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  await client.rbacResourceOwner.deleteMany({})
+  await client.kyroguardResourceOwner.deleteMany({})
   await client.post.deleteMany({})
   for (const [id, title] of [
     ['p1', 'one'],
@@ -320,10 +320,10 @@ describe('suppression — unguarded requests and the isInAuthz guard', () => {
 
   test('unregistered models are never filtered or short-circuited', async () => {
     expect(
-      await asGuarded(cashier, 'posts.void', () => extended.rbacResourceOwner.findMany(), p1),
+      await asGuarded(cashier, 'posts.void', () => extended.kyroguardResourceOwner.findMany(), p1),
     ).toHaveLength(3)
     expect(
-      await asGuarded(stranger, 'posts.flag', () => extended.rbacResourceOwner.count()),
+      await asGuarded(stranger, 'posts.flag', () => extended.kyroguardResourceOwner.count()),
     ).toBe(3)
   })
 })

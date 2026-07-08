@@ -12,7 +12,7 @@ function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOptions): 
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createrbac). |
+| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
 | `options.formatError` | `(error: KyroguardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 The plugin opens the request context on every request and decorates the app with `app.kyroguard`. Register it once. It is visible to the whole app, not only the registration scope.
@@ -20,7 +20,7 @@ The plugin opens the request context on every request and decorates the app with
 ```ts
 import Fastify from 'fastify'
 import { kyroguardFastify } from '@kyrobit/kyroguard/fastify'
-import { guard } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
 
 const app = Fastify()
 await app.register(kyroguardFastify(guard))
@@ -36,6 +36,49 @@ app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async 
   return { ok: true }
 })
 ```
+
+## kyroguardFastifyDomains()
+
+```ts
+import { kyroguardFastifyDomains } from '@kyrobit/kyroguard/fastify'
+
+function kyroguardFastifyDomains(
+  guard: Kyroguard,
+  options?: KyroguardFastifyOptions,
+): Pick<FastifyKyroguardDecoration, 'domain'>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
+| `options.formatError` | `(error: KyroguardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
+
+**Returns** `{ domain }` — the same factory as [`app.kyroguard.domain`](#app-kyroguard), hook-free. It needs no app instance, so domains become plain values a module exports and any route file imports. Use it when route files should import domains directly; use `app.kyroguard.domain` when the app is already in hand. Both produce identical [domain instances](#domain-instance).
+
+This is the pattern `kyroguard init` scaffolds in `src/kyroguard/domains.ts`:
+
+```ts
+// src/kyroguard/domains.ts
+import { createKyroguard } from '@kyrobit/kyroguard'
+import { kyroguardFastifyDomains } from '@kyrobit/kyroguard/fastify'
+
+export const guard = createKyroguard({ adapter, resources })
+
+const { domain } = kyroguardFastifyDomains(guard)
+
+export const admin = domain('admin', { getSubject })
+```
+
+```ts
+// routes/posts.ts
+import { admin } from '../kyroguard/domains.js'
+
+app.get('/posts/:id', { preHandler: admin.requirePolicy('posts.read') }, async () => {
+  // ...
+})
+```
+
+The plugin must still be registered once in your bootstrap — `await app.register(kyroguardFastify(guard))` opens the per-request context the guards run in. Without it, every guard throws `MisconfiguredError` (500).
 
 ## app.kyroguard
 

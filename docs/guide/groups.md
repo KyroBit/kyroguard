@@ -3,7 +3,7 @@
 Groups are job titles — what other systems call roles. Define them in one file:
 
 ```ts
-// src/rbac/groups.ts
+// src/kyroguard/groups.ts
 import type { GroupsDefinition } from '@kyrobit/kyroguard'
 
 export const groups: GroupsDefinition = {

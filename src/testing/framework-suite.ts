@@ -224,7 +224,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('10: two domains on one app resolve independent subjects (v0 forDomain regression)', () =>
+    it('10: two domains on one app resolve independent subjects (per-domain subject regression)', () =>
       withApp(
         {
           domains: ['admin', 'branch'],
@@ -265,7 +265,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('12: KyroguardErrors travel the framework pipeline — x-app-hook present on 200/401/403 (v0 reply-hijack regression)', () =>
+    it('12: KyroguardErrors travel the framework pipeline — x-app-hook present on 200/401/403 (reply-hijack regression)', () =>
       withApp(
         { routes: [route()], seed: guard => grant(guard, 'u1', 'thing.read') },
         async app => {

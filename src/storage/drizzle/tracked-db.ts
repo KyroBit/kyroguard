@@ -8,7 +8,7 @@ import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 import type { DrizzleStorageAdapter } from './adapter.js'
 
 export interface TrackedDbOptions {
-  rbac: {
+  guard: {
     engine: KyroguardEngine
     adapter: StorageAdapter
   }
@@ -288,8 +288,8 @@ export function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T
     if (resource.table != null) tableMap.set(resource.table, resource)
   }
   return makeDbProxy(db, {
-    engine: options.rbac.engine,
-    adapter: options.rbac.adapter,
+    engine: options.guard.engine,
+    adapter: options.guard.adapter,
     tableMap,
     strictTracking: options.strictTracking ?? 'warn',
     warned: new Set<string>(),

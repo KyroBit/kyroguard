@@ -7,15 +7,15 @@ export default defineConfig({
   adapter: async () => {
     const { PrismaClient } = await import('@prisma/client')
     const { prismaAdapter } = await import('@kyrobit/kyroguard/prisma')
-    // Prisma migrations own DDL: include the rbac models (prisma/rbac.prisma)
+    // Prisma migrations own DDL: include the kyroguard models (prisma/kyroguard.prisma)
     // in your schema and run `prisma migrate dev` before `kyroguard sync`.
     return prismaAdapter(new PrismaClient())
   },
   domains: [
     {
       name: '{{DOMAIN}}',
-      policies: './src/rbac/policies.ts',
-      groups: './src/rbac/groups.ts',
+      policies: './src/kyroguard/policies.ts',
+      groups: './src/kyroguard/groups.ts',
     },
   ],
   typegen: { output: './kyroguard.d.ts' },

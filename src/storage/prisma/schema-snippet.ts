@@ -10,9 +10,9 @@ export const prismaSchemaSnippet = `// ── @kyrobit/kyroguard models ──�
 // names, snake_case columns, defaults and unique constraints.
 // domain / tenantId use the '' sentinel (never NULL).
 
-model RbacPolicy {
+model KyroguardPolicy {
   id           String   @id @default(cuid())
-  name         String   @unique(map: "rbac_policies_name_unique")
+  name         String   @unique(map: "kyroguard_policies_name_unique")
   domain       String   @default("")
   label        String
   scopeOptions Json     @default("[]") @map("scope_options")
@@ -20,15 +20,15 @@ model RbacPolicy {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @map("updated_at")
 
-  groupEntries    RbacPolicyGroupPolicy[]
-  userAssignments RbacUserPolicy[]
+  groupEntries    KyroguardPolicyGroupPolicy[]
+  userAssignments KyroguardUserPolicy[]
 
-  @@map("rbac_policies")
+  @@map("kyroguard_policies")
 }
 
-model RbacPolicyGroup {
+model KyroguardPolicyGroup {
   id          String   @id @default(cuid())
-  name        String   @unique(map: "rbac_policy_groups_name_unique")
+  name        String   @unique(map: "kyroguard_policy_groups_name_unique")
   label       String
   description String?
   isSystem    Boolean  @default(false) @map("is_system")
@@ -36,27 +36,27 @@ model RbacPolicyGroup {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
-  entries         RbacPolicyGroupPolicy[]
-  userAssignments RbacUserPolicyGroup[]
+  entries         KyroguardPolicyGroupPolicy[]
+  userAssignments KyroguardUserPolicyGroup[]
 
-  @@map("rbac_policy_groups")
+  @@map("kyroguard_policy_groups")
 }
 
-model RbacPolicyGroupPolicy {
+model KyroguardPolicyGroupPolicy {
   id            String   @id @default(cuid())
   policyGroupId String   @map("policy_group_id")
   policyId      String   @map("policy_id")
   scope         String?
   createdAt     DateTime @default(now()) @map("created_at")
 
-  policyGroup RbacPolicyGroup @relation(fields: [policyGroupId], references: [id])
-  policy      RbacPolicy      @relation(fields: [policyId], references: [id])
+  policyGroup KyroguardPolicyGroup @relation(fields: [policyGroupId], references: [id])
+  policy      KyroguardPolicy      @relation(fields: [policyId], references: [id])
 
-  @@unique([policyGroupId, policyId], map: "rbac_pgp_group_policy_uq")
-  @@map("rbac_policy_group_policies")
+  @@unique([policyGroupId, policyId], map: "kyroguard_pgp_group_policy_uq")
+  @@map("kyroguard_policy_group_policies")
 }
 
-model RbacUserPolicyGroup {
+model KyroguardUserPolicyGroup {
   id            String   @id @default(cuid())
   subjectId     String   @map("subject_id")
   policyGroupId String   @map("policy_group_id")
@@ -64,14 +64,14 @@ model RbacUserPolicyGroup {
   tenantId      String   @default("") @map("tenant_id")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  policyGroup RbacPolicyGroup @relation(fields: [policyGroupId], references: [id])
+  policyGroup KyroguardPolicyGroup @relation(fields: [policyGroupId], references: [id])
 
-  @@unique([subjectId, policyGroupId, domain, tenantId], map: "rbac_upg_tuple_uq")
-  @@index([subjectId], map: "rbac_upg_subject_idx")
-  @@map("rbac_user_policy_groups")
+  @@unique([subjectId, policyGroupId, domain, tenantId], map: "kyroguard_upg_tuple_uq")
+  @@index([subjectId], map: "kyroguard_upg_subject_idx")
+  @@map("kyroguard_user_policy_groups")
 }
 
-model RbacUserPolicy {
+model KyroguardUserPolicy {
   id        String   @id @default(cuid())
   subjectId String   @map("subject_id")
   policyId  String   @map("policy_id")
@@ -80,14 +80,14 @@ model RbacUserPolicy {
   scope     String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  policy RbacPolicy @relation(fields: [policyId], references: [id])
+  policy KyroguardPolicy @relation(fields: [policyId], references: [id])
 
-  @@unique([subjectId, policyId, domain, tenantId], map: "rbac_up_tuple_uq")
-  @@index([subjectId], map: "rbac_up_subject_idx")
-  @@map("rbac_user_policies")
+  @@unique([subjectId, policyId, domain, tenantId], map: "kyroguard_up_tuple_uq")
+  @@index([subjectId], map: "kyroguard_up_subject_idx")
+  @@map("kyroguard_user_policies")
 }
 
-model RbacResourceOwner {
+model KyroguardResourceOwner {
   id           String   @id @default(cuid())
   resourceType String   @map("resource_type")
   resourceId   String   @map("resource_id")
@@ -97,9 +97,9 @@ model RbacResourceOwner {
   tenantId     String   @default("") @map("tenant_id")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  @@unique([resourceType, resourceId, ownerId, relation], map: "rbac_ro_tuple_uq")
-  @@index([resourceType, resourceId], map: "rbac_ro_resource_idx")
-  @@index([resourceType, ownerId], map: "rbac_ro_owner_idx")
-  @@map("rbac_resource_owners")
+  @@unique([resourceType, resourceId, ownerId, relation], map: "kyroguard_ro_tuple_uq")
+  @@index([resourceType, resourceId], map: "kyroguard_ro_resource_idx")
+  @@index([resourceType, ownerId], map: "kyroguard_ro_owner_idx")
+  @@map("kyroguard_resource_owners")
 }
 `

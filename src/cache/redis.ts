@@ -20,7 +20,7 @@ export interface RedisBusOptions {
   channel?: string
 }
 
-const DEFAULT_CHANNEL = 'rbac:invalidate'
+const DEFAULT_CHANNEL = 'kyroguard:invalidate'
 
 function parseEvent(message: string): InvalidationEvent | null {
   let parsed: unknown

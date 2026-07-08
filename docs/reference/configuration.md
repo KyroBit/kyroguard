@@ -11,7 +11,7 @@ export default defineConfig({
   // `kyroguard generate` never opens a database connection.
   adapter: async () => {
     const { drizzleAdapter } = await import('@kyrobit/kyroguard/drizzle')
-    const schema = await import('./src/db/rbac-schema.js')
+    const schema = await import('./src/db/kyroguard-schema.js')
     const { db } = await import('./src/db/index.js')
     return drizzleAdapter(db, { schema })
   },
@@ -19,8 +19,8 @@ export default defineConfig({
   domains: [
     {
       name: 'teachers', // the teacher portal
-      policies: './src/rbac/policies.ts',
-      groups: './src/rbac/groups.ts',
+      policies: './src/kyroguard/policies.ts',
+      groups: './src/kyroguard/groups.ts',
     },
   ],
   // Where `sync` and `generate` write the type declarations.
@@ -53,7 +53,7 @@ Paths resolve relative to the config file, not the working directory. `kyroguard
 The `policies` module exports a `ResourceDefinition[]` as `resources`, `policies`, or the default export. The `groups` module exports a `GroupsDefinition` as `groups` or the default export.
 
 ```ts
-// src/rbac/policies.ts
+// src/kyroguard/policies.ts
 import { Policy, Scope } from '@kyrobit/kyroguard'
 import type { ResourceDefinition } from '@kyrobit/kyroguard'
 
@@ -71,7 +71,7 @@ export const resources: ResourceDefinition[] = [
 ```
 
 ```ts
-// src/rbac/groups.ts
+// src/kyroguard/groups.ts
 import type { GroupsDefinition } from '@kyrobit/kyroguard'
 
 export const groups: GroupsDefinition = {

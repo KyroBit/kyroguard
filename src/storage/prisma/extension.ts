@@ -12,7 +12,7 @@ export interface KyroguardPrismaResourceRegistration {
 }
 
 export interface KyroguardPrismaExtensionOptions {
-  rbac: {
+  guard: {
     engine: KyroguardEngine
     adapter: StorageAdapter
   }
@@ -45,7 +45,7 @@ function delegateKey(model: string): string {
 }
 
 // findUnique's WhereUniqueInput requires the unique selector at the TOP level,
-// so the rbac fragment may only ride AND — never wrap the whole where.
+// so the kyroguard fragment may only ride AND — never wrap the whole where.
 function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Record<string, unknown> {
   const existing = where['AND']
   const conditions =
@@ -65,7 +65,7 @@ function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Re
  * are documented in docs/reference/prisma.md.
  */
 export function kyroguardPrismaExtension(options: KyroguardPrismaExtensionOptions): KyroguardPrismaExtension {
-  const { engine, adapter } = options.rbac
+  const { engine, adapter } = options.guard
 
   const extractId = (value: unknown): string | null => {
     if (typeof value !== 'object' || value === null) return null

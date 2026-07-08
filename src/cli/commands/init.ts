@@ -27,9 +27,41 @@ type PlannedFile =
   | { dest: string; content: string }
 
 const CONFIG_TEMPLATES: Record<Answers['orm'], string> = {
-  drizzle: 'rbac-config-drizzle.ts.tpl',
-  prisma: 'rbac-config-prisma.ts.tpl',
-  mongoose: 'rbac-config-mongoose.ts.tpl',
+  drizzle: 'kyroguard-config-drizzle.ts.tpl',
+  prisma: 'kyroguard-config-prisma.ts.tpl',
+  mongoose: 'kyroguard-config-mongoose.ts.tpl',
+}
+
+/**
+ * domains.ts adapter wiring per ORM. Construction mirrors kyroguard.config.ts,
+ * but reuses the app's own client (the TODO import) instead of opening one.
+ */
+const ADAPTER_WIRING: Record<Answers['orm'], { imports: string; create: string }> = {
+  drizzle: {
+    imports: [
+      "import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'",
+      "import * as schema from '../db/kyroguard-schema.js'",
+      "// TODO: import your app's drizzle instance:",
+      "import { db } from '../db/index.js'",
+    ].join('\n'),
+    create: 'const adapter = drizzleAdapter(db, { schema })',
+  },
+  prisma: {
+    imports: [
+      "import { prismaAdapter } from '@kyrobit/kyroguard/prisma'",
+      "// TODO: import your app's PrismaClient instance:",
+      "import { prisma } from '../db/client.js'",
+    ].join('\n'),
+    create: 'const adapter = prismaAdapter(prisma)',
+  },
+  mongoose: {
+    imports: [
+      "import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'",
+      "// TODO: import your app's mongoose connection:",
+      "import { connection } from '../db/connection.js'",
+    ].join('\n'),
+    create: 'const adapter = mongooseAdapter(connection)',
+  },
 }
 
 const PRISMA_SNIPPET_HEADER = `// @kyrobit/kyroguard tables — scaffolded by \`kyroguard init\`.
@@ -56,21 +88,27 @@ export async function run(options: InitOptions): Promise<void> {
 
   const substitutions: Record<string, string> = {
     '{{DOMAIN}}': answers.domain,
+    '{{DOMAIN_EXPORT}}': toIdentifier(answers.domain),
     '{{DIALECT}}': answers.dialect,
+    '{{ADAPTER_IMPORTS}}': ADAPTER_WIRING[answers.orm].imports,
+    '{{ADAPTER_CREATE}}': ADAPTER_WIRING[answers.orm].create,
   }
 
   const plan: PlannedFile[] = [
     { dest: 'kyroguard.config.ts', template: CONFIG_TEMPLATES[answers.orm] },
-    { dest: join('src', 'rbac', 'policies.ts'), template: 'policies-starter.ts.tpl' },
-    { dest: join('src', 'rbac', 'groups.ts'), template: 'groups-starter.ts.tpl' },
+    { dest: join('src', 'kyroguard', 'policies.ts'), template: 'policies-starter.ts.tpl' },
+    { dest: join('src', 'kyroguard', 'groups.ts'), template: 'groups-starter.ts.tpl' },
     {
-      dest: join('src', 'rbac', 'wiring.ts'),
-      template: answers.framework === 'express' ? 'rbac-wiring-express.ts.tpl' : 'rbac-wiring-fastify.ts.tpl',
+      dest: join('src', 'kyroguard', 'domains.ts'),
+      template:
+        answers.framework === 'express'
+          ? 'kyroguard-domains-express.ts.tpl'
+          : 'kyroguard-domains-fastify.ts.tpl',
     },
   ]
   if (answers.orm === 'drizzle') {
     plan.push({
-      dest: join('src', 'db', 'rbac-schema.ts'),
+      dest: join('src', 'db', 'kyroguard-schema.ts'),
       template: `schema-drizzle-${answers.dialect}.ts.tpl`,
     })
   }
@@ -106,27 +144,36 @@ export async function run(options: InitOptions): Promise<void> {
   console.log('')
   console.log('[kyroguard] Next steps:')
   if (answers.orm === 'drizzle') {
-    console.log('  1. Add src/db/rbac-schema.ts to your drizzle config schema paths.')
+    console.log('  1. Add src/db/kyroguard-schema.ts to your drizzle config schema paths.')
     console.log('  2. Run your migrations (drizzle-kit generate && drizzle-kit migrate, or push).')
-    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/kyroguard/domains.ts.')
     console.log('  4. Run `kyroguard sync`.')
   } else if (prismaSchemaDest !== null) {
     console.log(`  1. Include ${prismaSchemaDest} in your Prisma schema — enable multi-file`)
     console.log('     schemas (prismaSchemaFolder) or paste its models into schema.prisma.')
     console.log('  2. Run your migrations (npx prisma migrate dev, or prisma db push).')
-    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  3. Finish the TODOs in kyroguard.config.ts and src/kyroguard/domains.ts.')
     console.log('  4. Run `kyroguard sync`.')
   } else {
-    console.log('  1. Finish the TODOs in kyroguard.config.ts and src/rbac/wiring.ts.')
+    console.log('  1. Finish the TODOs in kyroguard.config.ts and src/kyroguard/domains.ts.')
     console.log('  2. Run `kyroguard sync` (creates the MongoDB indexes via ensureSchema).')
   }
 }
 
 function prismaSnippetDest(cwd: string): string {
   if (!existsSync(join(cwd, 'prisma')) && existsSync(join(cwd, 'schema.prisma'))) {
-    return 'rbac.prisma'
+    return 'kyroguard.prisma'
   }
-  return join('prisma', 'rbac.prisma')
+  return join('prisma', 'kyroguard.prisma')
+}
+
+/** Domain name as a safe export identifier: 'my-app' → 'myApp', '2fa' → '_2fa'. */
+function toIdentifier(name: string): string {
+  const camel = name.replace(/[^\p{L}\p{N}$_]+(.)?/gu, (_, next: string | undefined) =>
+    next ? next.toUpperCase() : '',
+  )
+  if (camel === '') return 'domain'
+  return /^[\p{L}$_]/u.test(camel) ? camel : `_${camel}`
 }
 
 function printDetected(detected: DetectedStack): void {

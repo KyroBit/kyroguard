@@ -1,7 +1,7 @@
 import { Schema } from 'mongoose'
 import type { Connection, Model, Types } from 'mongoose'
 
-export interface RbacPolicyDoc {
+export interface KyroguardPolicyDoc {
   name: string
   domain: string
   label: string
@@ -9,7 +9,7 @@ export interface RbacPolicyDoc {
   dependsOn: string[]
 }
 
-export interface RbacPolicyGroupDoc {
+export interface KyroguardPolicyGroupDoc {
   name: string
   label: string
   description: string
@@ -17,20 +17,20 @@ export interface RbacPolicyGroupDoc {
   isActive: boolean
 }
 
-export interface RbacPolicyGroupPolicyDoc {
+export interface KyroguardPolicyGroupPolicyDoc {
   policyGroupId: Types.ObjectId
   policyId: Types.ObjectId
   scope: string | null
 }
 
-export interface RbacUserPolicyGroupDoc {
+export interface KyroguardUserPolicyGroupDoc {
   subjectId: string
   policyGroupId: Types.ObjectId
   domain: string
   tenantId: string
 }
 
-export interface RbacUserPolicyDoc {
+export interface KyroguardUserPolicyDoc {
   subjectId: string
   policyId: Types.ObjectId
   domain: string
@@ -38,7 +38,7 @@ export interface RbacUserPolicyDoc {
   scope: string | null
 }
 
-export interface RbacResourceOwnerDoc {
+export interface KyroguardResourceOwnerDoc {
   resourceType: string
   resourceId: string
   ownerId: string
@@ -47,16 +47,16 @@ export interface RbacResourceOwnerDoc {
   tenantId: string
 }
 
-export interface RbacModels {
-  policy: Model<RbacPolicyDoc>
-  policyGroup: Model<RbacPolicyGroupDoc>
-  policyGroupPolicy: Model<RbacPolicyGroupPolicyDoc>
-  userPolicyGroup: Model<RbacUserPolicyGroupDoc>
-  userPolicy: Model<RbacUserPolicyDoc>
-  resourceOwner: Model<RbacResourceOwnerDoc>
+export interface KyroguardModels {
+  policy: Model<KyroguardPolicyDoc>
+  policyGroup: Model<KyroguardPolicyGroupDoc>
+  policyGroupPolicy: Model<KyroguardPolicyGroupPolicyDoc>
+  userPolicyGroup: Model<KyroguardUserPolicyGroupDoc>
+  userPolicy: Model<KyroguardUserPolicyDoc>
+  resourceOwner: Model<KyroguardResourceOwnerDoc>
 }
 
-const policySchema = new Schema<RbacPolicyDoc>(
+const policySchema = new Schema<KyroguardPolicyDoc>(
   {
     name: { type: String, required: true, unique: true },
     domain: { type: String, required: true, default: '' },
@@ -67,7 +67,7 @@ const policySchema = new Schema<RbacPolicyDoc>(
   { timestamps: true },
 )
 
-const policyGroupSchema = new Schema<RbacPolicyGroupDoc>(
+const policyGroupSchema = new Schema<KyroguardPolicyGroupDoc>(
   {
     name: { type: String, required: true, unique: true },
     label: { type: String, required: true, default: '' },
@@ -78,14 +78,14 @@ const policyGroupSchema = new Schema<RbacPolicyGroupDoc>(
   { timestamps: true },
 )
 
-const policyGroupPolicySchema = new Schema<RbacPolicyGroupPolicyDoc>({
+const policyGroupPolicySchema = new Schema<KyroguardPolicyGroupPolicyDoc>({
   policyGroupId: { type: Schema.Types.ObjectId, required: true },
   policyId: { type: Schema.Types.ObjectId, required: true },
   scope: { type: String, default: null },
 })
 policyGroupPolicySchema.index({ policyGroupId: 1, policyId: 1 }, { unique: true })
 
-const userPolicyGroupSchema = new Schema<RbacUserPolicyGroupDoc>({
+const userPolicyGroupSchema = new Schema<KyroguardUserPolicyGroupDoc>({
   subjectId: { type: String, required: true },
   policyGroupId: { type: Schema.Types.ObjectId, required: true },
   domain: { type: String, required: true, default: '' },
@@ -97,7 +97,7 @@ userPolicyGroupSchema.index(
 )
 userPolicyGroupSchema.index({ subjectId: 1 })
 
-const userPolicySchema = new Schema<RbacUserPolicyDoc>({
+const userPolicySchema = new Schema<KyroguardUserPolicyDoc>({
   subjectId: { type: String, required: true },
   policyId: { type: Schema.Types.ObjectId, required: true },
   domain: { type: String, required: true, default: '' },
@@ -107,7 +107,7 @@ const userPolicySchema = new Schema<RbacUserPolicyDoc>({
 userPolicySchema.index({ subjectId: 1, policyId: 1, domain: 1, tenantId: 1 }, { unique: true })
 userPolicySchema.index({ subjectId: 1 })
 
-const resourceOwnerSchema = new Schema<RbacResourceOwnerDoc>({
+const resourceOwnerSchema = new Schema<KyroguardResourceOwnerDoc>({
   resourceType: { type: String, required: true },
   resourceId: { type: String, required: true },
   ownerId: { type: String, required: true },
@@ -129,13 +129,13 @@ function scopedModel<T>(connection: Connection, name: string, schema: Schema<T>)
 }
 
 /** Connection-scoped model factory — safe to call repeatedly on one connection. */
-export function rbacModels(connection: Connection): RbacModels {
+export function kyroguardModels(connection: Connection): KyroguardModels {
   return {
-    policy: scopedModel(connection, 'RbacPolicy', policySchema),
-    policyGroup: scopedModel(connection, 'RbacPolicyGroup', policyGroupSchema),
-    policyGroupPolicy: scopedModel(connection, 'RbacPolicyGroupPolicy', policyGroupPolicySchema),
-    userPolicyGroup: scopedModel(connection, 'RbacUserPolicyGroup', userPolicyGroupSchema),
-    userPolicy: scopedModel(connection, 'RbacUserPolicy', userPolicySchema),
-    resourceOwner: scopedModel(connection, 'RbacResourceOwner', resourceOwnerSchema),
+    policy: scopedModel(connection, 'KyroguardPolicy', policySchema),
+    policyGroup: scopedModel(connection, 'KyroguardPolicyGroup', policyGroupSchema),
+    policyGroupPolicy: scopedModel(connection, 'KyroguardPolicyGroupPolicy', policyGroupPolicySchema),
+    userPolicyGroup: scopedModel(connection, 'KyroguardUserPolicyGroup', userPolicyGroupSchema),
+    userPolicy: scopedModel(connection, 'KyroguardUserPolicy', userPolicySchema),
+    resourceOwner: scopedModel(connection, 'KyroguardResourceOwner', resourceOwnerSchema),
   }
 }

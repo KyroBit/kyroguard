@@ -1,5 +1,5 @@
 import { UnknownPolicyError } from '../contract.js'
-import { rbacModels } from './models.js'
+import { kyroguardModels } from './models.js'
 import type { Connection, Types } from 'mongoose'
 import type { ResourceRef, SubjectRef } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
@@ -12,7 +12,7 @@ import type {
   PolicyRecord,
   StorageAdapter,
 } from '../contract.js'
-import type { RbacModels } from './models.js'
+import type { KyroguardModels } from './models.js'
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -27,12 +27,14 @@ function byName(a: PolicyGrant, b: PolicyGrant): number {
 }
 
 /**
- * Mongoose StorageAdapter; the caller owns the connection lifecycle.
+ * Mongoose StorageAdapter; close() closes the connection it was given (a
+ * closed mongoose Connection must be reopened explicitly — call close() only
+ * when the adapter's connection is done for good, e.g. app shutdown).
  * deletePolicies deletes in dependency order (entries and assignments first)
  * so a partial failure never leaves assignments pointing at deleted policies.
  */
 export function mongooseAdapter(connection: Connection): StorageAdapter {
-  const models: RbacModels = rbacModels(connection)
+  const models: KyroguardModels = kyroguardModels(connection)
 
   async function resolvePolicyIds(names: string[]): Promise<Map<string, Types.ObjectId>> {
     const unique = [...new Set(names)]
@@ -77,16 +79,18 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
 
   return {
     id: 'mongoose',
-    capabilities: { autoOwnershipTracking: true, queryScoping: true, listFiltering: true },
+    capabilities: { autoOwnershipTracking: true, listFiltering: true },
+
+    async close(): Promise<void> {
+      await connection.close()
+    },
 
     async ensureSchema(): Promise<void> {
-      // S22 migration: pre-relation rows are 'owner' rows — backfill before
-      // syncIndexes builds the unique index that includes `relation`.
-      await models.resourceOwner.updateMany(
-        { relation: { $exists: false } },
-        { $set: { relation: 'owner' } },
-      )
-      await Promise.all(Object.values(models).map(model => model.syncIndexes()))
+      // Sequential on purpose: concurrent syncIndexes on a cold connection
+      // race the collection-creation handshake and stall the server.
+      for (const model of Object.values(models)) {
+        await model.syncIndexes()
+      }
     },
 
     async upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void> {

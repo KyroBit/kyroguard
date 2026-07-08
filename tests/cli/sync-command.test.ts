@@ -35,7 +35,7 @@ function relativeImport(fromDir: string, toFile: string): string {
 async function writeFixtureProject(): Promise<string> {
   // realpath: the relative import written into rig.ts must be computed from
   // the RESOLVED path (macOS tmpdir sits behind the /var → /private/var symlink).
-  const dir = await realpath(await mkdtemp(join(tmpdir(), 'rbac-sync-')))
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'kyroguard-sync-')))
 
   // Module-level singleton: same instance for the config's adapter factory
   // and for the test's assertions. Spies record call order (S17: ensureSchema

@@ -94,7 +94,7 @@ export function memoryAdapter(): StorageAdapter {
 
   return {
     id: 'memory',
-    capabilities: { autoOwnershipTracking: false, queryScoping: false, listFiltering: true },
+    capabilities: { autoOwnershipTracking: false, listFiltering: true },
 
     // S17: nothing to create in memory; safe on every sync run.
     async ensureSchema() {},

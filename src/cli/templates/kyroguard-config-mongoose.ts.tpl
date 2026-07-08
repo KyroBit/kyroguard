@@ -15,8 +15,8 @@ export default defineConfig({
   domains: [
     {
       name: '{{DOMAIN}}',
-      policies: './src/rbac/policies.ts',
-      groups: './src/rbac/groups.ts',
+      policies: './src/kyroguard/policies.ts',
+      groups: './src/kyroguard/groups.ts',
     },
   ],
   typegen: { output: './kyroguard.d.ts' },

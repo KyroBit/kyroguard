@@ -10,7 +10,7 @@ Supported runtimes and version ranges for `@kyrobit/kyroguard` v1.
 | fastify | `^5.0.0` | Registration on Fastify 4 fails. |
 | express | `^4.18.0 \|\| ^5.0.0` | Identical behavior on 4 and 5. |
 | drizzle-orm | `>=0.36.0 <2` | PostgreSQL, MySQL and SQLite. |
-| @prisma/client | `^5.0.0 \|\| ^6.0.0` | Any client generated from the six rbac models. |
+| @prisma/client | `^5.0.0 \|\| ^6.0.0` | Any client generated from the six kyroguard models. |
 | mongoose | `^8.0.0` | Multiple connections per process are supported. |
 
 All framework and ORM packages are optional peer dependencies. Install only what you use. Each integration lives at its own subpath, so importing `@kyrobit/kyroguard/fastify` never loads Express or an ORM.
@@ -33,7 +33,7 @@ The legacy `"node"` setting fails with TS2307 on every subpath import. Also keep
 
 ## Semver
 
-The package follows semver. A major release is anything that could break a client branching on an error `code`, an HTTP status, or a custom storage adapter. The `RBAC_*` error codes are stable for the life of v1. See [Errors](/reference/errors) and [Custom adapters](/guide/custom-adapters).
+The package follows semver. A major release is anything that could break a client branching on an error `code`, an HTTP status, or a custom storage adapter. The error codes are stable for the life of v1. See [Errors](/reference/errors) and [Custom adapters](/guide/custom-adapters).
 
 ## Runtimes
 

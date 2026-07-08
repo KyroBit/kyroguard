@@ -38,11 +38,11 @@ import { defineConfig } from '@kyrobit/kyroguard'
 export default defineConfig({
   adapter: () => import('./src/db.js').then(m => m.adapter),
   domains: [
-    { name: 'teachers', policies: './src/rbac/teachers/policies.ts', groups: './src/rbac/teachers/groups.ts' }, // the teacher app
-    { name: 'students', policies: './src/rbac/students/policies.ts', groups: './src/rbac/students/groups.ts' }, // the student app
-    { name: 'parents',  policies: './src/rbac/parents/policies.ts',  groups: './src/rbac/parents/groups.ts' },  // the parent portal
-    { name: 'school',   policies: './src/rbac/school/policies.ts',   groups: './src/rbac/school/groups.ts' },   // the school office
-    { name: 'admin',    policies: './src/rbac/admin/policies.ts',    groups: './src/rbac/admin/groups.ts' },    // YOUR back office
+    { name: 'teachers', policies: './src/kyroguard/teachers/policies.ts', groups: './src/kyroguard/teachers/groups.ts' }, // the teacher app
+    { name: 'students', policies: './src/kyroguard/students/policies.ts', groups: './src/kyroguard/students/groups.ts' }, // the student app
+    { name: 'parents',  policies: './src/kyroguard/parents/policies.ts',  groups: './src/kyroguard/parents/groups.ts' },  // the parent portal
+    { name: 'school',   policies: './src/kyroguard/school/policies.ts',   groups: './src/kyroguard/school/groups.ts' },   // the school office
+    { name: 'admin',    policies: './src/kyroguard/admin/policies.ts',    groups: './src/kyroguard/admin/groups.ts' },    // YOUR back office
   ],
 })
 ```

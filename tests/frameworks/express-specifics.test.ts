@@ -290,7 +290,7 @@ describe('domain independence', () => {
       try {
         expect((await getJson(`${served.url}/admin/thing`, { 'x-subject-id': 'u1' })).status).toBe(200)
         expect((await getJson(`${served.url}/branch/thing`, { 'x-subject-id': 'u2' })).status).toBe(200)
-        // Registering the second domain must not clobber the first (v0 regression).
+        // Registering the second domain must not clobber the first (clobbering regression).
         expect((await getJson(`${served.url}/admin/thing`, { 'x-subject-id': 'u1' })).status).toBe(200)
 
         const cross1 = await getJson(`${served.url}/branch/thing`, { 'x-subject-id': 'u1' })

@@ -1,6 +1,6 @@
 # TypeScript
 
-`kyroguard sync` writes an `kyroguard.d.ts` file. It turns your policy names into types.
+`kyroguard sync` writes a `kyroguard.d.ts` file. It turns your policy names into types.
 
 Without it, any string compiles:
 

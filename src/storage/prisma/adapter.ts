@@ -10,7 +10,7 @@ import type {
 } from '../contract.js'
 import type { ResourceRef, SubjectRef } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
-import type { PrismaClientLike, PrismaRbacModelDelegates } from './client-contract.js'
+import type { PrismaClientLike, PrismaKyroguardModelDelegates } from './client-contract.js'
 
 export const PRISMA_ID_LIST_CAP = 10_000
 
@@ -46,21 +46,22 @@ function byName(a: PolicyGrant, b: PolicyGrant): number {
 
 /**
  * Prisma StorageAdapter. The client is structural (see ./client-contract.ts);
- * ensureSchema/close are omitted — migrations own DDL, the caller owns the client.
+ * ensureSchema is omitted — migrations own DDL. close() disconnects the
+ * client (a disconnected Prisma client reconnects on its next query).
  */
 export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
   const findGroupId = async (
-    ex: PrismaRbacModelDelegates,
+    ex: PrismaKyroguardModelDelegates,
     name: string,
   ): Promise<string | null> => {
-    const group: { id: unknown } | null = await ex.rbacPolicyGroup.findUnique({
+    const group: { id: unknown } | null = await ex.kyroguardPolicyGroup.findUnique({
       where: { name },
       select: { id: true },
     })
     return group ? String(group.id) : null
   }
 
-  const requireGroupId = async (ex: PrismaRbacModelDelegates, name: string): Promise<string> => {
+  const requireGroupId = async (ex: PrismaKyroguardModelDelegates, name: string): Promise<string> => {
     const id = await findGroupId(ex, name)
     if (id === null) throw new Error(`[kyroguard] Policy group "${name}" not found — seed groups first.`)
     return id
@@ -68,12 +69,12 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
   /** Resolves policy names → ids; throws UnknownPolicyError for the first unknown (S12). */
   const resolvePolicyIds = async (
-    ex: PrismaRbacModelDelegates,
+    ex: PrismaKyroguardModelDelegates,
     names: string[],
   ): Promise<Map<string, string>> => {
     const unique = [...new Set(names)]
     if (unique.length === 0) return new Map()
-    const rows: Array<{ id: unknown; name: unknown }> = await ex.rbacPolicy.findMany({
+    const rows: Array<{ id: unknown; name: unknown }> = await ex.kyroguardPolicy.findMany({
       where: { name: { in: unique } },
       select: { id: true, name: true },
     })
@@ -95,7 +96,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     resource: ResourceDefinition,
     match: Record<string, string>,
   ): Promise<{ where: unknown }> => {
-    const rows: Array<{ resourceId: unknown }> = await client.rbacResourceOwner.findMany({
+    const rows: Array<{ resourceId: unknown }> = await client.kyroguardResourceOwner.findMany({
       where: { resourceType: resource.type, ...match },
       select: { resourceId: true },
       take: PRISMA_ID_LIST_CAP,
@@ -114,7 +115,11 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
   return {
     id: 'prisma',
-    capabilities: { autoOwnershipTracking: true, queryScoping: false, listFiltering: true },
+    capabilities: { autoOwnershipTracking: true, listFiltering: true },
+
+    async close(): Promise<void> {
+      await client.$disconnect()
+    },
 
     listFilters: {
       owned: (subjectId, resource) =>
@@ -138,7 +143,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           label: unknown
           scopeOptions: unknown
           dependsOn: unknown
-        }> = await tx.rbacPolicy.findMany({
+        }> = await tx.kyroguardPolicy.findMany({
           where: { name: { in: rows.map(row => row.name) } },
           select: {
             id: true,
@@ -166,7 +171,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
             !sameArray(toStringArray(current.scopeOptions), row.scopeOptions) ||
             !sameArray(toStringArray(current.dependsOn), row.dependsOn)
           if (!changed) continue
-          await tx.rbacPolicy.update({
+          await tx.kyroguardPolicy.update({
             where: { id: String(current.id) },
             data: {
               domain: row.domain,
@@ -179,7 +184,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         }
 
         if (missing.length > 0) {
-          await tx.rbacPolicy.createMany({
+          await tx.kyroguardPolicy.createMany({
             data: missing.map(row => ({
               name: row.name,
               domain: row.domain,
@@ -199,7 +204,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         domain: unknown
         scopeOptions: unknown
         dependsOn: unknown
-      }> = await client.rbacPolicy.findMany({
+      }> = await client.kyroguardPolicy.findMany({
         orderBy: { name: 'asc' },
         select: { id: true, name: true, domain: true, scopeOptions: true, dependsOn: true },
       })
@@ -216,9 +221,9 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       if (ids.length === 0) return
       // S6: cascade group entries and direct assignments atomically.
       await client.$transaction(async tx => {
-        await tx.rbacPolicyGroupPolicy.deleteMany({ where: { policyId: { in: ids } } })
-        await tx.rbacUserPolicy.deleteMany({ where: { policyId: { in: ids } } })
-        await tx.rbacPolicy.deleteMany({ where: { id: { in: ids } } })
+        await tx.kyroguardPolicyGroupPolicy.deleteMany({ where: { policyId: { in: ids } } })
+        await tx.kyroguardUserPolicy.deleteMany({ where: { policyId: { in: ids } } })
+        await tx.kyroguardPolicy.deleteMany({ where: { id: { in: ids } } })
       })
     },
 
@@ -226,7 +231,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       const existingId = await findGroupId(client, group.name)
       if (existingId === null) {
         try {
-          await client.rbacPolicyGroup.create({
+          await client.kyroguardPolicyGroup.create({
             data: {
               name: group.name,
               label: group.label,
@@ -246,7 +251,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       if (group.description !== undefined) data['description'] = group.description
       if (group.isSystem !== undefined) data['isSystem'] = group.isSystem
       if (group.isActive !== undefined) data['isActive'] = group.isActive
-      await client.rbacPolicyGroup.update({ where: { name: group.name }, data })
+      await client.kyroguardPolicyGroup.update({ where: { name: group.name }, data })
     },
 
     async listGroups(): Promise<GroupRecord[]> {
@@ -256,7 +261,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         label: unknown
         isSystem: unknown
         isActive: unknown
-      }> = await client.rbacPolicyGroup.findMany({
+      }> = await client.kyroguardPolicyGroup.findMany({
         orderBy: { name: 'asc' },
         select: { id: true, name: true, label: true, isSystem: true, isActive: true },
       })
@@ -271,7 +276,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
     async getGroupPolicies(groupName: string): Promise<GroupPolicyEntry[]> {
       const rows: Array<{ scope: unknown; policy: { name: unknown } }> =
-        await client.rbacPolicyGroupPolicy.findMany({
+        await client.kyroguardPolicyGroupPolicy.findMany({
           where: { policyGroup: { is: { name: groupName } } },
           select: { scope: true, policy: { select: { name: true } } },
         })
@@ -290,7 +295,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         const idByName = await resolvePolicyIds(tx, entries.map(entry => entry.policyName))
         const keepIds = [...idByName.values()]
 
-        await tx.rbacPolicyGroupPolicy.deleteMany({
+        await tx.kyroguardPolicyGroupPolicy.deleteMany({
           where:
             keepIds.length > 0
               ? { policyGroupId: groupId, policyId: { notIn: keepIds } }
@@ -298,7 +303,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         })
 
         const existingRows: Array<{ policyId: unknown; scope: unknown }> =
-          await tx.rbacPolicyGroupPolicy.findMany({
+          await tx.kyroguardPolicyGroupPolicy.findMany({
             where: { policyGroupId: groupId },
             select: { policyId: true, scope: true },
           })
@@ -316,14 +321,14 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           if (!existingScopeByPolicy.has(policyId)) {
             toCreate.push({ policyGroupId: groupId, policyId, scope })
           } else if (existingScopeByPolicy.get(policyId) !== scope) {
-            await tx.rbacPolicyGroupPolicy.updateMany({
+            await tx.kyroguardPolicyGroupPolicy.updateMany({
               where: { policyGroupId: groupId, policyId },
               data: { scope },
             })
           }
         }
         if (toCreate.length > 0) {
-          await tx.rbacPolicyGroupPolicy.createMany({ data: toCreate })
+          await tx.kyroguardPolicyGroupPolicy.createMany({ data: toCreate })
         }
       })
     },
@@ -335,7 +340,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         const groupId = await requireGroupId(tx, groupName)
         const idByName = await resolvePolicyIds(tx, entries.map(entry => entry.policyName))
 
-        const existingRows: Array<{ policyId: unknown }> = await tx.rbacPolicyGroupPolicy.findMany(
+        const existingRows: Array<{ policyId: unknown }> = await tx.kyroguardPolicyGroupPolicy.findMany(
           {
             where: { policyGroupId: groupId },
             select: { policyId: true },
@@ -351,7 +356,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
           toCreate.push({ policyGroupId: groupId, policyId, scope: entry.scope ?? null })
         }
         if (toCreate.length > 0) {
-          await tx.rbacPolicyGroupPolicy.createMany({ data: toCreate })
+          await tx.kyroguardPolicyGroupPolicy.createMany({ data: toCreate })
         }
       })
     },
@@ -359,7 +364,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     async assignGroup(ref: SubjectRef, groupName: string): Promise<void> {
       const groupId = await requireGroupId(client, groupName)
       try {
-        await client.rbacUserPolicyGroup.upsert({
+        await client.kyroguardUserPolicyGroup.upsert({
           where: {
             subjectId_policyGroupId_domain_tenantId: {
               subjectId: ref.subjectId,
@@ -386,7 +391,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       const groupId = await findGroupId(client, groupName)
       if (groupId === null) return
       // S11: exact-tuple removal only.
-      await client.rbacUserPolicyGroup.deleteMany({
+      await client.kyroguardUserPolicyGroup.deleteMany({
         where: {
           subjectId: ref.subjectId,
           policyGroupId: groupId,
@@ -397,7 +402,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async assignPolicy(ref: SubjectRef, policyName: string, scope?: string | null): Promise<void> {
-      const policy: { id: unknown } | null = await client.rbacPolicy.findUnique({
+      const policy: { id: unknown } | null = await client.kyroguardPolicy.findUnique({
         where: { name: policyName },
         select: { id: true },
       })
@@ -405,7 +410,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       const policyId = String(policy.id)
       const next = scope ?? null
       try {
-        await client.rbacUserPolicy.upsert({
+        await client.kyroguardUserPolicy.upsert({
           where: {
             subjectId_policyId_domain_tenantId: {
               subjectId: ref.subjectId,
@@ -426,7 +431,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       } catch (error) {
         if (!isUniqueViolation(error)) throw error
         // S10 race: the row exists now — apply the scope the upsert carried.
-        await client.rbacUserPolicy.updateMany({
+        await client.kyroguardUserPolicy.updateMany({
           where: {
             subjectId: ref.subjectId,
             policyId,
@@ -439,13 +444,13 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async removePolicy(ref: SubjectRef, policyName: string): Promise<void> {
-      const policy: { id: unknown } | null = await client.rbacPolicy.findUnique({
+      const policy: { id: unknown } | null = await client.kyroguardPolicy.findUnique({
         where: { name: policyName },
         select: { id: true },
       })
       if (!policy) return
       // S11: exact-tuple removal only.
-      await client.rbacUserPolicy.deleteMany({
+      await client.kyroguardUserPolicy.deleteMany({
         where: {
           subjectId: ref.subjectId,
           policyId: String(policy.id),
@@ -461,7 +466,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
       const assignments: Array<{
         policyGroup: { entries: Array<{ scope: unknown; policy: { name: unknown } }> }
-      }> = await client.rbacUserPolicyGroup.findMany({
+      }> = await client.kyroguardUserPolicyGroup.findMany({
         // S20: deactivated groups grant nothing.
         where: { ...tuple, policyGroup: { is: { isActive: true } } },
         select: {
@@ -483,7 +488,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       }
 
       const direct: Array<{ scope: unknown; policy: { name: unknown } }> =
-        await client.rbacUserPolicy.findMany({
+        await client.kyroguardUserPolicy.findMany({
           where: tuple,
           select: { scope: true, policy: { select: { name: true } } },
         })
@@ -503,7 +508,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         try {
           // S13/S22: upsert on (resourceType, resourceId, ownerId, relation);
           // last write wins on domain/tenant.
-          await client.rbacResourceOwner.upsert({
+          await client.kyroguardResourceOwner.upsert({
             where: {
               resourceType_resourceId_ownerId_relation: {
                 resourceType: entry.resourceType,
@@ -531,7 +536,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
     async isOwner(ownerId: string, resource: ResourceRef): Promise<boolean> {
       // S22: ownership means relation 'owner' — a 'granted' entry never passes.
-      const row: { id: unknown } | null = await client.rbacResourceOwner.findFirst({
+      const row: { id: unknown } | null = await client.kyroguardResourceOwner.findFirst({
         where: {
           ownerId,
           resourceType: resource.type,
@@ -552,7 +557,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
         relation: unknown
         domain: unknown
         tenantId: unknown
-      }> = await client.rbacResourceOwner.findMany({
+      }> = await client.kyroguardResourceOwner.findMany({
         where: { resourceType: resource.type, resourceId: resource.id },
         select: {
           resourceType: true,
@@ -576,7 +581,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
 
     async removeAccess(ownerId: string, resource: ResourceRef, relation?: string): Promise<void> {
       // S23: only the matching (owner, resource[, relation]) entries.
-      await client.rbacResourceOwner.deleteMany({
+      await client.kyroguardResourceOwner.deleteMany({
         where: {
           ownerId,
           resourceType: resource.type,
@@ -587,7 +592,7 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
     },
 
     async removeOwnership(resource: ResourceRef): Promise<void> {
-      await client.rbacResourceOwner.deleteMany({
+      await client.kyroguardResourceOwner.deleteMany({
         where: { resourceType: resource.type, resourceId: resource.id },
       })
     },

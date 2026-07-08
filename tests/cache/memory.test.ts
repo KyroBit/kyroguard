@@ -73,7 +73,7 @@ describe('memoryCache', () => {
 
     expect(await cache.get(u1a)).toBeUndefined()
     expect(await cache.get(u1b)).toBeUndefined()
-    // 'u1' must not clear 'u1x' or 'u' — the v0 startsWith over-clear regression.
+    // 'u1' must not clear 'u1x' or 'u' — the startsWith over-clear regression.
     expect(await cache.get(u1x)).toBeDefined()
     expect(await cache.get(u)).toBeDefined()
   })

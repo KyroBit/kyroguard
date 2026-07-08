@@ -27,9 +27,9 @@ const guard = createKyroguard({ adapter: mongooseAdapter(connection) })
 The returned adapter:
 
 - `id`: `'mongoose'`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true, listFiltering: true }`.
+- `capabilities`: `{ autoOwnershipTracking: true, listFiltering: true }`.
 - Creates its indexes when `kyroguard sync` runs. No separate migration step.
-- Does not close the connection. You own the connection lifecycle.
+- `close()` closes the connection. The CLI calls it after `sync`/`status`; call it yourself on shutdown. A closed mongoose connection must be reopened explicitly, so only call it when the connection is done for good.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
 ### List filters
@@ -42,31 +42,31 @@ The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filte
 
 Ids are cast to `ObjectId` when the resource's registered `table` (its Mongoose model) declares an ObjectId `_id`; string `_id` models get the ids as-is. The list grows with the user's rows for that type — past roughly ten thousand, denormalize an owner field onto the document and ship a custom scope filter instead.
 
-## rbacModels()
+## kyroguardModels()
 
 ```ts
-import { rbacModels } from '@kyrobit/kyroguard/mongoose'
+import { kyroguardModels } from '@kyrobit/kyroguard/mongoose'
 
-function rbacModels(connection: Connection): RbacModels
+function kyroguardModels(connection: Connection): KyroguardModels
 ```
 
-Returns the six rbac models for direct queries. Safe to call repeatedly on one connection. `mongooseAdapter()` calls it internally.
+Returns the six kyroguard models for direct queries. Safe to call repeatedly on one connection. `mongooseAdapter()` calls it internally.
 
 | Property | Model name | Collection |
 | --- | --- | --- |
-| `policy` | `RbacPolicy` | `rbacpolicies` |
-| `policyGroup` | `RbacPolicyGroup` | `rbacpolicygroups` |
-| `policyGroupPolicy` | `RbacPolicyGroupPolicy` | `rbacpolicygrouppolicies` |
-| `userPolicyGroup` | `RbacUserPolicyGroup` | `rbacuserpolicygroups` |
-| `userPolicy` | `RbacUserPolicy` | `rbacuserpolicies` |
-| `resourceOwner` | `RbacResourceOwner` | `rbacresourceowners` |
+| `policy` | `KyroguardPolicy` | `kyroguardpolicies` |
+| `policyGroup` | `KyroguardPolicyGroup` | `kyroguardpolicygroups` |
+| `policyGroupPolicy` | `KyroguardPolicyGroupPolicy` | `kyroguardpolicygrouppolicies` |
+| `userPolicyGroup` | `KyroguardUserPolicyGroup` | `kyroguarduserpolicygroups` |
+| `userPolicy` | `KyroguardUserPolicy` | `kyroguarduserpolicies` |
+| `resourceOwner` | `KyroguardResourceOwner` | `kyroguardresourceowners` |
 
 ```ts
-const models = rbacModels(connection)
+const models = kyroguardModels(connection)
 const teachers = await models.userPolicyGroup.find({ domain: 'teachers' })
 ```
 
-The document types (`RbacPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
+The document types (`KyroguardPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
 
 ## kyroguardMongoosePlugin()
 
@@ -80,17 +80,17 @@ Schema plugin for your own models. It records ownership on save, and filters rea
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Kyroguard` | Your `createKyroguard` instance. |
+| `guard` | `Kyroguard` | Your `createKyroguard` instance. |
 | `type` | `string` | Resource type in the ownership store, for example `'grade'`. |
 
 ```ts
 import { Schema, model } from 'mongoose'
 import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
-import { guard } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(kyroguardMongoosePlugin, { rbac: guard, type: 'grade' })
+gradeSchema.plugin(kyroguardMongoosePlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```

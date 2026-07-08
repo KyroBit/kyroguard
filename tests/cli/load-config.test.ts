@@ -16,7 +16,7 @@ afterAll(async () => {
 async function fixtureDir(): Promise<string> {
   // realpath: macOS tmpdir lives behind the /var → /private/var symlink and
   // loadConfig compares paths derived from process.cwd() (already resolved).
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'rbac-loadconfig-')))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'kyroguard-loadconfig-')))
   roots.push(root)
   return root
 }
@@ -31,7 +31,7 @@ const VALID_TS_CONFIG = `
 const config = {
   adapter: async () => ({ id: 'stub' }),
   domains: [
-    { name: 'admin', policies: './src/rbac/policies.ts', groups: './src/rbac/groups.ts' },
+    { name: 'admin', policies: './src/kyroguard/policies.ts', groups: './src/kyroguard/groups.ts' },
   ],
   typegen: { output: './types/kyroguard.d.ts' },
 }
@@ -68,7 +68,7 @@ describe('loadConfig', () => {
     expect(typeof result.config.adapter).toBe('function')
     expect(result.config.domains).toHaveLength(1)
     expect(result.config.domains[0]?.name).toBe('admin')
-    expect(result.config.domains[0]?.policies).toBe('./src/rbac/policies.ts')
+    expect(result.config.domains[0]?.policies).toBe('./src/kyroguard/policies.ts')
     expect(result.config.typegen?.output).toBe('./types/kyroguard.d.ts')
   })
 

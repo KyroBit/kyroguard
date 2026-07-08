@@ -13,7 +13,7 @@ import { prismaAdapter } from '../../src/storage/prisma/index.js'
 import { runStorageAdapterContractSuite } from '../../src/testing/index.js'
 import { makePrismaFixture } from './helpers/prisma-fixture/setup.js'
 
-const fixture = await makePrismaFixture('rbac-prisma-contract-')
+const fixture = await makePrismaFixture('kyroguard-prisma-contract-')
 const { client } = fixture
 
 afterAll(async () => {
@@ -22,12 +22,12 @@ afterAll(async () => {
 
 /** Fresh state per contract case: wipe all six tables in dependency order. */
 const resetDb = async (): Promise<void> => {
-  await client.rbacPolicyGroupPolicy.deleteMany({})
-  await client.rbacUserPolicyGroup.deleteMany({})
-  await client.rbacUserPolicy.deleteMany({})
-  await client.rbacResourceOwner.deleteMany({})
-  await client.rbacPolicy.deleteMany({})
-  await client.rbacPolicyGroup.deleteMany({})
+  await client.kyroguardPolicyGroupPolicy.deleteMany({})
+  await client.kyroguardUserPolicyGroup.deleteMany({})
+  await client.kyroguardUserPolicy.deleteMany({})
+  await client.kyroguardResourceOwner.deleteMany({})
+  await client.kyroguardPolicy.deleteMany({})
+  await client.kyroguardPolicyGroup.deleteMany({})
 }
 
 runStorageAdapterContractSuite({

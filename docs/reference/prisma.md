@@ -1,6 +1,6 @@
 # Prisma
 
-Reference for `@kyrobit/kyroguard/prisma`. Requires `@prisma/client` 5 or 6 and a schema containing the six rbac models. Setup walkthrough: [Prisma](/databases/prisma).
+Reference for `@kyrobit/kyroguard/prisma`. Requires `@prisma/client` 5 or 6 and a schema containing the six kyroguard models. Setup walkthrough: [Prisma](/databases/prisma).
 
 ## prismaAdapter()
 
@@ -12,7 +12,7 @@ function prismaAdapter(client: PrismaClientLike): StorageAdapter
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `client` | `PrismaClientLike` | A generated `PrismaClient` whose schema includes the six rbac models. |
+| `client` | `PrismaClientLike` | A generated `PrismaClient` whose schema includes the six kyroguard models. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
@@ -25,9 +25,9 @@ const guard = createKyroguard({ adapter: prismaAdapter(new PrismaClient()) })
 The returned adapter:
 
 - `id`: `'prisma'`.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: false, listFiltering: true }`.
+- `capabilities`: `{ autoOwnershipTracking: true, listFiltering: true }`.
 - Does not create tables. Run `prisma migrate` before `kyroguard sync`.
-- Does not call `$disconnect()`. You own the client lifecycle.
+- `close()` calls `$disconnect()` on the client. The CLI calls it after `sync`/`status`; call it yourself on shutdown. A disconnected Prisma client reconnects on its next query, so an early `close()` is recoverable.
 - Multi-step writes run in `$transaction`. Concurrent duplicate assignments are safe.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
@@ -35,7 +35,7 @@ The package never imports `@prisma/client`. The `PrismaClientLike` contract is s
 
 ### List filters
 
-The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). Prisma's `WhereInput` cannot express an EXISTS against the polymorphic ownership table, so the built-in scopes take the ID-list route: one query against `RbacResourceOwner` for the matching resource ids, returned as
+The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). Prisma's `WhereInput` cannot express an EXISTS against the polymorphic ownership table, so the built-in scopes take the ID-list route: one query against `KyroguardResourceOwner` for the matching resource ids, returned as
 
 ```ts
 { id: { in: ['…', '…'] } }
@@ -59,19 +59,19 @@ Client extension that records ownership when your app creates rows, and filters 
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Kyroguard` | Your `createKyroguard` instance. |
+| `guard` | `Kyroguard` | Your `createKyroguard` instance. |
 | `resources` | `{ type: string; model: string }[]` | Models to track. `type` is the resource type in the ownership store. `model` is the client delegate key, case-exact: `model StudentGrade` is `'studentGrade'`. |
 
 ```ts
 import { PrismaClient } from '@prisma/client'
 import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
-import { guard } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
 
 const client = new PrismaClient()
 
 export const db = client.$extends(
   kyroguardPrismaExtension({
-    rbac: guard,
+    guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),
 )
@@ -102,16 +102,16 @@ import { prismaSchemaSnippet } from '@kyrobit/kyroguard/prisma'
 const prismaSchemaSnippet: string
 ```
 
-The six rbac models as a Prisma schema string. `kyroguard init` scaffolds `prisma/rbac.prisma` from it. It validates for the `postgresql`, `mysql` and `sqlite` providers.
+The six kyroguard models as a Prisma schema string. `kyroguard init` scaffolds `prisma/kyroguard.prisma` from it. It validates for the `postgresql`, `mysql` and `sqlite` providers.
 
 | Model | Table |
 | --- | --- |
-| `RbacPolicy` | `rbac_policies` |
-| `RbacPolicyGroup` | `rbac_policy_groups` |
-| `RbacPolicyGroupPolicy` | `rbac_policy_group_policies` |
-| `RbacUserPolicyGroup` | `rbac_user_policy_groups` |
-| `RbacUserPolicy` | `rbac_user_policies` |
-| `RbacResourceOwner` | `rbac_resource_owners` |
+| `KyroguardPolicy` | `kyroguard_policies` |
+| `KyroguardPolicyGroup` | `kyroguard_policy_groups` |
+| `KyroguardPolicyGroupPolicy` | `kyroguard_policy_group_policies` |
+| `KyroguardUserPolicyGroup` | `kyroguard_user_policy_groups` |
+| `KyroguardUserPolicy` | `kyroguard_user_policies` |
+| `KyroguardResourceOwner` | `kyroguard_resource_owners` |
 
 The models map to the same table and column names as the Drizzle schemas. A Prisma client and a Drizzle client can share one database. Column-by-column details are in [Database schema](/reference/database-schema).
 
@@ -121,8 +121,8 @@ The adapter addresses rows through the compound-unique input names Prisma derive
 
 | Model | Client unique input |
 | --- | --- |
-| `RbacUserPolicyGroup` | `subjectId_policyGroupId_domain_tenantId` |
-| `RbacUserPolicy` | `subjectId_policyId_domain_tenantId` |
-| `RbacResourceOwner` | `resourceType_resourceId_ownerId_relation` |
+| `KyroguardUserPolicyGroup` | `subjectId_policyGroupId_domain_tenantId` |
+| `KyroguardUserPolicy` | `subjectId_policyId_domain_tenantId` |
+| `KyroguardResourceOwner` | `resourceType_resourceId_ownerId_relation` |
 
 **Do not add a `name:` argument to the `@@unique` blocks. Renaming these inputs breaks the adapter.**

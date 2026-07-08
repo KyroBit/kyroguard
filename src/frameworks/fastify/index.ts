@@ -44,13 +44,7 @@ export function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOpt
     })
 
     const decoration: FastifyKyroguardDecoration = {
-      domain: (<P extends string>(
-        nameOrOptions: P | DomainOptions<FastifyRequest>,
-        domainOptions?: DomainOptions<FastifyRequest>,
-      ) =>
-        typeof nameOrOptions === 'string'
-          ? createDomain(guard, options, nameOrOptions, domainOptions!)
-          : createDomain(guard, options, '', nameOrOptions)) as FastifyKyroguardDecoration['domain'],
+      domain: makeDomainFactory(guard, options),
       setSubject: subject => guard.engine.store.setSubject(subject),
       addExtra: extra => guard.engine.store.addExtra(extra),
       cache: guard.cache,
@@ -59,6 +53,33 @@ export function kyroguardFastify(guard: Kyroguard, options?: KyroguardFastifyOpt
   }
 
   return fp(plugin, { name: '@kyrobit/kyroguard', fastify: '5.x' })
+}
+
+/**
+ * Hook-free domain factory, mirroring `kyroguardExpress(guard).domain`.
+ * Domains are plain values bound to the guard — create them in a module
+ * (e.g. src/kyroguard/domains.ts), export them, and import them next to any
+ * route. The `kyroguardFastify(guard)` plugin must still be registered on the
+ * app; it opens the per-request context the guards run in.
+ */
+export function kyroguardFastifyDomains(
+  guard: Kyroguard,
+  options?: KyroguardFastifyOptions,
+): Pick<FastifyKyroguardDecoration, 'domain'> {
+  return { domain: makeDomainFactory(guard, options) }
+}
+
+function makeDomainFactory(
+  guard: Kyroguard,
+  pluginOptions: KyroguardFastifyOptions | undefined,
+): FastifyKyroguardDecoration['domain'] {
+  return (<P extends string>(
+    nameOrOptions: P | DomainOptions<FastifyRequest>,
+    domainOptions?: DomainOptions<FastifyRequest>,
+  ) =>
+    typeof nameOrOptions === 'string'
+      ? createDomain(guard, pluginOptions, nameOrOptions, domainOptions!)
+      : createDomain(guard, pluginOptions, '', nameOrOptions)) as FastifyKyroguardDecoration['domain']
 }
 
 function createDomain<P extends string>(

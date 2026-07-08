@@ -115,7 +115,7 @@ describe('authorize() decision matrix', () => {
     ).rejects.toBeInstanceOf(PolicyDeniedError)
   })
 
-  test('null-tenant grant does NOT match explicit-tenant subject (v0 global-fallback regression)', async () => {
+  test('null-tenant grant does NOT match explicit-tenant subject (global-fallback regression)', async () => {
     const { adapter, engine } = makeEngine()
     // Granted with no tenant (empty-string sentinel).
     await grant(adapter, { subjectId: 'u1', domain: 'branch', tenantId: '' }, 'branch.posts.read')

@@ -8,7 +8,7 @@ import type { StorageAdapter } from '@kyrobit/kyroguard'
 const adapter: StorageAdapter = {
   id: 'my-adapter',
   // Optional extras your adapter supports. All false is a valid adapter.
-  capabilities: { autoOwnershipTracking: false, queryScoping: false },
+  capabilities: { autoOwnershipTracking: false },
 
   // Policy sync — called by `kyroguard sync`
   upsertPolicies,

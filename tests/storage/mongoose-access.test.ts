@@ -3,15 +3,15 @@
  * Mongoose adapter access-relation semantics (S13, S21–S23) and list-filter
  * fragments on a real mongod: relation-keyed ownership upserts, isOwner's
  * relation-'owner' restriction, getAccess/removeAccess, the ensureSchema
- * relation backfill, and listFilters ID-list fragments (owned / inTenant /
- * granted / or / none) applied through a real model with ObjectId _ids.
+ * and listFilters ID-list fragments (owned / inTenant / granted / or / none)
+ * applied through a real model with ObjectId _ids.
  */
 
 import mongoose from 'mongoose'
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { mongooseAdapter, rbacModels } from '../../src/storage/mongoose/index.js'
+import { mongooseAdapter, kyroguardModels } from '../../src/storage/mongoose/index.js'
 import { makeConnection, mongoAvailable, stopMongo } from './helpers/mongo.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
 import type { OwnershipEntry } from '../../src/storage/contract.js'
@@ -35,7 +35,7 @@ if (!available) {
   const connection = await makeConnection()
   const adapter = mongooseAdapter(connection)
   await adapter.ensureSchema?.()
-  const models = rbacModels(connection)
+  const models = kyroguardModels(connection)
 
   interface PostDoc {
     title: string
@@ -153,25 +153,6 @@ if (!available) {
       await adapter.removeOwnership({ type: 'post', id: 'r1' })
       expect(await adapter.getAccess!({ type: 'post', id: 'r1' })).toHaveLength(0)
       expect(await adapter.getAccess!({ type: 'post', id: 'r2' })).toHaveLength(1)
-    })
-
-    test('ensureSchema backfills relation on pre-relation rows and stays idempotent (S17/S22)', async () => {
-      await models.resourceOwner.collection.insertOne({
-        resourceType: 'post',
-        resourceId: 'legacy',
-        ownerId: 'u1',
-        domain: '',
-        tenantId: '',
-      })
-      expect(await adapter.isOwner('u1', { type: 'post', id: 'legacy' })).toBe(false)
-
-      await adapter.ensureSchema?.()
-      await adapter.ensureSchema?.()
-
-      expect(await adapter.isOwner('u1', { type: 'post', id: 'legacy' })).toBe(true)
-      const rows = await models.resourceOwner.find({ resourceId: 'legacy' }).lean()
-      expect(rows).toHaveLength(1)
-      expect(rows[0]?.relation).toBe('owner')
     })
   })
 

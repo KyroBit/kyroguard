@@ -2,7 +2,7 @@ import { MisconfiguredError, KyroguardError } from '../index.js'
 import type { FilterResult, QualifiedPolicyName, Kyroguard, Subject } from '../index.js'
 
 export interface AssertScopeParityOptions {
-  rbac: Kyroguard
+  guard: Kyroguard
   subject: Subject
   policy: QualifiedPolicyName
   /** The registered resource type being listed. */
@@ -19,23 +19,23 @@ export interface AssertScopeParityOptions {
  * filterFor-filtered query. Rejects with one Error naming every violation.
  */
 export async function assertScopeParity(options: AssertScopeParityOptions): Promise<void> {
-  const { rbac, subject, policy, resource, rows, query } = options
+  const { guard, subject, policy, resource, rows, query } = options
 
-  const definition = rbac.resources.find(candidate => candidate.type === resource)
+  const definition = guard.resources.find(candidate => candidate.type === resource)
   if (!definition) {
     throw new MisconfiguredError(
       `[kyroguard] assertScopeParity: resource type "${resource}" is not registered on this kyroguard instance.`,
     )
   }
 
-  const filter = await rbac.engine.filterFor(subject, policy, definition)
+  const filter = await guard.engine.filterFor(subject, policy, definition)
   const listed = new Set((await query(filter)).map(row => row.id))
 
   const violations: string[] = []
   for (const row of rows) {
     let allowed = true
     try {
-      await rbac.engine.authorize(subject, policy, {
+      await guard.engine.authorize(subject, policy, {
         resource: () => ({ type: resource, id: row.id }),
       })
     } catch (error) {

@@ -15,9 +15,9 @@ afterAll(async () => {
 let fileCounter = 0
 
 async function generate(domains: DomainTypeInfo[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'rbac-typegen-'))
+  const root = await mkdtemp(join(tmpdir(), 'kyroguard-typegen-'))
   roots.push(root)
-  const output = join(root, 'nested', `rbac-${++fileCounter}.d.ts`)
+  const output = join(root, 'nested', `kyroguard-${++fileCounter}.d.ts`)
   await generateTypes(domains, output)
   return await readFile(output, 'utf8')
 }
@@ -125,7 +125,7 @@ describe('generateTypes', () => {
   })
 
   test('hostile names (quotes, backslashes, unicode breaks) cannot inject declarations', async () => {
-    // Each of these broke or escaped the string context in the v0 raw
+    // Each of these broke or escaped the string context in a naive raw
     // interpolation: closing quote + union pivot, double quotes, trailing
     // backslash (would swallow the closing quote), U+2028/U+2029 (legal in
     // JSON, line terminators in older JS), and plain unicode.
@@ -150,7 +150,7 @@ describe('generateTypes', () => {
     // Every hostile name round-trips through the AST byte-for-byte.
     expect(parsed.domainUnion).toEqual([domainName])
     expect(parsed.policyUnion.toSorted()).toEqual(policyNames.toSorted())
-    // Property keys are quoted too (the v0 regression hit keys AND literals).
+    // Property keys are quoted too (the naive generator broke on keys AND literals).
     expect([...parsed.domainPolicies.keys()]).toEqual([domainName])
     expect(parsed.domainPolicies.get(domainName)?.toSorted()).toEqual(policyNames.toSorted())
 

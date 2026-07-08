@@ -19,9 +19,9 @@ It detects Mongoose and writes the starter files:
   dialect:   not detected
 
   wrote   kyroguard.config.ts
-  wrote   src/rbac/policies.ts
-  wrote   src/rbac/groups.ts
-  wrote   src/rbac/wiring.ts
+  wrote   src/kyroguard/policies.ts
+  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/domains.ts
 ```
 
 There is no schema file to add. The adapter defines its own Mongoose models.
@@ -31,7 +31,7 @@ There is no schema file to add. The adapter defines its own Mongoose models.
 Pass a Mongoose connection to `mongooseAdapter` and hand the result to `createKyroguard`:
 
 ```ts
-// src/rbac/instance.ts
+// src/kyroguard/instance.ts
 import { createConnection } from 'mongoose'
 import { createKyroguard } from '@kyrobit/kyroguard'
 import { mongooseAdapter } from '@kyrobit/kyroguard/mongoose'
@@ -42,7 +42,7 @@ export const adapter = mongooseAdapter(connection)
 export const guard = createKyroguard({ adapter, resources })
 ```
 
-You own the connection, so close it on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
+You own the connection at runtime — close it (or call `adapter.close()`, which does the same) on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI, which closes the connection it opened before exiting.
 
 ## 3. Sync
 
@@ -60,11 +60,11 @@ Policies with `Scope.owned()` check who created each document. The plugin record
 // src/models/grade.ts
 import { Schema, model } from 'mongoose'
 import { kyroguardMongoosePlugin } from '@kyrobit/kyroguard/mongoose'
-import { guard } from '../rbac/instance.js'
+import { guard } from '../kyroguard/instance.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(kyroguardMongoosePlugin, { rbac: guard, type: 'grade' })
+gradeSchema.plugin(kyroguardMongoosePlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```

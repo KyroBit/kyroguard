@@ -15,7 +15,7 @@ async function projectDir(
   dependencies: Record<string, string>,
   devDependencies?: Record<string, string>,
 ): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'rbac-init-'))
+  const root = await mkdtemp(join(tmpdir(), 'kyroguard-init-'))
   roots.push(root)
   await writeFile(
     join(root, 'package.json'),
@@ -52,26 +52,26 @@ async function runInitQuiet(cwd: string): Promise<string[]> {
   return lines
 }
 
-const RBAC_TABLES = [
-  'rbac_policies',
-  'rbac_policy_groups',
-  'rbac_policy_group_policies',
-  'rbac_user_policy_groups',
-  'rbac_user_policies',
-  'rbac_resource_owners',
+const KYROGUARD_TABLES = [
+  'kyroguard_policies',
+  'kyroguard_policy_groups',
+  'kyroguard_policy_group_policies',
+  'kyroguard_user_policy_groups',
+  'kyroguard_user_policies',
+  'kyroguard_resource_owners',
 ]
 
 const PRISMA_MODELS = [
-  'RbacPolicy',
-  'RbacPolicyGroup',
-  'RbacPolicyGroupPolicy',
-  'RbacUserPolicyGroup',
-  'RbacUserPolicy',
-  'RbacResourceOwner',
+  'KyroguardPolicy',
+  'KyroguardPolicyGroup',
+  'KyroguardPolicyGroupPolicy',
+  'KyroguardUserPolicyGroup',
+  'KyroguardUserPolicy',
+  'KyroguardResourceOwner',
 ]
 
 describe('kyroguard init --yes', () => {
-  test('fastify + drizzle-orm + pg project gets config, policies, groups, wiring and the pg schema', async () => {
+  test('fastify + drizzle-orm + pg project gets config, policies, groups, domains and the pg schema', async () => {
     const cwd = await projectDir({ fastify: '^5.0.0', 'drizzle-orm': '^0.36.0', pg: '^8.13.0' })
     const lines = await runInitQuiet(cwd)
 
@@ -82,10 +82,10 @@ describe('kyroguard init --yes', () => {
 
     // All five files land.
     const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
-    const policies = await readFile(join(cwd, 'src', 'rbac', 'policies.ts'), 'utf8')
-    const groups = await readFile(join(cwd, 'src', 'rbac', 'groups.ts'), 'utf8')
-    const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    const schema = await readFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), 'utf8')
+    const policies = await readFile(join(cwd, 'src', 'kyroguard', 'policies.ts'), 'utf8')
+    const groups = await readFile(join(cwd, 'src', 'kyroguard', 'groups.ts'), 'utf8')
+    const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+    const schema = await readFile(join(cwd, 'src', 'db', 'kyroguard-schema.ts'), 'utf8')
 
     // Drizzle config variant with substitutions applied (no leftover markers).
     expect(config).toContain('drizzleAdapter')
@@ -100,15 +100,15 @@ describe('kyroguard init --yes', () => {
     expect(groups).toContain('teacher:')
     expect(groups).toContain("'grades.update': 'owned'")
 
-    // Fastify wiring variant.
-    expect(wiring).toContain('kyroguardFastify')
-    expect(wiring).not.toContain('kyroguardExpress')
-    expect(wiring).not.toContain('{{DOMAIN}}')
+    // Fastify domains variant.
+    expect(domains).toContain('kyroguardFastify')
+    expect(domains).not.toContain('kyroguardExpress')
+    expect(domains).not.toContain('{{DOMAIN}}')
 
-    // The pg schema defines exactly the 6 rbac tables.
+    // The pg schema defines exactly the 6 kyroguard tables.
     expect(schema).toContain('pgTable')
     const tables = [...schema.matchAll(/pgTable\(\s*'([a-z_]+)'/g)].map(match => match[1])
-    expect(tables.toSorted()).toEqual(RBAC_TABLES.toSorted())
+    expect(tables.toSorted()).toEqual(KYROGUARD_TABLES.toSorted())
   })
 
   test('re-running init skips files that already exist', async () => {
@@ -119,7 +119,7 @@ describe('kyroguard init --yes', () => {
     const configMarker = '// customized-by-user config\n'
     const schemaMarker = '// customized-by-user schema\n'
     await writeFile(join(cwd, 'kyroguard.config.ts'), configMarker, 'utf8')
-    await writeFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), schemaMarker, 'utf8')
+    await writeFile(join(cwd, 'src', 'db', 'kyroguard-schema.ts'), schemaMarker, 'utf8')
 
     const lines = await runInitQuiet(cwd)
 
@@ -129,7 +129,7 @@ describe('kyroguard init --yes', () => {
     expect(lines.some(line => line.includes('wrote'))).toBe(false)
 
     expect(await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')).toBe(configMarker)
-    expect(await readFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), 'utf8')).toBe(schemaMarker)
+    expect(await readFile(join(cwd, 'src', 'db', 'kyroguard-schema.ts'), 'utf8')).toBe(schemaMarker)
   })
 
   test('re-running restores only files the user deleted, leaving the rest untouched', async () => {
@@ -138,15 +138,15 @@ describe('kyroguard init --yes', () => {
 
     const configMarker = '// keep me\n'
     await writeFile(join(cwd, 'kyroguard.config.ts'), configMarker, 'utf8')
-    await rm(join(cwd, 'src', 'rbac', 'groups.ts'))
+    await rm(join(cwd, 'src', 'kyroguard', 'groups.ts'))
 
     const lines = await runInitQuiet(cwd)
     expect(lines.some(line => line.includes('wrote') && line.includes('groups.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'rbac', 'groups.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
     expect(await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')).toBe(configMarker)
   })
 
-  test('express + mongoose project gets the mongoose config, express wiring and NO schema file', async () => {
+  test('express + mongoose project gets the mongoose config, express domains and NO schema file', async () => {
     const cwd = await projectDir({ express: '^4.21.0', mongoose: '^8.9.0' })
     const lines = await runInitQuiet(cwd)
 
@@ -158,20 +158,20 @@ describe('kyroguard init --yes', () => {
     expect(config).not.toContain('drizzleAdapter')
     expect(config).toContain("name: 'admin'")
 
-    const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('kyroguardExpress')
-    expect(wiring).not.toContain('kyroguardFastify')
+    const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+    expect(domains).toContain('kyroguardExpress')
+    expect(domains).not.toContain('kyroguardFastify')
 
     // Mongoose owns its indexes via ensureSchema — no drizzle schema file.
-    expect(existsSync(join(cwd, 'src', 'db', 'rbac-schema.ts'))).toBe(false)
+    expect(existsSync(join(cwd, 'src', 'db', 'kyroguard-schema.ts'))).toBe(false)
     expect(existsSync(join(cwd, 'src', 'db'))).toBe(false)
 
     // Starter policies/groups are ORM-independent and still written.
-    expect(existsSync(join(cwd, 'src', 'rbac', 'policies.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'rbac', 'groups.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
   })
 
-  test('fastify + prisma project gets the prisma config, prisma/rbac.prisma and NO drizzle schema', async () => {
+  test('fastify + prisma project gets the prisma config, prisma/kyroguard.prisma and NO drizzle schema', async () => {
     const cwd = await projectDir({ fastify: '^5.0.0', '@prisma/client': '^6.0.0' }, { prisma: '^6.0.0' })
     await mkdir(join(cwd, 'prisma'), { recursive: true })
     await writeFile(join(cwd, 'prisma', 'schema.prisma'), prismaSchemaSource('postgresql'), 'utf8')
@@ -193,19 +193,19 @@ describe('kyroguard init --yes', () => {
     expect(config).toContain("name: 'admin'")
     expect(config).not.toContain('{{DOMAIN}}')
 
-    // The snippet lands in prisma/ with all six models mapped to the rbac tables.
-    const snippet = await readFile(join(cwd, 'prisma', 'rbac.prisma'), 'utf8')
+    // The snippet lands in prisma/ with all six models mapped to the kyroguard tables.
+    const snippet = await readFile(join(cwd, 'prisma', 'kyroguard.prisma'), 'utf8')
     for (const model of PRISMA_MODELS) expect(snippet).toContain(`model ${model} {`)
-    for (const table of RBAC_TABLES) expect(snippet).toContain(`@@map("${table}")`)
+    for (const table of KYROGUARD_TABLES) expect(snippet).toContain(`@@map("${table}")`)
     // Header tells the user how to include it.
     expect(snippet).toContain('prismaSchemaFolder')
     expect(snippet).toContain('prisma migrate dev')
 
     // Starter policies/groups/wiring still land; no drizzle schema file.
-    expect(existsSync(join(cwd, 'src', 'rbac', 'policies.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'src', 'rbac', 'groups.ts'))).toBe(true)
-    const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('kyroguardFastify')
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'policies.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'src', 'kyroguard', 'groups.ts'))).toBe(true)
+    const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+    expect(domains).toContain('kyroguardFastify')
     expect(existsSync(join(cwd, 'src', 'db'))).toBe(false)
 
     // Next steps mention the migration flow.
@@ -220,18 +220,18 @@ describe('kyroguard init --yes', () => {
     await runInitQuiet(cwd)
 
     const snippetMarker = '// customized-by-user snippet\n'
-    await writeFile(join(cwd, 'prisma', 'rbac.prisma'), snippetMarker, 'utf8')
+    await writeFile(join(cwd, 'prisma', 'kyroguard.prisma'), snippetMarker, 'utf8')
 
     const lines = await runInitQuiet(cwd)
 
-    // --yes never overwrites: config, policies, groups, wiring, rbac.prisma.
+    // --yes never overwrites: config, policies, groups, domains, kyroguard.prisma.
     const skipped = lines.filter(line => line.includes('skipped'))
     expect(skipped.length).toBe(5)
     expect(lines.some(line => line.includes('wrote'))).toBe(false)
-    expect(await readFile(join(cwd, 'prisma', 'rbac.prisma'), 'utf8')).toBe(snippetMarker)
+    expect(await readFile(join(cwd, 'prisma', 'kyroguard.prisma'), 'utf8')).toBe(snippetMarker)
   })
 
-  test('root-level schema.prisma without a prisma/ dir puts rbac.prisma next to it', async () => {
+  test('root-level schema.prisma without a prisma/ dir puts kyroguard.prisma next to it', async () => {
     const cwd = await projectDir({ '@prisma/client': '^6.0.0' }, { prisma: '^6.0.0' })
     await writeFile(join(cwd, 'schema.prisma'), prismaSchemaSource('sqlite'), 'utf8')
 
@@ -239,7 +239,7 @@ describe('kyroguard init --yes', () => {
     expect(lines.join('\n')).toContain('dialect:   sqlite')
 
     expect(existsSync(join(cwd, 'prisma'))).toBe(false)
-    const snippet = await readFile(join(cwd, 'rbac.prisma'), 'utf8')
+    const snippet = await readFile(join(cwd, 'kyroguard.prisma'), 'utf8')
     for (const model of PRISMA_MODELS) expect(snippet).toContain(`model ${model} {`)
   })
 
@@ -258,9 +258,9 @@ describe('kyroguard init --yes', () => {
     expect(config).toContain('drizzleAdapter')
     expect(config).not.toContain('prismaAdapter')
 
-    expect(existsSync(join(cwd, 'src', 'db', 'rbac-schema.ts'))).toBe(true)
-    expect(existsSync(join(cwd, 'prisma', 'rbac.prisma'))).toBe(false)
-    expect(existsSync(join(cwd, 'rbac.prisma'))).toBe(false)
+    expect(existsSync(join(cwd, 'src', 'db', 'kyroguard-schema.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'prisma', 'kyroguard.prisma'))).toBe(false)
+    expect(existsSync(join(cwd, 'kyroguard.prisma'))).toBe(false)
   })
 
   test('empty project falls back to fastify + drizzle + pg defaults under --yes', async () => {
@@ -269,9 +269,9 @@ describe('kyroguard init --yes', () => {
 
     const config = await readFile(join(cwd, 'kyroguard.config.ts'), 'utf8')
     expect(config).toContain('drizzleAdapter')
-    const wiring = await readFile(join(cwd, 'src', 'rbac', 'wiring.ts'), 'utf8')
-    expect(wiring).toContain('kyroguardFastify')
-    const schema = await readFile(join(cwd, 'src', 'db', 'rbac-schema.ts'), 'utf8')
-    expect(schema).toContain("pgTable('rbac_policies'")
+    const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+    expect(domains).toContain('kyroguardFastify')
+    const schema = await readFile(join(cwd, 'src', 'db', 'kyroguard-schema.ts'), 'utf8')
+    expect(schema).toContain("pgTable('kyroguard_policies'")
   })
 })

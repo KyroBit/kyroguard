@@ -4,7 +4,7 @@
  *
  * Generates the client from ./schema.prisma into ./client (gitignored),
  * pushes the schema to a UNIQUE tmp sqlite file per fixture (the datasource
- * url comes from RBAC_PRISMA_DB_URL, so parallel runs never collide), then
+ * url comes from KYROGUARD_PRISMA_DB_URL, so parallel runs never collide), then
  * dynamically imports the generated client. The import is dynamic with a
  * computed specifier on purpose: the generated client does not exist until
  * `prisma generate` has run, and a static import would break `tsc --noEmit`
@@ -29,7 +29,6 @@ const packageRoot = fileURLToPath(new URL('../../../..', import.meta.url))
 export type PrismaFixtureClient = PrismaClientLike & {
   /** Fixture-only resource model (extension tests). */
   post: PrismaModelDelegateLike
-  $disconnect(): Promise<void>
   $executeRawUnsafe(sql: string): Promise<unknown>
   $extends(extension: unknown): unknown
 }
@@ -47,7 +46,7 @@ let generated = false
 export async function makePrismaFixture(tmpPrefix: string): Promise<PrismaFixture> {
   const tmpDir = mkdtempSync(join(tmpdir(), tmpPrefix))
   const dbUrl = `file:${join(tmpDir, 'rbac.db')}`
-  const env = { ...process.env, RBAC_PRISMA_DB_URL: dbUrl }
+  const env = { ...process.env, KYROGUARD_PRISMA_DB_URL: dbUrl }
 
   const runPrisma = (args: string[]): void => {
     const result = Bun.spawnSync(['bunx', 'prisma', ...args, '--schema', schemaPath], {

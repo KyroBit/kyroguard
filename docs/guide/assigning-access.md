@@ -37,7 +37,7 @@ Changes apply immediately on this server. Running several servers? See [Producti
 Outside a request handler there is often no domain instance. Use `guard.admin.*` there:
 
 ```ts
-import { guard } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
 
 await guard.admin.assignGroup(
   { subjectId: 'user-42', domain: 'teachers', tenantId: 'school-1' },

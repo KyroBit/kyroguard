@@ -1,6 +1,6 @@
 # Sync
 
-Your definitions live in two files. `src/rbac/policies.ts` says what users can do. `src/rbac/groups.ts` maps job titles to policies. One command loads both:
+Your definitions live in two files. `src/kyroguard/policies.ts` says what users can do. `src/kyroguard/groups.ts` maps job titles to policies. One command loads both:
 
 ```sh
 npx kyroguard sync
@@ -46,8 +46,8 @@ Sync writes rows. It does not create tables. Run your migrations first, or sync 
 
 ```
 $ npx kyroguard sync
-[kyroguard] sync failed: relation "rbac_policies" does not exist
-[kyroguard] The rbac tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
+[kyroguard] sync failed: relation "kyroguard_policies" does not exist
+[kyroguard] The kyroguard tables do not exist yet — run your migrations first (drizzle-kit migrate, prisma migrate dev, or your migration tool).
 ```
 
 ## CI and deploys

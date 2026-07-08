@@ -11,7 +11,7 @@ TypeScript types in sync.
   Mongoose — all certified against the same behavioral contract test suite.
 - **Strict isolation**: domain and tenant assignments match by exact
   equality. A grant in one domain or tenant never applies in another.
-- **Typed decisions**: guards throw typed errors (`ACCESS_DENIED`,
+- **Typed decisions**: guards throw typed errors (`UNAUTHENTICATED`,
   `ACCESS_DENIED`, …) through your framework's own error pipeline.
 - **Bounded cache** (LRU + TTL, instance-scoped) with a pluggable
   cross-instance invalidation bus.
@@ -23,7 +23,7 @@ TypeScript types in sync.
 
 ```bash
 npm install @kyrobit/kyroguard
-npx kyroguard init   # detects your stack, scaffolds schema + config + wiring
+npx kyroguard init   # detects your stack, scaffolds schema + config + policies + domains
 ```
 
 ## At a glance
@@ -32,7 +32,7 @@ npx kyroguard init   # detects your stack, scaffolds schema + config + wiring
 // guard.ts
 import { createKyroguard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
-import * as schema from './db/rbac-schema'
+import * as schema from './db/kyroguard-schema'
 import { db } from './db'
 
 export const guard = createKyroguard({ adapter: drizzleAdapter(db, { schema }) })
@@ -61,7 +61,7 @@ A subject without `admin.transactions.view` receives:
 Full documentation lives in [`docs/`](./docs) (VitePress — `bun run docs:dev`):
 installation per stack, guides for domains, tenants, scopes,
 ownership, caching and observability, a complete API and CLI reference, the
-database schema, an error encyclopedia and the v0 → v1 migration guide.
+database schema and an error encyclopedia.
 
 ## Requirements
 

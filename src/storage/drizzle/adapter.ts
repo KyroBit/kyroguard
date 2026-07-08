@@ -17,7 +17,7 @@ import type { ResourceRef, SubjectRef } from '../../core/types.js'
 export type DrizzleDialect = 'pg' | 'mysql' | 'sqlite'
 
 /** The `tables` barrel exported by `@kyrobit/kyroguard/drizzle/schema/{pg,mysql,sqlite}`. */
-export interface DrizzleRbacTables {
+export interface DrizzleKyroguardTables {
   policies: unknown
   policyGroups: unknown
   policyGroupPolicies: unknown
@@ -27,13 +27,13 @@ export interface DrizzleRbacTables {
 }
 
 /** Pass the whole schema module: `import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'`. */
-export interface DrizzleRbacSchema {
+export interface DrizzleKyroguardSchema {
   dialect: DrizzleDialect
-  tables: DrizzleRbacTables
+  tables: DrizzleKyroguardTables
 }
 
 export interface DrizzleAdapterOptions {
-  schema: DrizzleRbacSchema
+  schema: DrizzleKyroguardSchema
 }
 
 export interface DrizzleStorageAdapter extends StorageAdapter {
@@ -176,7 +176,7 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Dri
 
   return {
     id: `drizzle-${options.schema.dialect}`,
-    capabilities: { autoOwnershipTracking: true, queryScoping: true, listFiltering: true },
+    capabilities: { autoOwnershipTracking: true, listFiltering: true },
     listFilters,
 
     async upsertPolicies(rows: PolicyDefinitionRow[]): Promise<void> {

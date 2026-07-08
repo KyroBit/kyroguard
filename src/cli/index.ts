@@ -104,8 +104,15 @@ function readVersion(): string {
   return pkg.version ?? 'unknown'
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  console.error(message.startsWith('[kyroguard]') ? message : `[kyroguard] ${message}`)
-  process.exitCode = 1
-})
+main()
+  .catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(message.startsWith('[kyroguard]') ? message : `[kyroguard] ${message}`)
+    process.exitCode = 1
+  })
+  .finally(() => {
+    // The user's config/policy modules may hold live handles the CLI cannot
+    // reach (a shared db client, a poller). Commands close what they opened;
+    // exit explicitly so the process never hangs on what they didn't.
+    process.exit()
+  })

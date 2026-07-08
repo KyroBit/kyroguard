@@ -218,7 +218,7 @@ export function createKyroguard(options: CreateKyroguardOptions): Kyroguard {
       revoke: async (userId, resource, relation) => {
         if (!options.adapter.removeAccess) {
           throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — upgrade it to use guard.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — implement it to use guard.access.`,
           )
         }
         await options.adapter.removeAccess(userId, resource, relation)
@@ -226,7 +226,7 @@ export function createKyroguard(options: CreateKyroguardOptions): Kyroguard {
       list: async resource => {
         if (!options.adapter.getAccess) {
           throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — upgrade it to use guard.access.`,
+            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — implement it to use guard.access.`,
           )
         }
         return options.adapter.getAccess(resource)

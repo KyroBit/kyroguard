@@ -16,7 +16,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
 
 const DDL = `
-CREATE TABLE rbac_policies (
+CREATE TABLE kyroguard_policies (
   id text PRIMARY KEY NOT NULL,
   name text NOT NULL,
   domain text NOT NULL DEFAULT '',
@@ -26,9 +26,9 @@ CREATE TABLE rbac_policies (
   created_at integer NOT NULL,
   updated_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_policies_name_unique ON rbac_policies (name);
+CREATE UNIQUE INDEX kyroguard_policies_name_unique ON kyroguard_policies (name);
 
-CREATE TABLE rbac_policy_groups (
+CREATE TABLE kyroguard_policy_groups (
   id text PRIMARY KEY NOT NULL,
   name text NOT NULL,
   label text NOT NULL,
@@ -38,41 +38,41 @@ CREATE TABLE rbac_policy_groups (
   created_at integer NOT NULL,
   updated_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_policy_groups_name_unique ON rbac_policy_groups (name);
+CREATE UNIQUE INDEX kyroguard_policy_groups_name_unique ON kyroguard_policy_groups (name);
 
-CREATE TABLE rbac_policy_group_policies (
+CREATE TABLE kyroguard_policy_group_policies (
   id text PRIMARY KEY NOT NULL,
-  policy_group_id text NOT NULL REFERENCES rbac_policy_groups(id),
-  policy_id text NOT NULL REFERENCES rbac_policies(id),
+  policy_group_id text NOT NULL REFERENCES kyroguard_policy_groups(id),
+  policy_id text NOT NULL REFERENCES kyroguard_policies(id),
   scope text,
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_pgp_group_policy_uq ON rbac_policy_group_policies (policy_group_id, policy_id);
+CREATE UNIQUE INDEX kyroguard_pgp_group_policy_uq ON kyroguard_policy_group_policies (policy_group_id, policy_id);
 
-CREATE TABLE rbac_user_policy_groups (
+CREATE TABLE kyroguard_user_policy_groups (
   id text PRIMARY KEY NOT NULL,
   subject_id text NOT NULL,
-  policy_group_id text NOT NULL REFERENCES rbac_policy_groups(id),
+  policy_group_id text NOT NULL REFERENCES kyroguard_policy_groups(id),
   domain text NOT NULL DEFAULT '',
   tenant_id text NOT NULL DEFAULT '',
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_upg_tuple_uq ON rbac_user_policy_groups (subject_id, policy_group_id, domain, tenant_id);
-CREATE INDEX rbac_upg_subject_idx ON rbac_user_policy_groups (subject_id);
+CREATE UNIQUE INDEX kyroguard_upg_tuple_uq ON kyroguard_user_policy_groups (subject_id, policy_group_id, domain, tenant_id);
+CREATE INDEX kyroguard_upg_subject_idx ON kyroguard_user_policy_groups (subject_id);
 
-CREATE TABLE rbac_user_policies (
+CREATE TABLE kyroguard_user_policies (
   id text PRIMARY KEY NOT NULL,
   subject_id text NOT NULL,
-  policy_id text NOT NULL REFERENCES rbac_policies(id),
+  policy_id text NOT NULL REFERENCES kyroguard_policies(id),
   domain text NOT NULL DEFAULT '',
   tenant_id text NOT NULL DEFAULT '',
   scope text,
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_up_tuple_uq ON rbac_user_policies (subject_id, policy_id, domain, tenant_id);
-CREATE INDEX rbac_up_subject_idx ON rbac_user_policies (subject_id);
+CREATE UNIQUE INDEX kyroguard_up_tuple_uq ON kyroguard_user_policies (subject_id, policy_id, domain, tenant_id);
+CREATE INDEX kyroguard_up_subject_idx ON kyroguard_user_policies (subject_id);
 
-CREATE TABLE rbac_resource_owners (
+CREATE TABLE kyroguard_resource_owners (
   id text PRIMARY KEY NOT NULL,
   resource_type text NOT NULL,
   resource_id text NOT NULL,
@@ -82,9 +82,9 @@ CREATE TABLE rbac_resource_owners (
   tenant_id text NOT NULL DEFAULT '',
   created_at integer NOT NULL
 );
-CREATE UNIQUE INDEX rbac_ro_tuple_uq ON rbac_resource_owners (resource_type, resource_id, owner_id, relation);
-CREATE INDEX rbac_ro_resource_idx ON rbac_resource_owners (resource_type, resource_id);
-CREATE INDEX rbac_ro_owner_idx ON rbac_resource_owners (resource_type, owner_id);
+CREATE UNIQUE INDEX kyroguard_ro_tuple_uq ON kyroguard_resource_owners (resource_type, resource_id, owner_id, relation);
+CREATE INDEX kyroguard_ro_resource_idx ON kyroguard_resource_owners (resource_type, resource_id);
+CREATE INDEX kyroguard_ro_owner_idx ON kyroguard_resource_owners (resource_type, owner_id);
 `
 
 export interface SqliteTestDb {

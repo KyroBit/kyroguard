@@ -1,3 +1,4 @@
+import { closeAdapter } from './close-adapter.js'
 import type { KyroguardConfig } from '../../core/config.js'
 import type { StorageAdapter } from '../../storage/contract.js'
 
@@ -9,7 +10,7 @@ export async function run(config: KyroguardConfig): Promise<void> {
 
     console.log(`adapter:      ${adapter.id}`)
     console.log(
-      `capabilities: autoOwnershipTracking=${adapter.capabilities.autoOwnershipTracking} queryScoping=${adapter.capabilities.queryScoping}`,
+      `capabilities: autoOwnershipTracking=${adapter.capabilities.autoOwnershipTracking} listFiltering=${adapter.capabilities.listFiltering === true}`,
     )
     console.log(`policies:     ${policies.length}`)
     console.log(`groups:       ${groups.length}`)
@@ -17,6 +18,6 @@ export async function run(config: KyroguardConfig): Promise<void> {
     console.error(`[kyroguard] status failed: ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
   } finally {
-    await adapter?.close?.().catch(() => {})
+    await closeAdapter(adapter)
   }
 }

@@ -48,6 +48,16 @@ Every storage adapter must pass `runStorageAdapterContractSuite`. Every
 framework integration must pass `runFrameworkContractSuite`. Bug fixes ship
 with a regression test named after the defect they fix.
 
+## Testing against a real app (`bun link`)
+
+Linking an app to this checkout exposes the app's TypeScript to the
+checkout's devDependency copies of the framework peers (fastify, express).
+TypeScript only merges `declare module` augmentations across two package
+copies when name **and version** match — keep the app's fastify on the same
+version this checkout pins, or set a `paths` override in the app's tsconfig.
+Details and the consumer-facing fix live in
+[docs/guide/fastify.md](docs/guide/fastify.md#type-errors-under-npm-link--bun-link).
+
 ## Releases
 
 CI publishes to GitHub Packages on `v*` tags, gated on tests and package

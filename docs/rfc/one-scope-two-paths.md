@@ -16,9 +16,9 @@
 | **Oso (legacy lib)** | `authorized_query(actor, action, cls)` — same Polar rule, evaluated with resource unbound | Live ORM query you keep chaining; deny = `WHERE false` as the OR-fold seed, allow = `WHERE true` | Polar rules over abstract types; per-class field/relation **registration map** (`register_class(cls, fields=…)`) | Library emits a tiny DNF IR; per-ORM adapters (~60 lines each) consume it |
 | **CASL** | `accessibleBy(ability, action).ofType('Post')` — same rule objects as `ability.can()` | Native fragment (Prisma `WhereInput` / Mongo filter); deny = `{OR: []}` / `{$expr:{$eq:[0,1]}}` (v1 threw — most-complained-about behavior, reverted) | Not generic: conditions name concrete columns per subject type; genericity by naming convention only | Conditions ARE query-shaped data; per-ORM packages wrap them; generic `rulesToCondition` + `{and,or,empty}` hooks for the rest |
 | **Casbin** | None — `BatchEnforce` post-filter loop, `GetImplicitPermissions` → `IN`, or SQL strings inside policy rows | `[]bool` / ID tuples / SQL strings; no trichotomy (`ERR_EMPTY_CONDITION` exists only because empty conditions fail **open** in ORMs) | Not generic; column names baked into policy text | The developer, entirely — the acknowledged "two sources of truth" failure this RFC avoids |
-| **Postgres RLS** | None — one `USING` predicate rewritten into every query; `SET LOCAL` carries the subject | Rows. Default-deny = injected `false`; `USING(true)` = allow; multiple permissive policies **OR** together | None (per-table policies); genericity via column convention or a central mapping table joined by EXISTS — exactly `rbac_resource_owners` | The Postgres planner; predicate *is* SQL. Non-row predicates constant-fold once per query |
+| **Postgres RLS** | None — one `USING` predicate rewritten into every query; `SET LOCAL` carries the subject | Rows. Default-deny = injected `false`; `USING(true)` = allow; multiple permissive policies **OR** together | None (per-table policies); genericity via column convention or a central mapping table joined by EXISTS — exactly `kyroguard_resource_owners` | The Postgres planner; predicate *is* SQL. Non-row predicates constant-fold once per query |
 | **Pundit** | `policy_scope(Post)` → `Scope#resolve(user, scope)` in the same policy class as `update?` | Chainable Relation: `scope.all` / `scope.none` (`WHERE 1=0`) / `scope.where(…)`; fail-loud if undefined | None — every policy re-implements `where(user_id:)`; check/scope drift is *the* classic Pundit bug | The developer writes native queries; zero library machinery, zero guarantees |
-| **SpiceDB / OpenFGA** | `LookupResources` / `ListObjects` → ID stream → `WHERE id IN (…)` | ID list only; no "no filter" arm (admin must enumerate everything); OpenFGA caps at 1,000 + silently truncates on deadline | Fully generic — ownership lives in the engine's own tuple store `(type, id, relation, subject)` = `rbac_resource_owners` as a service | Nobody; developer writes the `IN`. Composability with search/sort/pagination is the #1 complaint |
+| **SpiceDB / OpenFGA** | `LookupResources` / `ListObjects` → ID stream → `WHERE id IN (…)` | ID list only; no "no filter" arm (admin must enumerate everything); OpenFGA caps at 1,000 + silently truncates on deadline | Fully generic — ownership lives in the engine's own tuple store `(type, id, relation, subject)` = `kyroguard_resource_owners` as a service | Nobody; developer writes the `IN`. Composability with search/sort/pagination is the #1 complaint |
 
 **Convergent findings across all five reports:**
 
@@ -27,7 +27,7 @@
 3. **Row-less conditions never become SQL.** They are evaluated once against `(subject, ctx)` at filter-build time and fold the plan to allow/deny — Cerbos folds `now()`, Oso pre-evaluates actor-side conditions, RLS constant-folds STABLE predicates, CASL bakes them in at build. We already have this mechanism: `check(subject, null, ctx)`.
 4. **Grants OR together** (RLS permissive policies; Cerbos ORs matching rules; CASL ORs can-branches). An unscoped grant short-circuits to allow-all.
 5. **Return a composable fragment, never a wrapped query and never an ID list as the primary mechanism.** Fragments keep pagination, COUNT, ORDER BY, and the app's own WHERE native.
-6. **Genericity = central fact store for ownership + a small per-resource registration for genuine field mapping.** Our `rbac_resource_owners` is structurally Zanzibar's tuple store living *in the same database* — the EXISTS join is what SpiceDB needs a whole replication product (Materialize) to fake. This is the library's strongest card.
+6. **Genericity = central fact store for ownership + a small per-resource registration for genuine field mapping.** Our `kyroguard_resource_owners` is structurally Zanzibar's tuple store living *in the same database* — the EXISTS join is what SpiceDB needs a whole replication product (Materialize) to fake. This is the library's strongest card.
 
 **On the DSL question:** the research supports the author's instinct. A conditions-AST (Cerbos/Oso/CASL-style) buys ORM-portability of *custom* scopes at the price of a whole condition language, per-ORM visitors, operator tables, normalization rules ("Cerbos needed several releases to make plan simplification predictable"), and stringly-typed mapper drift. Pundit's posture — the author writes the native fragment, the library owns resolution, composition, and the trichotomy — is the simplicity bar this library sells. We take Pundit's ceremony, Cerbos's trichotomy and grant-OR semantics, and beat both on ownership via the central store. The AST remains a possible v2 *under the same public API* (nothing below precludes it).
 
@@ -101,7 +101,7 @@ export class Scope {
 // src/core/types.ts
 
 export type ListFilter<TWhere = unknown> =
-  | { kind: 'all' }                                    // query with no rbac restriction
+  | { kind: 'all' }                                    // query with no kyroguard restriction
   | { kind: 'none'; reason: 'scope-denied' | 'no-filter' }  // return [] — do not query
   | { kind: 'where'; where: TWhere; scopes: string[] } // AND this fragment into your query
 ```
@@ -228,7 +228,7 @@ Per backend, `owned()` is:
 - **Drizzle (pg/mysql/sqlite)** — the star path, a synchronous correlated EXISTS, resource-generic with zero per-resource mapping beyond the table registration:
 
   ```sql
-  EXISTS (SELECT 1 FROM rbac_resource_owners ro
+  EXISTS (SELECT 1 FROM kyroguard_resource_owners ro
           WHERE ro.resource_type = :type
             AND ro.resource_id   = CAST(<idColumn> AS text)
             AND ro.owner_id      = :ownerId)
@@ -343,7 +343,7 @@ The invariant this feature exists to guarantee: **for every row, `check(subject,
 
 ```ts
 export async function assertScopeParity(options: {
-  rbac: Kyroguard
+  guard: Kyroguard
   subject: Subject
   policy: QualifiedPolicyName
   resource: string
@@ -450,7 +450,7 @@ The move from implicit to explicit is deliberate (the stated requirement): the p
 - **Restrictive (AND-composed) scopes** across grants; grants OR, full stop.
 - **Multi-policy plans** (`filterFor(subject, ['grades.view','grades.update'], …)` sharing one grant fetch — cheap later since the map is cached).
 - **A fetch-then-check post-filter helper.** `filterFor` + a manual `authorize` loop is expressible today; blessing it invites the broken-pagination trap all five reports warn about.
-- **Cross-database filtering** (data table and `rbac_resource_owners` in different databases) beyond what the Prisma/Mongoose ID-list already tolerates.
+- **Cross-database filtering** (data table and `kyroguard_resource_owners` in different databases) beyond what the Prisma/Mongoose ID-list already tolerates.
 - **List-filter caching.** Filters are per-(subject, policy, resource, ctx) by design; the grant map is already cached, which is the only expensive part (the unanimous Oso/CASL guidance).
 
 ## 6. Honest costs
@@ -462,4 +462,4 @@ The move from implicit to explicit is deliberate (the stated requirement): the p
 - **A filterless row scope yields an empty list, not an error.** The condition-fold fallback is what makes `grading-window` free, and its flip side is that a row scope missing its `filter` folds to `none` silently-but-warned. The alternative (throwing) would break every condition scope or demand explicit classification — more ceremony than it buys.
 - **The guard-path OR-of-scopes change** is real behavior change for multi-scoped grants, and the cache format bump invalidates warm external caches on deploy.
 - **No portable deny fragment for Prisma** — the switch/short-circuit is mandatory there; `drizzleWhere`/`mongoWhere` conveniences have no Prisma sibling.
-- **One more index** on `rbac_resource_owners` (`resource_type, owner_id`), and the EXISTS casts `resource_id` (text) against native PKs — fine for text/uuid PKs, a per-dialect cast for integer PKs that the adapters own and must snapshot-test.
+- **One more index** on `kyroguard_resource_owners` (`resource_type, owner_id`), and the EXISTS casts `resource_id` (text) against native PKs — fine for text/uuid PKs, a per-dialect cast for integer PKs that the adapters own and must snapshot-test.

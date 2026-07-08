@@ -127,7 +127,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     expect(await runQuery(rows)(filter)).toEqual([{ id: '1' }])
 
     await assertScopeParity({
-      rbac,
+      guard: rbac,
       subject,
       policy: 'posts.view',
       resource: 'post',
@@ -148,7 +148,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     expect(await runQuery(rows)(filter)).toEqual([{ id: '1' }, { id: '3' }])
 
     await assertScopeParity({
-      rbac,
+      guard: rbac,
       subject,
       policy: 'posts.view',
       resource: 'post',
@@ -170,7 +170,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     expect(await runQuery(rows)(filter)).toEqual([{ id: '2' }])
 
     await assertScopeParity({
-      rbac,
+      guard: rbac,
       subject,
       policy: 'posts.view',
       resource: 'post',
@@ -188,7 +188,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     expect(filter).toEqual({ kind: 'none', reason: 'scope-denied' })
 
     await assertScopeParity({
-      rbac,
+      guard: rbac,
       subject,
       policy: 'posts.view',
       resource: 'post',
@@ -205,7 +205,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     expect(filter).toEqual({ kind: 'none', reason: 'no-policy' })
 
     await assertScopeParity({
-      rbac,
+      guard: rbac,
       subject,
       policy: 'posts.view',
       resource: 'post',
@@ -220,7 +220,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
 
     expect(
       assertScopeParity({
-        rbac,
+        guard: rbac,
         subject: { id: 'u1' },
         policy: 'posts.view',
         resource: 'post',
@@ -234,7 +234,7 @@ describe('assertScopeParity — filterFor end-to-end on the memory adapter', () 
     const { rbac } = await buildGuard()
     expect(
       assertScopeParity({
-        rbac,
+        guard: rbac,
         subject: { id: 'u1' },
         policy: 'posts.view',
         resource: 'ghost',

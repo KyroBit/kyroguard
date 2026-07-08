@@ -92,7 +92,7 @@ describe('redisBus', () => {
     const publisher = hub.publisher()
     const bus = redisBus(publisher, hub.subscriber())
     await bus.publish({ type: 'all' })
-    expect(publisher.published[0]!.channel).toBe('rbac:invalidate')
+    expect(publisher.published[0]!.channel).toBe('kyroguard:invalidate')
   })
 
   test("a subscribed bus receives events published by 'another instance' through the hub", async () => {
@@ -118,7 +118,7 @@ describe('redisBus', () => {
     bus.subscribe((e) => seen.push(e))
     await Promise.resolve()
 
-    const channel = 'rbac:invalidate'
+    const channel = 'kyroguard:invalidate'
     hub.raw(channel, 'not json at all')
     hub.raw(channel, '{"type":') // truncated JSON
     hub.raw(channel, 'null')
@@ -166,13 +166,13 @@ describe('redisBus', () => {
     expect(subscriber.listeners.size).toBe(0)
 
     bus.subscribe(() => {})
-    expect(subscriber.subscribeCalls).toEqual(['rbac:invalidate'])
+    expect(subscriber.subscribeCalls).toEqual(['kyroguard:invalidate'])
     expect(subscriber.listeners.size).toBe(1)
 
     // Subsequent subscribes reuse the existing wiring.
     bus.subscribe(() => {})
     bus.subscribe(() => {})
-    expect(subscriber.subscribeCalls).toEqual(['rbac:invalidate'])
+    expect(subscriber.subscribeCalls).toEqual(['kyroguard:invalidate'])
     expect(subscriber.listeners.size).toBe(1)
   })
 
@@ -185,9 +185,9 @@ describe('redisBus', () => {
     bus.subscribe((e) => seenB.push(e))
     await Promise.resolve()
 
-    hub.raw('rbac:invalidate', '{"type":"all"}')
+    hub.raw('kyroguard:invalidate', '{"type":"all"}')
     unsubA()
-    hub.raw('rbac:invalidate', '{"type":"subject","subjectId":"u1"}')
+    hub.raw('kyroguard:invalidate', '{"type":"subject","subjectId":"u1"}')
 
     expect(seenA).toEqual([{ type: 'all' }])
     expect(seenB).toEqual([{ type: 'all' }, { type: 'subject', subjectId: 'u1' }])
@@ -203,7 +203,7 @@ describe('redisBus', () => {
     bus.subscribe((e) => seen.push(e))
     await Promise.resolve()
 
-    hub.raw('rbac:invalidate', '{"type":"all"}')
+    hub.raw('kyroguard:invalidate', '{"type":"all"}')
     expect(seen).toEqual([{ type: 'all' }])
   })
 
@@ -217,12 +217,12 @@ describe('redisBus', () => {
 
     await bus.close?.()
 
-    expect(subscriber.unsubscribeCalls).toEqual(['rbac:invalidate'])
+    expect(subscriber.unsubscribeCalls).toEqual(['kyroguard:invalidate'])
     expect(subscriber.listeners.size).toBe(0)
 
     // Even if the server still pushed a message, nothing is delivered.
-    subscriber.channels.add('rbac:invalidate')
-    hub.raw('rbac:invalidate', '{"type":"all"}')
+    subscriber.channels.add('kyroguard:invalidate')
+    hub.raw('kyroguard:invalidate', '{"type":"all"}')
     expect(seen).toEqual([])
   })
 
@@ -250,7 +250,7 @@ describe('redisBus', () => {
     bus.subscribe((e) => seen.push(e))
     await Promise.resolve()
 
-    for (const listener of listeners) listener('rbac:invalidate', '{"type":"all"}')
+    for (const listener of listeners) listener('kyroguard:invalidate', '{"type":"all"}')
     expect(seen).toEqual([{ type: 'all' }])
 
     // close() must not throw when optional methods are absent.

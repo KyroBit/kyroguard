@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
+import { kyroguardFastify, kyroguardFastifyDomains } from '../../src/frameworks/fastify/index.js'
 import type { KyroguardFastifyOptions } from '../../src/frameworks/fastify/index.js'
 import {
   Policy,
@@ -330,4 +330,46 @@ describe('fastify integration specifics', () => {
         expect(parse(again.body).hasStore).toBe(true)
       },
     ))
+
+  test('(z) kyroguardFastifyDomains: a domain created OUTSIDE the app (domains.ts pattern) guards routes identically', async () => {
+    const rbac = createKyroguard({ adapter: memoryAdapter(), resources: makeResources() })
+    try {
+      await rbac.sync(makeResources(), 'admin')
+      await rbac.admin.assignPolicy(
+        { subjectId: 'u1', domain: 'admin', tenantId: '' },
+        qualifyPolicyName('admin', 'thing.read'),
+      )
+
+      // The domains.ts pattern: no app in sight when the domain is created.
+      const { domain } = kyroguardFastifyDomains(rbac)
+      const admin = domain('admin', { getSubject: async req => headerSubject(req) })
+
+      const app = Fastify()
+      await app.register(kyroguardFastify(rbac))
+      app.get('/thing', { preHandler: admin.requirePolicy('thing.read') }, async () => ({ ok: true }))
+      await app.ready()
+      try {
+        const allowed = await app.inject({
+          method: 'GET',
+          url: '/thing',
+          headers: { 'x-subject-id': 'u1' },
+        })
+        expect(allowed.statusCode).toBe(200)
+
+        const denied = await app.inject({
+          method: 'GET',
+          url: '/thing',
+          headers: { 'x-subject-id': 'u2' },
+        })
+        expect(denied.statusCode).toBe(403)
+
+        const unauthenticated = await app.inject({ method: 'GET', url: '/thing' })
+        expect(unauthenticated.statusCode).toBe(401)
+      } finally {
+        await app.close()
+      }
+    } finally {
+      rbac.dispose()
+    }
+  })
 })

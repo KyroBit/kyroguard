@@ -73,7 +73,7 @@ describe('subjectKeyPrefix', () => {
     }
   })
 
-  test("is NOT a prefix of any other subject's key ids (v0 startsWith over-clear regression)", () => {
+  test("is NOT a prefix of any other subject's key ids (startsWith over-clear regression)", () => {
     const u1Prefix = subjectKeyPrefix('u1')
     for (const other of ['u1x', 'u', 'u1:', 'u12']) {
       for (const domain of domains) {

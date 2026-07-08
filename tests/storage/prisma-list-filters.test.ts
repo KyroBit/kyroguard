@@ -36,7 +36,7 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  await client.rbacResourceOwner.deleteMany({})
+  await client.kyroguardResourceOwner.deleteMany({})
   await client.post.deleteMany({})
 })
 
@@ -56,7 +56,7 @@ describe('prisma access relations', () => {
     ])
 
     const rows: Array<{ relation: unknown; domain: unknown; tenantId: unknown }> =
-      await client.rbacResourceOwner.findMany({
+      await client.kyroguardResourceOwner.findMany({
         where: { resourceType: 'post', resourceId: 'p1', ownerId: 'u1' },
         select: { relation: true, domain: true, tenantId: true },
       })
@@ -203,7 +203,7 @@ describe('prisma listFilters (honest ID-list)', () => {
     }
     for (let i = 0; i < values.length; i += 1000) {
       await client.$executeRawUnsafe(
-        'INSERT INTO rbac_resource_owners (id, resource_type, resource_id, owner_id) VALUES ' +
+        'INSERT INTO kyroguard_resource_owners (id, resource_type, resource_id, owner_id) VALUES ' +
           values.slice(i, i + 1000).join(','),
       )
     }

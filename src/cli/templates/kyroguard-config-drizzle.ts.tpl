@@ -6,9 +6,9 @@ export default defineConfig({
   // imports a database driver.
   adapter: async () => {
     const { drizzleAdapter } = await import('@kyrobit/kyroguard/drizzle')
-    // The rbac tables ({{DIALECT}}) — add this file to your drizzle-kit schema
+    // The kyroguard tables ({{DIALECT}}) — add this file to your drizzle-kit schema
     // paths and run your migrations before `kyroguard sync`.
-    const schema = await import('./src/db/rbac-schema.js')
+    const schema = await import('./src/db/kyroguard-schema.js')
     // TODO: import your drizzle instance.
     const { db } = await import('./src/db/index.js')
     return drizzleAdapter(db, { schema })
@@ -16,8 +16,8 @@ export default defineConfig({
   domains: [
     {
       name: '{{DOMAIN}}',
-      policies: './src/rbac/policies.ts',
-      groups: './src/rbac/groups.ts',
+      policies: './src/kyroguard/policies.ts',
+      groups: './src/kyroguard/groups.ts',
     },
   ],
   typegen: { output: './kyroguard.d.ts' },

@@ -4,7 +4,7 @@ import type { KyroguardEngine } from '../../core/engine.js'
 import type { OwnershipEntry, StorageAdapter } from '../contract.js'
 
 export interface KyroguardMongoosePluginOptions {
-  rbac: { engine: KyroguardEngine; adapter: StorageAdapter }
+  guard: { engine: KyroguardEngine; adapter: StorageAdapter }
   /** The resource type recorded in the ownership store, e.g. 'post'. */
   type: string
 }
@@ -24,7 +24,7 @@ function documentId(doc: unknown): string | null {
  * nor filtered — see docs/reference/mongoose.md.
  */
 export function kyroguardMongoosePlugin(schema: Schema, options: KyroguardMongoosePluginOptions): void {
-  const { engine, adapter } = options.rbac
+  const { engine, adapter } = options.guard
 
   async function recordOwnershipFor(docs: unknown[]): Promise<void> {
     const subject = engine.store.getSubject()

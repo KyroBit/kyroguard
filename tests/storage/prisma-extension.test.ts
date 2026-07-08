@@ -25,7 +25,7 @@ const engine = new KyroguardEngine({ adapter, scopes: new Map(), cache: null, bu
 // fixture client is structural, so the extension object goes through as-is.
 const extended = client.$extends(
   kyroguardPrismaExtension({
-    rbac: { engine, adapter },
+    guard: { engine, adapter },
     resources: [{ type: 'post', model: 'post' }],
   }),
 ) as {
@@ -55,7 +55,7 @@ const isOwner = (ownerId: string, id: string): Promise<boolean> =>
 
 describe('kyroguardPrismaExtension', () => {
   beforeEach(async () => {
-    await client.rbacResourceOwner.deleteMany({})
+    await client.kyroguardResourceOwner.deleteMany({})
     await client.post.deleteMany({})
   })
 
@@ -67,7 +67,7 @@ describe('kyroguardPrismaExtension', () => {
     expect(await isOwner('u2', post.id)).toBe(false)
 
     const row: { ownerId: unknown; domain: unknown; tenantId: unknown } | null =
-      await client.rbacResourceOwner.findFirst({
+      await client.kyroguardResourceOwner.findFirst({
         where: { resourceType: 'post', resourceId: post.id },
       })
     expect(row).not.toBeNull()
@@ -102,7 +102,7 @@ describe('kyroguardPrismaExtension', () => {
     )
 
     expect(result.count).toBe(1)
-    expect(await client.rbacResourceOwner.findMany({})).toHaveLength(0)
+    expect(await client.kyroguardResourceOwner.findMany({})).toHaveLength(0)
   })
 
   test('(c) create with no ALS subject records no ownership and does not throw', async () => {
@@ -110,12 +110,12 @@ describe('kyroguardPrismaExtension', () => {
     const post = await extended.post.create({ data: { title: 'orphan' } })
 
     expect(await isOwner('u1', post.id)).toBe(false)
-    expect(await client.rbacResourceOwner.findMany({})).toHaveLength(0)
+    expect(await client.kyroguardResourceOwner.findMany({})).toHaveLength(0)
   })
 
   test('(d) a failing ownership write rejects the caller', async () => {
     await client.$executeRawUnsafe(
-      'ALTER TABLE rbac_resource_owners RENAME TO rbac_resource_owners_gone',
+      'ALTER TABLE kyroguard_resource_owners RENAME TO kyroguard_resource_owners_gone',
     )
     try {
       // The post row itself commits (extensions run outside a transaction),
@@ -125,7 +125,7 @@ describe('kyroguardPrismaExtension', () => {
       ).rejects.toThrow()
     } finally {
       await client.$executeRawUnsafe(
-        'ALTER TABLE rbac_resource_owners_gone RENAME TO rbac_resource_owners',
+        'ALTER TABLE kyroguard_resource_owners_gone RENAME TO kyroguard_resource_owners',
       )
     }
   })
@@ -143,12 +143,12 @@ describe('kyroguardPrismaExtension', () => {
 
     // Update path: create-vs-update cannot be distinguished, so ownership is
     // (re)recorded idempotently — still exactly one owner row.
-    await client.rbacResourceOwner.deleteMany({})
+    await client.kyroguardResourceOwner.deleteMany({})
     const updated = await asSubject(subject, () => extended.post.upsert(args))
     expect(updated.title).toBe('v2')
     expect(await isOwner('u1', 'up-1')).toBe(true)
     expect(
-      await client.rbacResourceOwner.findMany({ where: { resourceId: 'up-1' } }),
+      await client.kyroguardResourceOwner.findMany({ where: { resourceId: 'up-1' } }),
     ).toHaveLength(1)
   })
 })

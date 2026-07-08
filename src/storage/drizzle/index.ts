@@ -2,8 +2,8 @@ export { drizzleAdapter } from './adapter.js'
 export type {
   DrizzleAdapterOptions,
   DrizzleDialect,
-  DrizzleRbacSchema,
-  DrizzleRbacTables,
+  DrizzleKyroguardSchema,
+  DrizzleKyroguardTables,
   DrizzleStorageAdapter,
 } from './adapter.js'
 export { trackedDb } from './tracked-db.js'

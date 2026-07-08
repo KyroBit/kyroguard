@@ -46,7 +46,7 @@ export async function mongoAvailable(): Promise<boolean> {
 export async function makeConnection(): Promise<Connection> {
   if (!server) throw new Error('[mongo helper] call mongoAvailable() first')
   dbCounter += 1
-  const dbName = `rbac_test_${dbCounter}`
+  const dbName = `kyroguard_test_${dbCounter}`
   const connection = mongoose.createConnection(server.getUri(), { dbName })
   await connection.asPromise()
   openConnections.add(connection)

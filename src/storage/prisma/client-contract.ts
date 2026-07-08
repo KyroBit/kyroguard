@@ -21,17 +21,18 @@ export interface PrismaModelDelegateLike {
   deleteMany(args?: any): Promise<any>
 }
 
-/** The six RBAC model delegates; property names are fixed by the `prismaSchemaSnippet` model names. */
-export interface PrismaRbacModelDelegates {
-  readonly rbacPolicy: PrismaModelDelegateLike
-  readonly rbacPolicyGroup: PrismaModelDelegateLike
-  readonly rbacPolicyGroupPolicy: PrismaModelDelegateLike
-  readonly rbacUserPolicyGroup: PrismaModelDelegateLike
-  readonly rbacUserPolicy: PrismaModelDelegateLike
-  readonly rbacResourceOwner: PrismaModelDelegateLike
+/** The six kyroguard model delegates; property names are fixed by the `prismaSchemaSnippet` model names. */
+export interface PrismaKyroguardModelDelegates {
+  readonly kyroguardPolicy: PrismaModelDelegateLike
+  readonly kyroguardPolicyGroup: PrismaModelDelegateLike
+  readonly kyroguardPolicyGroupPolicy: PrismaModelDelegateLike
+  readonly kyroguardUserPolicyGroup: PrismaModelDelegateLike
+  readonly kyroguardUserPolicy: PrismaModelDelegateLike
+  readonly kyroguardResourceOwner: PrismaModelDelegateLike
 }
 
-/** What `prismaAdapter` requires: the six delegates plus interactive `$transaction`. */
-export interface PrismaClientLike extends PrismaRbacModelDelegates {
-  $transaction<T>(fn: (tx: PrismaRbacModelDelegates) => Promise<T>): Promise<T>
+/** What `prismaAdapter` requires: the six delegates, interactive `$transaction` and `$disconnect`. */
+export interface PrismaClientLike extends PrismaKyroguardModelDelegates {
+  $transaction<T>(fn: (tx: PrismaKyroguardModelDelegates) => Promise<T>): Promise<T>
+  $disconnect(): Promise<void>
 }

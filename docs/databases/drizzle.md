@@ -19,13 +19,13 @@ It detects Drizzle and your dialect, then writes the starter files:
   dialect:   pg
 
   wrote   kyroguard.config.ts
-  wrote   src/rbac/policies.ts
-  wrote   src/rbac/groups.ts
-  wrote   src/rbac/wiring.ts
-  wrote   src/db/rbac-schema.ts
+  wrote   src/kyroguard/policies.ts
+  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/domains.ts
+  wrote   src/db/kyroguard-schema.ts
 ```
 
-On MySQL and SQLite the detected dialect reads `mysql` or `sqlite`. The file list is the same. `src/db/rbac-schema.ts` holds the six rbac tables for your dialect.
+On MySQL and SQLite the detected dialect reads `mysql` or `sqlite`. The file list is the same. `src/db/kyroguard-schema.ts` holds the six kyroguard tables for your dialect.
 
 ## 2. Migrate
 
@@ -37,7 +37,7 @@ import { defineConfig } from 'drizzle-kit'
 
 export default defineConfig({
   dialect: 'postgresql', // or 'mysql' / 'sqlite'
-  schema: ['./src/db/schema.ts', './src/db/rbac-schema.ts'],
+  schema: ['./src/db/schema.ts', './src/db/kyroguard-schema.ts'],
   out: './drizzle',
   dbCredentials: { url: process.env.DATABASE_URL! },
 })
@@ -57,10 +57,10 @@ npx drizzle-kit migrate
 Pass your Drizzle db and the scaffolded schema module to `drizzleAdapter`:
 
 ```ts
-// src/rbac/instance.ts
+// src/kyroguard/instance.ts
 import { createKyroguard } from '@kyrobit/kyroguard'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
-import * as schema from '../db/rbac-schema.js'
+import * as schema from '../db/kyroguard-schema.js'
 import { rawDb } from '../db/index.js'
 import { resources } from './policies.js'
 
@@ -76,20 +76,20 @@ export const guard = createKyroguard({ adapter, resources })
 npx kyroguard sync
 ```
 
-This writes your policies and groups into the rbac tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
+This writes your policies and groups into the kyroguard tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
 ## 5. Track ownership (optional)
 
 Policies with `Scope.owned()` check who created each row. `trackedDb` records that for you. Wrap your db once and use the wrapped handle in request handlers:
 
 ```ts
-// src/rbac/instance.ts
+// src/kyroguard/instance.ts
 import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 
-export const db = trackedDb(rawDb, { rbac: guard, resources })
+export const db = trackedDb(rawDb, { guard, resources })
 ```
 
-Link each resource to its table in `src/rbac/policies.ts`:
+Link each resource to its table in `src/kyroguard/policies.ts`:
 
 ```ts
 import { Policy, Scope } from '@kyrobit/kyroguard'

@@ -2,7 +2,7 @@
 /**
  * trackedDb (Drizzle) behavior against real PostgreSQL (pglite) and SQLite
  * (bun:sqlite) semantics: ownership auto-tracking on insert (values-ids and
- * .returning() paths), transactional atomicity, the v0 "ownership failure
+ * .returning() paths), transactional atomicity, the "ownership failure
  * hangs the caller" regression, strictTracking modes, db.untracked bypass,
  * and guard-driven automatic read filtering on select (the request's
  * activeFilters plan: all / none / where trichotomy, per-policy keying,
@@ -70,7 +70,7 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
   cleanups.push(async () => rbac.dispose())
 
   const db = trackedDb(pg.db, {
-    rbac: { engine: rbac.engine, adapter },
+    guard: { engine: rbac.engine, adapter },
     resources,
     ...(options?.strictTracking ? { strictTracking: options.strictTracking } : {}),
   })
@@ -87,7 +87,7 @@ const runAs = <T>(engine: KyroguardEngine, subject: Subject, fn: () => Promise<T
 const u1: Subject = { id: 'u1', domain: 'admin', tenant_id: 'c1' }
 
 const ownershipRows = (pg: Awaited<ReturnType<typeof makePgDb>>) =>
-  pg.db.select().from(pgSchema.rbacResourceOwners)
+  pg.db.select().from(pgSchema.kyroguardResourceOwners)
 
 // ── (a) plain insert without .returning(): ids read from values() ────────────
 
@@ -183,7 +183,7 @@ describe('trackedDb — ownership tracking on insert', () => {
           // The ownership row must have been written through the SAME tx.
           const inside = await (tx as unknown as typeof pg.db)
             .select()
-            .from(pgSchema.rbacResourceOwners)
+            .from(pgSchema.kyroguardResourceOwners)
           ownershipVisibleInsideTx = inside.length === 1
           throw new Error('boom')
         }),
@@ -196,11 +196,11 @@ describe('trackedDb — ownership tracking on insert', () => {
     expect(await adapter.isOwner('u1', { type: 'post', id })).toBe(false)
   })
 
-  // ── (d) ownership write failure rejects — the v0 hang regression ──────────
+  // ── (d) ownership write failure rejects — the ownership-failure hang regression ──────────
 
   test('d: when the ownership insert fails, the awaited insert REJECTS (never hangs, never resolves)', async () => {
     const { pg, engine, db } = await makeSetup()
-    await pg.client.exec('DROP TABLE "rbac_resource_owners"')
+    await pg.client.exec('DROP TABLE "kyroguard_resource_owners"')
     const id = crypto.randomUUID()
 
     const outcome = await Promise.race([
@@ -210,7 +210,7 @@ describe('trackedDb — ownership tracking on insert', () => {
         () => 'resolved' as const,
         () => 'rejected' as const,
       ),
-      // Timeout guard: the v0 regression made this await hang forever.
+      // Timeout guard: the original regression made this await hang forever.
       new Promise<'hang'>(resolve => setTimeout(() => resolve('hang'), 250)),
     ])
 
@@ -373,7 +373,7 @@ async function makeFilterSetup() {
   const rbac = createKyroguard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = trackedDb(pg.db, { rbac: { engine: rbac.engine, adapter }, resources })
+  const db = trackedDb(pg.db, { guard: { engine: rbac.engine, adapter }, resources })
 
   await rbac.sync()
   await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
@@ -595,7 +595,7 @@ async function makeSqliteFilterSetup() {
   const rbac = createKyroguard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = trackedDb(raw, { rbac: { engine: rbac.engine, adapter }, resources })
+  const db = trackedDb(raw, { guard: { engine: rbac.engine, adapter }, resources })
 
   await rbac.sync()
   await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')

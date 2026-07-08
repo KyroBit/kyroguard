@@ -13,8 +13,8 @@ Each record says: this user created this row. When a teacher enters a grade, the
 The ORM integrations write ownership records on insert, attributed to the logged-in user. Wiring lives in your database page:
 
 - [Drizzle](/databases/drizzle#_5-track-ownership-optional) — wrap your db with `trackedDb`.
-- [Prisma](/databases/prisma#track-ownership-with-rbacprismaextension) — extend your client with `kyroguardPrismaExtension`.
-- [MongoDB](/databases/mongodb#track-ownership-with-rbacmongooseplugin) — add `kyroguardMongoosePlugin` to each schema.
+- [Prisma](/databases/prisma#track-ownership-with-kyroguardprismaextension) — extend your client with `kyroguardPrismaExtension`.
+- [MongoDB](/databases/mongodb#track-ownership-with-kyroguardmongooseplugin) — add `kyroguardMongoosePlugin` to each schema.
 
 The same integrations also filter reads on guarded routes — see [Automatic filtering](/guide/scopes#automatic-filtering).
 

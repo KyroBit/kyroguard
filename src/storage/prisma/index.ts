@@ -8,6 +8,6 @@ export type {
 export type {
   PrismaClientLike,
   PrismaModelDelegateLike,
-  PrismaRbacModelDelegates,
+  PrismaKyroguardModelDelegates,
 } from './client-contract.js'
 export { prismaSchemaSnippet } from './schema-snippet.js'

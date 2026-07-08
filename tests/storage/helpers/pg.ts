@@ -7,7 +7,7 @@
  * DDL that mirrors src/storage/drizzle/schema/pg.ts exactly:
  *  - text ids (application-generated via $defaultFn/createId — no DB default),
  *  - NOT NULL DEFAULT '' sentinels on domain/tenant_id columns (S1),
- *  - real booleans on rbac_policy_groups,
+ *  - real booleans on kyroguard_policy_groups,
  *  - jsonb scope_options/depends_on with '[]' defaults,
  *  - the unique constraints/indexes the idempotent upserts rely on (S10, S13),
  *  - FKs matching .references() in the schema.
@@ -24,8 +24,8 @@ export interface PgTestDb {
   close: () => Promise<void>
 }
 
-export const RBAC_PG_DDL = `
-CREATE TABLE "rbac_policies" (
+export const KYROGUARD_PG_DDL = `
+CREATE TABLE "kyroguard_policies" (
   "id" text PRIMARY KEY,
   "name" text NOT NULL UNIQUE,
   "domain" text NOT NULL DEFAULT '',
@@ -36,7 +36,7 @@ CREATE TABLE "rbac_policies" (
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
 
-CREATE TABLE "rbac_policy_groups" (
+CREATE TABLE "kyroguard_policy_groups" (
   "id" text PRIMARY KEY,
   "name" text NOT NULL UNIQUE,
   "label" text NOT NULL,
@@ -47,42 +47,42 @@ CREATE TABLE "rbac_policy_groups" (
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
 
-CREATE TABLE "rbac_policy_group_policies" (
+CREATE TABLE "kyroguard_policy_group_policies" (
   "id" text PRIMARY KEY,
-  "policy_group_id" text NOT NULL REFERENCES "rbac_policy_groups"("id"),
-  "policy_id" text NOT NULL REFERENCES "rbac_policies"("id"),
+  "policy_group_id" text NOT NULL REFERENCES "kyroguard_policy_groups"("id"),
+  "policy_id" text NOT NULL REFERENCES "kyroguard_policies"("id"),
   "scope" text,
   "created_at" timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX "rbac_pgp_group_policy_uq"
-  ON "rbac_policy_group_policies" ("policy_group_id", "policy_id");
+CREATE UNIQUE INDEX "kyroguard_pgp_group_policy_uq"
+  ON "kyroguard_policy_group_policies" ("policy_group_id", "policy_id");
 
-CREATE TABLE "rbac_user_policy_groups" (
+CREATE TABLE "kyroguard_user_policy_groups" (
   "id" text PRIMARY KEY,
   "subject_id" text NOT NULL,
-  "policy_group_id" text NOT NULL REFERENCES "rbac_policy_groups"("id"),
+  "policy_group_id" text NOT NULL REFERENCES "kyroguard_policy_groups"("id"),
   "domain" text NOT NULL DEFAULT '',
   "tenant_id" text NOT NULL DEFAULT '',
   "created_at" timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX "rbac_upg_tuple_uq"
-  ON "rbac_user_policy_groups" ("subject_id", "policy_group_id", "domain", "tenant_id");
-CREATE INDEX "rbac_upg_subject_idx" ON "rbac_user_policy_groups" ("subject_id");
+CREATE UNIQUE INDEX "kyroguard_upg_tuple_uq"
+  ON "kyroguard_user_policy_groups" ("subject_id", "policy_group_id", "domain", "tenant_id");
+CREATE INDEX "kyroguard_upg_subject_idx" ON "kyroguard_user_policy_groups" ("subject_id");
 
-CREATE TABLE "rbac_user_policies" (
+CREATE TABLE "kyroguard_user_policies" (
   "id" text PRIMARY KEY,
   "subject_id" text NOT NULL,
-  "policy_id" text NOT NULL REFERENCES "rbac_policies"("id"),
+  "policy_id" text NOT NULL REFERENCES "kyroguard_policies"("id"),
   "domain" text NOT NULL DEFAULT '',
   "tenant_id" text NOT NULL DEFAULT '',
   "scope" text,
   "created_at" timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX "rbac_up_tuple_uq"
-  ON "rbac_user_policies" ("subject_id", "policy_id", "domain", "tenant_id");
-CREATE INDEX "rbac_up_subject_idx" ON "rbac_user_policies" ("subject_id");
+CREATE UNIQUE INDEX "kyroguard_up_tuple_uq"
+  ON "kyroguard_user_policies" ("subject_id", "policy_id", "domain", "tenant_id");
+CREATE INDEX "kyroguard_up_subject_idx" ON "kyroguard_user_policies" ("subject_id");
 
-CREATE TABLE "rbac_resource_owners" (
+CREATE TABLE "kyroguard_resource_owners" (
   "id" text PRIMARY KEY,
   "resource_type" text NOT NULL,
   "resource_id" text NOT NULL,
@@ -92,12 +92,12 @@ CREATE TABLE "rbac_resource_owners" (
   "tenant_id" text NOT NULL DEFAULT '',
   "created_at" timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX "rbac_ro_tuple_uq"
-  ON "rbac_resource_owners" ("resource_type", "resource_id", "owner_id", "relation");
-CREATE INDEX "rbac_ro_resource_idx"
-  ON "rbac_resource_owners" ("resource_type", "resource_id");
-CREATE INDEX "rbac_ro_owner_idx"
-  ON "rbac_resource_owners" ("resource_type", "owner_id");
+CREATE UNIQUE INDEX "kyroguard_ro_tuple_uq"
+  ON "kyroguard_resource_owners" ("resource_type", "resource_id", "owner_id", "relation");
+CREATE INDEX "kyroguard_ro_resource_idx"
+  ON "kyroguard_resource_owners" ("resource_type", "resource_id");
+CREATE INDEX "kyroguard_ro_owner_idx"
+  ON "kyroguard_resource_owners" ("resource_type", "owner_id");
 `
 
 /**
@@ -106,7 +106,7 @@ CREATE INDEX "rbac_ro_owner_idx"
  */
 export async function makePgDb(extraDdl?: string): Promise<PgTestDb> {
   const client = new PGlite()
-  await client.exec(RBAC_PG_DDL)
+  await client.exec(KYROGUARD_PG_DDL)
   if (extraDdl) await client.exec(extraDdl)
   const db = drizzle(client)
   return { client, db, close: () => client.close() }

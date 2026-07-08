@@ -4,7 +4,7 @@
  *
  * The x-app-hook header is added via a plain onSend hook, which only runs for
  * responses that travel Fastify's real pipeline. If a guard ever regressed to
- * reply.hijack() (the v0 bug), error responses would lose the header and
+ * reply.hijack() (a hijack-swallowing bug), error responses would lose the header and
  * contract case 12 would fail.
  */
 

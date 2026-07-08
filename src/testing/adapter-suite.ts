@@ -626,7 +626,7 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(list.find(policy => policy.name === 'standalone.read')?.domain).toBe('')
         }))
 
-      it("S19: domain-scoped orphan delete never touches another domain's dotted-name policies (v0 name-shape regression)", () =>
+      it("S19: domain-scoped orphan delete never touches another domain's dotted-name policies (name-shape regression)", () =>
         withAdapter(async adapter => {
           // A policy with no domain whose NAME looks like it belongs to 'admin'.
           await adapter.upsertPolicies([row('admin.posts.read', { domain: '' })])

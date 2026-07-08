@@ -61,7 +61,7 @@ describe('policy cache behavior', () => {
     expect(calls()).toBe(1)
   })
 
-  test("cache keys isolate domain/tenant: ('u1','', 'admin') never shares an entry with ('u1','admin','') — v0 collision regression", async () => {
+  test("cache keys isolate domain/tenant: ('u1','', 'admin') never shares an entry with ('u1','admin','') — collision regression", async () => {
     const { adapter, engine } = makeEngine()
     // Grant only to the (domain '', tenant 'admin') tuple.
     await grant(adapter, { subjectId: 'u1', domain: '', tenantId: 'admin' }, 'posts.read')
@@ -209,7 +209,7 @@ describe('onDecision hook', () => {
 
     // Allow still resolves.
     await engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.posts.read')
-    // Deny still throws the RBAC error, not the hook's error.
+    // Deny still throws the authorization error, not the hook's error.
     expect(engine.authorize({ id: 'u1', domain: 'admin' }, 'admin.nope')).rejects.toBeInstanceOf(
       PolicyDeniedError,
     )

@@ -34,13 +34,13 @@ The CLI detects your framework and ORM, asks a few questions, and writes the sta
 
 ```
   wrote   kyroguard.config.ts
-  wrote   src/rbac/policies.ts
-  wrote   src/rbac/groups.ts
-  wrote   src/rbac/wiring.ts
-  wrote   src/db/rbac-schema.ts
+  wrote   src/kyroguard/policies.ts
+  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/domains.ts
+  wrote   src/db/kyroguard-schema.ts
 ```
 
-Output shown for Drizzle. Prisma projects get `prisma/rbac.prisma` instead of `src/db/rbac-schema.ts`. MongoDB projects get no schema file at all.
+Output shown for Drizzle. Prisma projects get `prisma/kyroguard.prisma` instead of `src/db/kyroguard-schema.ts`. MongoDB projects get no schema file at all.
 
 `kyroguard.config.ts` tells the CLI where your policies live and how to reach your database. `policies.ts` and `groups.ts` are starters. Replace them with your own: [Policies](/guide/policies), [Groups](/guide/groups).
 
@@ -53,17 +53,17 @@ Migrate, then point the adapter at your database. MongoDB skips migration — `k
 ::: code-group
 
 ```ts [Drizzle]
-// add src/db/rbac-schema.ts to your drizzle-kit schema paths, then:
+// add src/db/kyroguard-schema.ts to your drizzle-kit schema paths, then:
 // npx drizzle-kit generate && npx drizzle-kit migrate
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
-import * as schema from './db/rbac-schema.js'
+import * as schema from './db/kyroguard-schema.js'
 import { db } from './db/index.js'
 
 const adapter = drizzleAdapter(db, { schema })
 ```
 
 ```ts [Prisma]
-// include prisma/rbac.prisma in your schema, then:
+// include prisma/kyroguard.prisma in your schema, then:
 // npx prisma migrate dev
 import { PrismaClient } from '@prisma/client'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
@@ -85,7 +85,7 @@ Details per database: [Drizzle](/databases/drizzle), [Prisma](/databases/prisma)
 
 ## 4. Wire your framework
 
-`kyroguard init` put the wiring in `src/rbac/wiring.ts`. Finish its TODOs: pass your adapter to `createKyroguard`, register it, and guard a first route. The complete setups are [Fastify](/guide/fastify) and [Express](/guide/express).
+`kyroguard init` put the guard and your first domain in `src/kyroguard/domains.ts`. Finish its TODOs: import your db client and resolve the subject in `getSubject`. Then register kyroguard once in your bootstrap — Fastify: `await app.register(kyroguardFastify(guard))`; Express: `app.use(context())` before your routes, `app.use(errorHandler())` after — and guard a first route. The complete setups are [Fastify](/guide/fastify) and [Express](/guide/express).
 
 ## 5. Sync
 

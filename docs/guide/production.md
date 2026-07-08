@@ -68,7 +68,7 @@ const guard = createKyroguard({
 ```
 $ npx kyroguard status
 adapter:      drizzle-pg
-capabilities: autoOwnershipTracking=true queryScoping=true
+capabilities: autoOwnershipTracking=true listFiltering=true
 policies:     7
 groups:       2
 ```

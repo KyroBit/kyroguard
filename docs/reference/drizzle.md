@@ -7,13 +7,13 @@ Reference for `@kyrobit/kyroguard/drizzle`. Supports PostgreSQL, MySQL and SQLit
 ```ts
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
 
-function drizzleAdapter(db: unknown, options: { schema: DrizzleRbacSchema }): DrizzleStorageAdapter
+function drizzleAdapter(db: unknown, options: { schema: DrizzleKyroguardSchema }): DrizzleStorageAdapter
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `db` | `unknown` | A Drizzle database handle for the matching dialect. |
-| `options.schema` | `DrizzleRbacSchema` | The whole schema module: `import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'`. |
+| `options.schema` | `DrizzleKyroguardSchema` | The whole schema module: `import * as schema from '@kyrobit/kyroguard/drizzle/schema/pg'`. |
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
@@ -27,18 +27,18 @@ const adapter = drizzleAdapter(db, { schema })
 The returned adapter:
 
 - `id`: `'drizzle-pg'`, `'drizzle-mysql'` or `'drizzle-sqlite'`, from the schema's dialect.
-- `capabilities`: `{ autoOwnershipTracking: true, queryScoping: true, listFiltering: true }`.
+- `capabilities`: `{ autoOwnershipTracking: true, listFiltering: true }`.
 - Does not create tables. Run your Drizzle Kit migrations before `kyroguard sync`.
-- Does not close the connection. You own the connection lifecycle.
+- Has no `close()` — Drizzle drivers expose no uniform disconnect API, so you own the connection lifecycle (`client.end()`, `pool.end()`, …). The CLI still always terminates: it exits explicitly after `sync`/`status`.
 - Multi-step writes run in a transaction.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
 ### List filters
 
-The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). The built-in scopes compile to one correlated EXISTS against `rbac_resource_owners` — no extra round trip, and it composes into any query without disturbing joins or pagination:
+The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). The built-in scopes compile to one correlated EXISTS against `kyroguard_resource_owners` — no extra round trip, and it composes into any query without disturbing joins or pagination:
 
 ```sql
-EXISTS (SELECT 1 FROM rbac_resource_owners ro
+EXISTS (SELECT 1 FROM kyroguard_resource_owners ro
         WHERE ro.resource_type = 'grade'
           AND ro.resource_id = CAST(grades.id AS text)
           AND ro.owner_id = 'user-id'
@@ -59,18 +59,19 @@ Wraps your Drizzle database. Inserts into registered resource tables record owne
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `rbac` | `Kyroguard` | required | Your `createKyroguard` instance. |
+| `guard` | `Kyroguard` | required | Your `createKyroguard` instance. |
 | `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are tracked and filtered. Other tables pass through. |
 | `strictTracking` | `'warn' \| 'error' \| 'off'` | `'warn'` | What to do when an insert's ids cannot be read. |
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { trackedDb } from '@kyrobit/kyroguard/drizzle'
-import { rbac: guard, resources } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
+import { resources } from './kyroguard/policies.js'
 
 const rawDb = drizzle(process.env.DATABASE_URL!)
 
-export const db = trackedDb(rawDb, { rbac: guard, resources })
+export const db = trackedDb(rawDb, { guard, resources })
 ```
 
 ### What gets tracked
@@ -101,12 +102,12 @@ Each module exports the same names. Pass the whole module to `drizzleAdapter` as
 
 | Export | Table |
 | --- | --- |
-| `rbacPolicies` | `rbac_policies` |
-| `rbacPolicyGroups` | `rbac_policy_groups` |
-| `rbacPolicyGroupPolicies` | `rbac_policy_group_policies` |
-| `rbacUserPolicyGroups` | `rbac_user_policy_groups` |
-| `rbacUserPolicies` | `rbac_user_policies` |
-| `rbacResourceOwners` | `rbac_resource_owners` |
+| `kyroguardPolicies` | `kyroguard_policies` |
+| `kyroguardPolicyGroups` | `kyroguard_policy_groups` |
+| `kyroguardPolicyGroupPolicies` | `kyroguard_policy_group_policies` |
+| `kyroguardUserPolicyGroups` | `kyroguard_user_policy_groups` |
+| `kyroguardUserPolicies` | `kyroguard_user_policies` |
+| `kyroguardResourceOwners` | `kyroguard_resource_owners` |
 | `dialect` | `'pg'`, `'mysql'` or `'sqlite'` |
 | `tables` | Barrel object consumed by `drizzleAdapter` |
 

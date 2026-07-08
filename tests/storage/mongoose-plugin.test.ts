@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { inProcessBus } from '../../src/cache/bus.js'
 import { KyroguardEngine } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
-import { mongooseAdapter, rbacModels, kyroguardMongoosePlugin } from '../../src/storage/mongoose/index.js'
+import { mongooseAdapter, kyroguardModels, kyroguardMongoosePlugin } from '../../src/storage/mongoose/index.js'
 import { makeConnection, mongoAvailable, stopMongo } from './helpers/mongo.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
 import type { Subject } from '../../src/core/types.js'
@@ -29,7 +29,7 @@ if (!available) {
   const connection = await makeConnection()
   const adapter = mongooseAdapter(connection)
   await adapter.ensureSchema?.()
-  const models = rbacModels(connection)
+  const models = kyroguardModels(connection)
 
   const scopes = new Map<string, Scope>([['owned', Scope.owned()]])
   const engine = new KyroguardEngine({
@@ -53,7 +53,7 @@ if (!available) {
   })
   const postResource: ResourceDefinition = { type: 'post', policies: [] }
   kyroguardMongoosePlugin(postSchema as unknown as mongoose.Schema, {
-    rbac: { engine, adapter },
+    guard: { engine, adapter },
     type: 'post',
   })
   const Post = connection.model<PostDoc>('Post', postSchema)

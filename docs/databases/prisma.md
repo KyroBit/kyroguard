@@ -19,20 +19,20 @@ It detects Prisma and writes the starter files:
   dialect:   pg
 
   wrote   kyroguard.config.ts
-  wrote   src/rbac/policies.ts
-  wrote   src/rbac/groups.ts
-  wrote   src/rbac/wiring.ts
-  wrote   prisma/rbac.prisma
+  wrote   src/kyroguard/policies.ts
+  wrote   src/kyroguard/groups.ts
+  wrote   src/kyroguard/domains.ts
+  wrote   prisma/kyroguard.prisma
 ```
 
-`prisma/rbac.prisma` holds the six rbac models. One exception: with a root-level `schema.prisma` and no `prisma/` directory, it lands next to your schema as `rbac.prisma`.
+`prisma/kyroguard.prisma` holds the six kyroguard models. One exception: with a root-level `schema.prisma` and no `prisma/` directory, it lands next to your schema as `kyroguard.prisma`.
 
 ## 2. Add the models to your schema
 
 Prisma has to see the six models. Pick one:
 
-- **Multi-file schemas.** Prisma merges every `.prisma` file in the schema folder. If that folder is `prisma/`, the file is already in place. If you use `prisma/schema/`, move `rbac.prisma` in there.
-- **Single file.** Paste the models from `rbac.prisma` into `schema.prisma` and delete the scaffolded file.
+- **Multi-file schemas.** Prisma merges every `.prisma` file in the schema folder. If that folder is `prisma/`, the file is already in place. If you use `prisma/schema/`, move `kyroguard.prisma` in there.
+- **Single file.** Paste the models from `kyroguard.prisma` into `schema.prisma` and delete the scaffolded file.
 
 ## 3. Migrate
 
@@ -40,14 +40,14 @@ Prisma has to see the six models. Pick one:
 npx prisma migrate dev
 ```
 
-This creates the six rbac tables. `npx prisma db push` also works during development. Migrate before you sync. `kyroguard sync` writes rows, it never creates tables.
+This creates the six kyroguard tables. `npx prisma db push` also works during development. Migrate before you sync. `kyroguard sync` writes rows, it never creates tables.
 
 ## 4. Wire the adapter
 
 Pass a `PrismaClient` to `prismaAdapter` and hand the result to `createKyroguard`:
 
 ```ts
-// src/rbac/instance.ts
+// src/kyroguard/instance.ts
 import { PrismaClient } from '@prisma/client'
 import { createKyroguard } from '@kyrobit/kyroguard'
 import { prismaAdapter } from '@kyrobit/kyroguard/prisma'
@@ -58,7 +58,7 @@ export const adapter = prismaAdapter(client)
 export const guard = createKyroguard({ adapter, resources })
 ```
 
-Any client generated from a schema that includes the rbac models works. You own the client, so call `$disconnect()` on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI.
+Any client generated from a schema that includes the kyroguard models works. You own the client at runtime — call `$disconnect()` (or `adapter.close()`, which does the same) on shutdown. `kyroguard.config.ts` contains the same wiring for the CLI, which closes the client it opened before exiting.
 
 ## 5. Sync
 
@@ -66,7 +66,7 @@ Any client generated from a schema that includes the rbac models works. You own 
 npx kyroguard sync
 ```
 
-This writes your policies and groups into the rbac tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
+This writes your policies and groups into the kyroguard tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
 
 ## Track ownership with `kyroguardPrismaExtension`
 
@@ -75,11 +75,11 @@ Policies with `Scope.owned()` check who created each row. The extension records 
 ```ts
 // src/db.ts
 import { kyroguardPrismaExtension } from '@kyrobit/kyroguard/prisma'
-import { client, guard } from './rbac/instance.js'
+import { client, guard } from './kyroguard/instance.js'
 
 export const db = client.$extends(
   kyroguardPrismaExtension({
-    rbac: guard,
+    guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),
 )

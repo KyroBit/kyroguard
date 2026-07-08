@@ -8,7 +8,7 @@ import express from 'express'
 import { createKyroguard } from '@kyrobit/kyroguard'
 import { kyroguardExpress } from '@kyrobit/kyroguard/express'
 import { drizzleAdapter } from '@kyrobit/kyroguard/drizzle'
-import * as schema from './db/rbac-schema.js' // written by `kyroguard init`
+import * as schema from './db/kyroguard-schema.js' // written by `kyroguard init`
 import { db } from './db.js'
 import { resources } from './resources.js'
 import { verifySession } from './auth.js'

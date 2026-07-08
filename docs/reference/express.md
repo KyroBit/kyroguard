@@ -12,7 +12,7 @@ function kyroguardExpress(guard: Kyroguard, options?: ExpressKyroguardOptions): 
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `rbac` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createrbac). |
+| `guard` | `Kyroguard` | The instance from [`createKyroguard()`](/reference/core-api#createkyroguard). |
 | `options.formatError` | `(error: KyroguardError, req: Request) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 **Returns** three factories:
@@ -27,7 +27,7 @@ function kyroguardExpress(guard: Kyroguard, options?: ExpressKyroguardOptions): 
 ```ts
 import express from 'express'
 import { kyroguardExpress } from '@kyrobit/kyroguard/express'
-import { guard } from './rbac.js'
+import { guard } from './kyroguard/domains.js'
 
 const app = express()
 const { context, domain, errorHandler } = kyroguardExpress(guard)
