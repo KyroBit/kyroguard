@@ -19,7 +19,7 @@ await teachers.assignPolicy(user.id, 'grades.update', { scope: 'owned' })
 await teachers.assignGroup(user.id, 'coordinator', { tenantId: 'school-1' })
 ```
 
-Policy names stay short — the domain adds its prefix ([Multi-tenancy](/guide/multi-tenancy)). Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Sync](/guide/sync).
+Policy names stay short — the domain adds its prefix ([Domains](/guide/domains)). Groups and policies must exist before you assign them. See [Groups](/guide/groups) and [Sync](/guide/sync).
 
 Removal mirrors assignment. Someone leaves, you take the job title back:
 

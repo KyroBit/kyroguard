@@ -47,8 +47,8 @@ Six words cover everything this library does.
 
 - **Policy** — a named permission, like `grades.view`: one thing a user can do. See [Policies](/guide/policies).
 - **Group** — a job title, like `teacher`: its policies, assigned as one. See [Groups](/guide/groups).
-- **Domain** — the app users sign in to: `teachers` (the teacher portal) or `admin` (the school office). See [Multi-tenancy](/guide/multi-tenancy).
-- **Tenant** — the school a grant applies to, like `school-1`. See [Multi-tenancy](/guide/multi-tenancy).
+- **Domain** — the app users sign in to: `teachers` (the teacher portal) or `admin` (the school office). See [Domains](/guide/domains).
+- **Tenant** — the school a grant applies to, like `school-1`. See [Domains](/guide/domains).
 - **Scope** — a condition on a permission: a teacher updates only their own grades, only unpublished ones, only while grading is open. See [Scopes](/guide/scopes).
 - **Subject** — the logged-in user, as this library sees it. See [Protecting routes](/guide/protecting-routes).
 

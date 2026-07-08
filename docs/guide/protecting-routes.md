@@ -27,7 +27,7 @@ app.post('/grades', teachers.requirePolicy('grades.enter'), enterGrade)
 
 The user must hold the named policy. Otherwise the request is denied. Viewing grades and entering them are separate policies.
 
-`teachers` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Multi-tenancy](/guide/multi-tenancy).
+`teachers` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Domains](/guide/domains).
 
 ## getSubject
 
@@ -44,7 +44,7 @@ const teachers = app.kyroguard.domain({
 })
 ```
 
-`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the school. See [Multi-tenancy](/guide/multi-tenancy).
+`getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the school. See [Domains](/guide/domains).
 
 ## The four outcomes
 

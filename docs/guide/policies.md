@@ -26,7 +26,7 @@ Name policies `resource.action`. The name is what you check on a route:
 app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, listGrades)
 ```
 
-Write names without a domain prefix. Domains add theirs for you. See [Multi-tenancy](/guide/multi-tenancy).
+Write names without a domain prefix. Domains add theirs for you. See [Domains](/guide/domains).
 
 ## Labels
 

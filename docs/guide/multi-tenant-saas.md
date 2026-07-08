@@ -15,7 +15,7 @@ This page follows one school — Greenwood — from signup to daily life. Every 
 
 ## 1. Greenwood signs up
 
-A **tenant** is one customer's world — here, one school ([Multi-tenancy](/guide/multi-tenancy)). To the library a tenant is just an id you attach to grants and requests; there is nothing to register.
+A **tenant** is one customer's world — here, one school ([Domains](/guide/domains)). To the library a tenant is just an id you attach to grants and requests; there is nothing to register.
 
 So onboarding Greenwood is one insert in your own database:
 
@@ -27,7 +27,7 @@ const [greenwood] = await db.insert(schools)
 
 ## 2. Five front doors
 
-Greenwood's people are not one crowd. A **domain** is one kind of user's app — teachers get one, parents get another; you get the admin one ([Multi-tenancy](/guide/multi-tenancy)).
+Greenwood's people are not one crowd. A **domain** is one kind of user's app — teachers get one, parents get another; you get the admin one ([Domains](/guide/domains)).
 
 This declares the five front doors, each with its own policies and groups:
 
@@ -174,6 +174,6 @@ There is one tenant level — tenants never nest, so a district above schools is
 
 ## Next steps
 
-- [Multi-tenancy](/guide/multi-tenancy) — domains and tenants, taught properly.
+- [Domains](/guide/domains) — domains and tenants, taught properly.
 - [Owners and superusers](/guide/owners) — the principal's bypass in full.
 - [Scopes](/guide/scopes) — the check and filter halves in depth.

@@ -34,7 +34,7 @@ await app.listen({ port: 3000 })
 
 Three steps. Register `kyroguardFastify(guard)` once. Create a domain with `app.kyroguard.domain()`. Guard routes with `requirePolicy` in `preHandler`.
 
-`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Multi-tenancy](/guide/multi-tenancy).
+`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Domains](/guide/domains).
 
 ## Errors
 

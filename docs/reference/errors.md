@@ -37,7 +37,7 @@ Messages are deliberately generic. The `code` field is the stable contract; for 
 
 **When.** Your `getSubject` returned no user, or a user without an id. This is the normal path for requests with no session.
 
-**Fix.** Return `null` from `getSubject` when nobody is logged in, and a user with a non-empty `id` otherwise. Check that the guard runs after your authentication middleware. See [Multi-tenancy](/guide/multi-tenancy).
+**Fix.** Return `null` from `getSubject` when nobody is logged in, and a user with a non-empty `id` otherwise. Check that the guard runs after your authentication middleware. See [Domains](/guide/domains).
 
 ## ACCESS_DENIED
 

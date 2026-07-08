@@ -29,7 +29,7 @@ coordinator: {
 },
 ```
 
-Each value is a scope name, or `'all'` for no condition — every row. [Ownership](/guide/ownership) explains how grades get owners; `'in-tenant'` — any grade in the request's school — is covered in [Multi-tenancy](/guide/multi-tenancy).
+Each value is a scope name, or `'all'` for no condition — every row. [Ownership](/guide/ownership) explains how grades get owners; `'in-tenant'` — any grade in the request's school — is covered in [Domains](/guide/domains).
 
 This rule looks at a row. On `PATCH /grades/:id` the guard finds it by itself — the policy's resource type plus the route's `:id` param. When the id lives anywhere else, pass a `resource` resolver — see [Protecting routes](/guide/protecting-routes).
 
@@ -148,7 +148,7 @@ The check guards single rows; the filter powers lists. A row scope without a fil
 |---|---|---|
 | `Scope.owned()` | `owned` | the user created the row — [Ownership](/guide/ownership) |
 | `Scope.granted()` | `granted` | the row was shared with the user — [the access API](/guide/ownership#the-access-api) |
-| `Scope.inTenant()` | `in-tenant` | the row belongs to the request's tenant — [Multi-tenancy](/guide/multi-tenancy) |
+| `Scope.inTenant()` | `in-tenant` | the row belongs to the request's tenant — [Domains](/guide/domains) |
 
 All three guard single rows and filter lists.
 
