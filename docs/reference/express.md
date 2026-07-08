@@ -57,7 +57,7 @@ const admin = domain('admin', { getSubject }) // multi-area app
 
 `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
-`createDomain(guard, name?, options)` is also exported from the subpath — the same factory without calling `kyroguardExpress` first, for modules that only define domains (`src/kyroguard/domains.ts`).
+`createDomain(guard, name?, options)` is also exported from the subpath — the same factory without calling `kyroguardExpress` first, for modules that only define domains (`src/kyroguard/domains.ts`). Pass the domain's `resources` there and the guard registers them for you.
 
 | Method | Description |
 | --- | --- |

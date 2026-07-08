@@ -4,6 +4,7 @@
  */
 
 import type { GuardError } from '../core/errors.js'
+import type { ResourceDefinition } from '../core/policy.js'
 import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInput } from '../core/types.js'
 
 export interface GuardOptions<TReq> {
@@ -32,6 +33,12 @@ export function defaultResourceResolver(
 export interface DomainOptions<TReq> {
   /** Called lazily at guard time, memoized per (request, domain); null → 401. */
   getSubject: (req: TReq) => Awaitable<SubjectInput | null>
+  /**
+   * This domain's resource definitions. Registered on the guard at domain
+   * creation — the domain owns its policies; the guard never needs a
+   * hand-assembled union.
+   */
+  resources?: ResourceDefinition[]
 }
 
 export interface DomainInstance<TReq, TGuard, P extends string = string> {

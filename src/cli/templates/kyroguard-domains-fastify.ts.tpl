@@ -14,13 +14,15 @@
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain } from '@kyrobit/kyroguard/fastify'
 {{ADAPTER_IMPORTS}}
-import { resources } from './policies/{{DOMAIN}}.js'
+import { resources as {{DOMAIN_EXPORT}}Resources } from './policies/{{DOMAIN}}.js'
 
 {{ADAPTER_CREATE}}
 
-export const guard = createGuard({ adapter, resources })
+export const guard = createGuard({ adapter })
 
 export const {{DOMAIN_EXPORT}} = createDomain(guard, '{{DOMAIN}}', {
+  // The domain owns its policies; the guard aggregates them.
+  resources: {{DOMAIN_EXPORT}}Resources,
   // Resolved lazily at guard time, memoized per request per domain.
   // Return null when the request is unauthenticated → 401.
   getSubject: async request => {

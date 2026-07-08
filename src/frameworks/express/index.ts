@@ -88,6 +88,7 @@ function buildDomain<P extends string>(
   name: P,
   options: DomainOptions<Request>,
 ): DomainInstance<Request, RequestHandler, P> {
+  if (options.resources) guard.registerResources(name, options.resources)
   const resolveSubject = async (req: Request): Promise<Subject | null> => {
     const store = guard.engine.store.get()
     if (!store) {
@@ -122,7 +123,8 @@ function buildDomain<P extends string>(
     requirePolicy(policy: string, guardOptions?: GuardOptions<Request>): RequestHandler {
       const qualified = qualifyPolicyName(name, policy)
       const resource = guardOptions?.resource
-      const filterTarget = guard.resourceForPolicy.get(policy)
+      const filterTarget =
+        guard.resourceForPolicy.get(qualifyPolicyName(name, policy)) ?? guard.resourceForPolicy.get(policy)
       return asyncGuard(async req => {
         const subject = await resolveSubject(req)
         await guard.engine.authorize(subject, qualified, {
@@ -142,7 +144,7 @@ function buildDomain<P extends string>(
 
     filterFor: async (req: Request, policy: string) => {
       const subject = await resolveSubject(req)
-      return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, policy))
+      return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, name, policy))
     },
 
     assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
@@ -164,8 +166,10 @@ function buildDomain<P extends string>(
   }
 }
 
-function filterResource(guard: Guard, policy: string): ResourceDefinition {
-  const resource = guard.resourceForPolicy.get(policy)
+function filterResource(guard: Guard, domain: string, policy: string): ResourceDefinition {
+  const resource =
+    guard.resourceForPolicy.get(qualifyPolicyName(domain, policy)) ??
+    guard.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
       `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createGuard({ resources }).`,

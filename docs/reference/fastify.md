@@ -51,6 +51,7 @@ function createDomain(guard: Guard, options): FastifyDomain<''>
 | `guard` | `Guard` | The instance from [`createGuard()`](/reference/core-api#createguard). |
 | `name` | `string` | Domain name. Omit it for single-area apps — policies stay unprefixed. |
 | `options.getSubject` | `(req: FastifyRequest) => SubjectInput \| null` | Resolves the authenticated user. `null` → 401. |
+| `options.resources` | `ResourceDefinition[]` | Optional. This domain's resource definitions, registered on the guard at creation. |
 | `options.formatError` | `(error: GuardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 Creates the same [domain instance](#domain-instance) as [`app.kyroguard.domain`](#app-kyroguard), without needing the app — so domains are plain values a module exports and any route file imports. This is the pattern `kyroguard init` scaffolds in `src/kyroguard/domains.ts`:
@@ -59,9 +60,10 @@ Creates the same [domain instance](#domain-instance) as [`app.kyroguard.domain`]
 // src/kyroguard/domains.ts
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain } from '@kyrobit/kyroguard/fastify'
+import { resources } from './policies/admin.js'
 
-export const guard = createGuard({ adapter, resources })
-export const admin = createDomain(guard, 'admin', { getSubject })
+export const guard = createGuard({ adapter })
+export const admin = createDomain(guard, 'admin', { resources, getSubject })
 ```
 
 ```ts

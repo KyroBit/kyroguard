@@ -13,7 +13,7 @@ function createGuard(options: CreateGuardOptions): Guard
 | `adapter` | `StorageAdapter` | required | Storage backend. |
 | `policies` | `Policy[]` | `[]` | Plain policy list — what staff can do. Use it for guard-only apps. |
 | `groups` | `GroupsDefinition` | — | Group definitions — job titles. `sync()` seeds them after policies. |
-| `resources` | `ResourceDefinition[]` | `[]` | Resource definitions. Only needed for ownership tracking or list filtering. |
+| `resources` | `ResourceDefinition[]` | `[]` | Resource definitions for a guard-level (single-domain) setup. Domains usually carry their own instead — `createDomain(guard, name, { resources })`. |
 | `cache` | `PolicyCache \| false` | in-memory | Policy cache. `false` disables caching. |
 | `cacheTtlMs` | `number` | `30_000` | TTL for the default cache. Ignored when `cache` is set. |
 | `cacheMaxEntries` | `number` | `10_000` | Size limit for the default cache. Ignored when `cache` is set. |
@@ -57,7 +57,8 @@ The instance returned by `createGuard()`.
 | --- | --- |
 | `engine` | The authorization engine (`GuardEngine`). |
 | `adapter` | The adapter passed to `createGuard()`. |
-| `resources` | The resource definitions, including the `policies` shorthand. |
+| `resources` | All resource definitions: constructor ones plus everything domains registered. |
+| `registerResources(domain, resources)` | Attach a domain's resources. `createDomain` calls this for you when given `resources`. |
 | `resourceForPolicy` | Unqualified policy name → the resource that defines it. Guards resolve their filter target through it — see [`storeFilterFor`](#storefilterfor). |
 | `sync()` | Load the `createGuard` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |

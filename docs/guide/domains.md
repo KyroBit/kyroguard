@@ -13,13 +13,15 @@ import { createDomain } from '@kyrobit/kyroguard/fastify'
 import { resources as adminResources } from './policies/admin.js'
 import { resources as teacherResources } from './policies/teachers.js'
 
-export const guard = createGuard({ adapter, resources: [...adminResources, ...teacherResources] })
+export const guard = createGuard({ adapter })
 
 export const admin = createDomain(guard, 'admin', {
+  resources: adminResources,
   getSubject: req => getOfficeSession(req),
 })
 
 export const teachers = createDomain(guard, 'teachers', {
+  resources: teacherResources,
   getSubject: req => getTeacherSession(req),
 })
 ```
@@ -62,18 +64,7 @@ src/kyroguard/
     └── teachers.ts
 ```
 
-`kyroguard sync` derives the domains from the file names. At runtime, `domains.ts` gives the guard the union:
-
-```ts
-// src/kyroguard/domains.ts
-import { resources as adminResources } from './policies/admin.js'
-import { resources as teacherResources } from './policies/teachers.js'
-
-export const guard = createGuard({
-  adapter,
-  resources: [...adminResources, ...teacherResources],
-})
-```
+`kyroguard sync` derives the domains from the file names, and at runtime each domain carries its own file — nothing is unioned by hand anywhere.
 
 Route modules never define policies — they import their domain and guard their routes:
 
@@ -91,7 +82,9 @@ app.get('/blogs', { preHandler: admin.requirePolicy('blog.read') }, listBlogs)
 One app means no domains. Skip the name and policies stay unprefixed:
 
 ```ts
-export const site = createDomain(guard, { getSubject })
+import { resources } from './policies.js'
+
+export const site = createDomain(guard, { resources, getSubject })
 ```
 
 Add domains when a second app shows up.

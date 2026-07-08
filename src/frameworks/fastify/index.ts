@@ -100,6 +100,7 @@ function buildDomain<P extends string>(
   name: P,
   options: DomainOptions<FastifyRequest>,
 ): FastifyDomain<P> {
+  if (options.resources) guard.registerResources(name, options.resources)
   const store = guard.engine.store
 
   // Memoized per (request, domain), null results included — two domains on
@@ -132,7 +133,8 @@ function buildDomain<P extends string>(
     requirePolicy(policy, guardOptions) {
       const qualified = qualifyPolicyName(name, policy)
       const resolveResource = guardOptions?.resource
-      const filterTarget = guard.resourceForPolicy.get(policy)
+      const filterTarget =
+        guard.resourceForPolicy.get(qualified) ?? guard.resourceForPolicy.get(policy)
       return async (req, reply) => {
         try {
           const subject = await resolveSubject(req)
@@ -165,7 +167,7 @@ function buildDomain<P extends string>(
 
     async filterFor(req, policy) {
       const subject = await resolveSubject(req)
-      return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, policy))
+      return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, name, policy))
     },
 
     assignGroup: (subjectId, group, opts) =>
@@ -189,11 +191,13 @@ function buildDomain<P extends string>(
   }
 }
 
-function filterResource(guard: Guard, policy: string): ResourceDefinition {
-  const resource = guard.resourceForPolicy.get(policy)
+function filterResource(guard: Guard, domain: string, policy: string): ResourceDefinition {
+  const resource =
+    guard.resourceForPolicy.get(qualifyPolicyName(domain, policy)) ??
+    guard.resourceForPolicy.get(policy)
   if (!resource) {
     throw new MisconfiguredError(
-      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to createGuard({ resources }).`,
+      `[kyroguard] filterFor: no registered resource defines policy "${policy}" — add it to the domain's resources (createDomain) or createGuard({ resources }).`,
     )
   }
   return resource

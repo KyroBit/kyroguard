@@ -1,6 +1,7 @@
 /** @kyrobit/kyroguard — framework-agnostic core entry; integrations live at subpaths. */
 
 import { GuardEngine } from './core/engine.js'
+import { qualifyPolicyName } from './core/types.js'
 import { MisconfiguredError } from './core/errors.js'
 import { collectScopes } from './core/scope.js'
 import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
@@ -50,9 +51,21 @@ export interface CreateGuardOptions {
 export interface Guard {
   readonly engine: GuardEngine
   readonly adapter: StorageAdapter
+  /** Constructor resources plus everything domains registered. */
   readonly resources: ResourceDefinition[]
-  /** UNQUALIFIED policy name → owning resource; guards resolve the filter target through this. */
+  /**
+   * Policy name → owning resource; guards resolve the filter target through
+   * this. Constructor resources key by UNQUALIFIED name, domain-registered
+   * resources by their QUALIFIED name.
+   */
   readonly resourceForPolicy: ReadonlyMap<string, ResourceDefinition>
+
+  /**
+   * Attach a domain's resources: extends the scope registry and the policy →
+   * resource map, and includes them in sync(). createDomain calls this when
+   * given `resources` — domains own their policies; the guard aggregates.
+   */
+  registerResources(domain: string, resources: ResourceDefinition[]): void
 
   /** Programmatic `npx kyroguard sync`. The explicit resources form does not touch groups. */
   sync(): Promise<void>
@@ -146,11 +159,34 @@ export function createGuard(options: CreateGuardOptions): Guard {
     tenantId: subject.tenantId ?? '',
   })
 
+  // Domain-registered resources (createDomain({ resources })). The scope map
+  // and resourceForPolicy are live references shared with the engine, so
+  // registration after construction extends both.
+  const domainResources = new Map<string, ResourceDefinition[]>()
+
+  const registerResources = (domain: string, extra: ResourceDefinition[]): void => {
+    const bucket = domainResources.get(domain)
+    if (bucket) bucket.push(...extra)
+    else domainResources.set(domain, [...extra])
+    for (const resource of extra) {
+      for (const policy of resource.policies) {
+        for (const scope of policy.scopeOptions) {
+          if (!scopes.has(scope.name)) scopes.set(scope.name, scope)
+        }
+        const qualified = qualifyPolicyName(domain, policy.name)
+        if (!resourceForPolicy.has(qualified)) resourceForPolicy.set(qualified, resource)
+      }
+    }
+  }
+
   return {
     engine,
     adapter: options.adapter,
-    resources,
+    get resources() {
+      return [...resources, ...[...domainResources.values()].flat()]
+    },
     resourceForPolicy,
+    registerResources,
 
     sync: async (resourcesOrDomain?: ResourceDefinition[] | string, domain?: string) => {
       const explicit = Array.isArray(resourcesOrDomain)
@@ -158,14 +194,21 @@ export function createGuard(options: CreateGuardOptions): Guard {
       const domainName = explicit ? domain : resourcesOrDomain
       await options.adapter.ensureSchema?.()
       await syncPolicies(options.adapter, res, domainName)
-      if (!explicit && options.groups) {
-        await seedGroups(
-          options.adapter,
-          options.groups,
-          resources.flatMap(resource => resource.policies),
-          domainName,
-        )
-        await backfillGroupDependencies(options.adapter, res, domainName)
+      if (!explicit) {
+        // Domain-registered resources sync under their own domain.
+        for (const [registeredDomain, registered] of domainResources) {
+          if (domainName !== undefined && registeredDomain !== domainName) continue
+          await syncPolicies(options.adapter, registered, registeredDomain)
+        }
+        if (options.groups) {
+          await seedGroups(
+            options.adapter,
+            options.groups,
+            resources.flatMap(resource => resource.policies),
+            domainName,
+          )
+          await backfillGroupDependencies(options.adapter, res, domainName)
+        }
       }
     },
     seedGroups: (groups, seedOptions) =>

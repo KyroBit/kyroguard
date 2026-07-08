@@ -371,4 +371,42 @@ describe('fastify integration specifics', () => {
       rbac.dispose()
     }
   })
+
+  test('(z2) domain-owned resources: createGuard({ adapter }) + createDomain({ resources }) guards and syncs', async () => {
+    const adapter = memoryAdapter()
+    const rbac = createGuard({ adapter }) // no resources at the guard
+    try {
+      // The domain carries its resources; the guard aggregates on creation.
+      const admin = createDomain(rbac, 'admin', {
+        resources: makeResources(),
+        getSubject: async req => headerSubject(req),
+      })
+      expect(rbac.resources.map(r => r.type)).toEqual(['thing'])
+
+      // sync() picks the registered domain up — policies land QUALIFIED.
+      await rbac.sync()
+      const synced = await adapter.listPolicies()
+      expect(synced.map(p => p.name).toSorted()).toEqual(['admin.other.read', 'admin.thing.read'])
+
+      await rbac.admin.assignPolicy(
+        { subjectId: 'u1', domain: 'admin', tenantId: '' },
+        qualifyPolicyName('admin', 'thing.read'),
+      )
+
+      const app = Fastify()
+      await app.register(kyroguardFastify(rbac))
+      app.get('/thing', { preHandler: admin.requirePolicy('thing.read') }, async () => ({ ok: true }))
+      await app.ready()
+      try {
+        const allowed = await app.inject({ method: 'GET', url: '/thing', headers: { 'x-subject-id': 'u1' } })
+        expect(allowed.statusCode).toBe(200)
+        const denied = await app.inject({ method: 'GET', url: '/thing', headers: { 'x-subject-id': 'u2' } })
+        expect(denied.statusCode).toBe(403)
+      } finally {
+        await app.close()
+      }
+    } finally {
+      rbac.dispose()
+    }
+  })
 })
