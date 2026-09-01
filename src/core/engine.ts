@@ -40,7 +40,8 @@ export interface EngineOptions {
 }
 
 export interface AuthorizeOptions {
-  resource?: () => Awaitable<ResourceRef | null | undefined>
+  /** Many refs for a bulk route: every one must pass, or the whole call denies. */
+  resource?: () => Awaitable<ResourceRef | ResourceRef[] | null | undefined>
 }
 
 /** Framework-free engine: authorize() resolves (allow) or throws a typed GuardError (deny). */
@@ -152,27 +153,43 @@ export class GuardEngine {
     const prevInAuthz = this.store.isInAuthz()
     this.store.setInAuthz(true)
     try {
-      // No resolver: the scopes decide on null (row-based scopes fail closed).
+      // No resolver: one null target, so row scopes decide on null and fail closed.
       // A resolver that finds nothing is a 404.
-      let resource: ResourceRef | null = null
+      let targets: (ResourceRef | null)[] = [null]
       if (options?.resource) {
-        resource = (await options.resource()) ?? null
-        if (!resource) {
+        const resolved = (await options.resource()) ?? null
+        const list = resolved === null ? [] : Array.isArray(resolved) ? resolved : [resolved]
+        if (!list.length) {
           this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeNames[0] ?? null, cacheHit, startedAt)
           throw new ResourceNotFoundError()
         }
+        targets = list
       }
 
-      // Scopes OR together: the first passing scope allows. An unknown scope
-      // name contributes a deny, never a bypass.
+      // Scopes OR together: the first passing scope allows that target. Targets AND
+      // together: a bulk call is only allowed when every row it names passes.
       const ctx = { db: this.db, adapter: this.adapter }
-      for (const scopeName of scopeNames) {
-        const scope = this.scopes.get(scopeName)
-        if (!scope) continue
-        if (await scope.check(subject, resource, ctx)) {
-          this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt)
-          return
+      let allowedBy: string | null = null
+      let allAllowed = true
+      for (const target of targets) {
+        let passed = false
+        for (const scopeName of scopeNames) {
+          const scope = this.scopes.get(scopeName)
+          if (!scope) continue
+          if (await scope.check(subject, target, ctx)) {
+            passed = true
+            allowedBy ??= scopeName
+            break
+          }
         }
+        if (!passed) {
+          allAllowed = false
+          break
+        }
+      }
+      if (allAllowed) {
+        this.emitDecision(subject, policy, 'allow', 'granted', allowedBy, cacheHit, startedAt)
+        return
       }
     } finally {
       this.store.setInAuthz(prevInAuthz)

@@ -166,6 +166,54 @@ describe('authorize() scoped grants', () => {
     })
   })
 
+  test('a resolver returning many refs allows only when every one passes', async () => {
+    const mine = new Set(['p1', 'p2'])
+    const scopes = new Map([
+      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? mine.has(r.id) : false))],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'owned')
+
+    await engine.authorize(subject, 'admin.posts.update', {
+      resource: () => [
+        { type: 'post', id: 'p1' },
+        { type: 'post', id: 'p2' },
+      ],
+    })
+  })
+
+  test('a resolver returning many refs denies when any one fails', async () => {
+    const mine = new Set(['p1'])
+    const scopes = new Map([
+      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? mine.has(r.id) : false))],
+    ])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'owned')
+
+    const err = await engine
+      .authorize(subject, 'admin.posts.update', {
+        resource: () => [
+          { type: 'post', id: 'p1' },
+          { type: 'post', id: 'p9' },
+        ],
+      })
+      .then(() => null, (e: unknown) => e)
+
+    expect(err).toBeInstanceOf(ScopeDeniedError)
+  })
+
+  test('a resolver returning an empty list is a 404, never a silent allow', async () => {
+    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'owned')
+
+    const err = await engine
+      .authorize(subject, 'admin.posts.update', { resource: () => [] })
+      .then(() => null, (e: unknown) => e)
+
+    expect(err).toBeInstanceOf(ResourceNotFoundError)
+  })
+
   test('no resource resolver → a condition scope can allow (business hours)', async () => {
     // Condition scopes ignore the row entirely — no resolver needed.
     const withinHours = new Scope('business-hours', 'Business hours', () => true)

@@ -119,7 +119,7 @@ Tracking needs the new row's id. On PostgreSQL and SQLite, chain `.returning()`.
 Three more things to know:
 
 - Writes with no logged-in user (seeders, jobs, scripts) record nothing.
-- `db.untracked` is the raw handle when you want a plain insert.
+- `db.untracked(reason)` is the raw handle when you want a plain insert.
 - On a guarded route, selects on `grades` come back filtered by the guard's grant — [Automatic filtering](/guide/scopes#automatic-filtering), [Drizzle reference](/reference/drizzle#how-selects-are-filtered).
 
 ## Next steps

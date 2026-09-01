@@ -55,7 +55,7 @@ import { trackedDb } from '@kyrobit/kyroguard/drizzle'
 function trackedDb<T extends object>(db: T, options: TrackedDbOptions): T & { untracked: T }
 ```
 
-Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user; selects on registered tables come back filtered by the grant of the route's guard. `db.untracked` is the raw handle.
+Wraps your Drizzle database. Inserts into registered resource tables record ownership for the current user; selects on registered tables come back filtered by the grant of the route's guard. `db.untracked(reason)` is the raw handle, for a reason registered in `trackedDb({ untracked: [...] })`.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -78,17 +78,21 @@ export const db = trackedDb(rawDb, { guard, resources })
 
 An insert needs the new row ids. The wrapper reads them from `values()` rows that carry an `id`, or from a `.returning()` result. When no user is set on the request, seeders and jobs for example, the insert runs plainly. Inside a transaction, the ownership row commits together with the insert.
 
-Updates and deletes are not intercepted. Call `guard.ownership.remove()` when you delete an owned resource.
+Updates and deletes carry the same filter as selects, so a grant cannot write to rows it cannot read. Ownership rows are not removed for you — call `guard.ownership.remove()` when you delete an owned resource. An insert that may not have written the row it names — `onConflictDoNothing`, `onConflictDoUpdate` — is attributed only from `.returning()`, so a conflicting write never takes ownership of someone else's row.
 
 ::: warning
-An insert without ids in `values()` and without `.returning()` cannot be attributed. Set `strictTracking: 'error'` in development to catch these paths. Use `db.untracked` where skipping tracking is intentional.
+An insert without ids in `values()` and without `.returning()` cannot be attributed. Set `strictTracking: 'error'` in development to catch these paths. Use `db.untracked(reason)` where skipping is intentional — the reason must be registered in `trackedDb({ untracked: [...] })`.
 :::
 
 ### How selects are filtered
 
 [Automatic filtering](/guide/scopes#automatic-filtering) is guard-driven: when the route's `requirePolicy` allows, it activates the exercised policy's decision for that policy's resource ([`storeFilterFor`](/reference/core-api#storefilterfor)). `db.select()` and `db.selectDistinct()` with `.from()` on a registered table apply the active decision: `all` leaves the query untouched, `none` compiles to an impossible `WHERE`, `where` is `AND`ed with your own `.where()`.
 
-Selects run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — through `db.untracked`, and while the engine itself is deciding: scope checks, filter halves and resource resolvers see the whole table. Updates, deletes and raw SQL are never intercepted.
+A filter belongs to the table, not to how you reached it: `from()`, `innerJoin`/`leftJoin` (applied in the `ON` condition, so a left join keeps its left rows), `update`, `delete` and `db.query` all carry it.
+
+`db.query` is filtered on the root config and on `many` relations, recursively. Drizzle exposes no `where` for a `one` relation, so one pointing at a filtered resource throws synchronously rather than returning rows the grant denies — load it with `db.select()` and a join instead.
+
+Queries run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — through `db.untracked(reason)`, and while the engine itself is deciding: scope checks, filter halves and resource resolvers see the whole table. Raw SQL is never intercepted.
 
 ## Schema subpaths
 

@@ -10,7 +10,7 @@
  */
 
 import { afterAll, describe, expect, spyOn, test } from 'bun:test'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import { pgTable, serial, text } from 'drizzle-orm/pg-core'
 import { sqliteTable, text as sqliteText } from 'drizzle-orm/sqlite-core'
 
@@ -72,6 +72,7 @@ async function makeSetup(options?: { strictTracking?: 'warn' | 'error' | 'off' }
   const db = trackedDb(pg.db, {
     guard: { engine: rbac.engine, adapter },
     resources,
+    untracked: ['test-bypass'],
     ...(options?.strictTracking ? { strictTracking: options.strictTracking } : {}),
   })
 
@@ -313,7 +314,7 @@ describe('trackedDb — ownership tracking on insert', () => {
     const id = crypto.randomUUID()
 
     await runAs(engine, u1, async () => {
-      await db.untracked.insert(posts).values({ id, title: 'raw' })
+      await db.untracked('test-bypass').insert(posts).values({ id, title: 'raw' })
     })
 
     expect(await pg.db.select().from(posts)).toHaveLength(1)
@@ -373,7 +374,7 @@ async function makeFilterSetup() {
   const rbac = createGuard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = trackedDb(pg.db, { guard: { engine: rbac.engine, adapter }, resources })
+  const db = trackedDb(pg.db, { guard: { engine: rbac.engine, adapter }, resources, untracked: ['test-bypass'] })
 
   await rbac.sync()
   await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
@@ -522,7 +523,7 @@ describe('trackedDb — guard-driven read filtering on select (pg)', () => {
       cashier,
       'sales.void',
       saleResource,
-      () => db.untracked.select().from(sales),
+      () => db.untracked('test-bypass').select().from(sales),
       s1,
     )
     expect(rows).toHaveLength(3)
@@ -595,7 +596,7 @@ async function makeSqliteFilterSetup() {
   const rbac = createGuard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = trackedDb(raw, { guard: { engine: rbac.engine, adapter }, resources })
+  const db = trackedDb(raw, { guard: { engine: rbac.engine, adapter }, resources, untracked: ['test-bypass'] })
 
   await rbac.sync()
   await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
@@ -613,6 +614,286 @@ async function makeSqliteFilterSetup() {
 
   return { engine: rbac.engine, db, saleResource }
 }
+
+describe('trackedDb — untracked is a registered decision', () => {
+  test('n: a reason on the allowlist hands back the raw handle', async () => {
+    const { pg, engine, db } = await makeSetup()
+    const id = crypto.randomUUID()
+
+    await runAs(engine, u1, () => db.untracked('test-bypass').insert(posts).values({ id, title: 'raw' }))
+
+    expect(await ownershipRows(pg)).toHaveLength(0)
+  })
+
+  test('n: a reason that was never registered throws instead of bypassing', async () => {
+    const { db } = await makeSetup()
+
+    expect(() => db.untracked('quick fix')).toThrow(MisconfiguredError)
+  })
+
+  test('n: reaching for untracked without a reason throws', async () => {
+    const { db } = await makeSetup()
+
+    expect(() => (db.untracked as unknown as () => unknown)()).toThrow(MisconfiguredError)
+  })
+
+  test('n: with no allowlist configured nothing may bypass', async () => {
+    const pg = await makePgDb(USER_DDL)
+    cleanups.push(pg.close)
+    const adapter = drizzleAdapter(pg.db, { schema: pgSchema })
+    const resources: ResourceDefinition[] = [{ type: 'post', policies: [], table: posts }]
+    const rbac = createGuard({ adapter, resources, cache: false })
+    cleanups.push(async () => rbac.dispose())
+    const db = trackedDb(pg.db, { guard: { engine: rbac.engine, adapter }, resources })
+
+    expect(() => db.untracked('anything')).toThrow(MisconfiguredError)
+  })
+})
+
+describe('trackedDb — joined tables carry their own filter (pg)', () => {
+  test('l: innerJoin on a registered table applies that table\'s active filter', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await pg.db.insert(posts).values([
+      { id: 's1', title: 'one' },
+      { id: 's2', title: 'two' },
+      { id: 's3', title: 'three' },
+    ])
+
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(posts).innerJoin(sales, eq(posts.id, sales.id)),
+      s1,
+    )
+
+    // s3 belongs to u9 — joining must not surface it.
+    expect(rows.map((row: any) => row.sales.id).sort()).toEqual(['s1', 's2'])
+  })
+
+  test('l: leftJoin keeps its left rows and nulls the rows the grant hides', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await pg.db.insert(posts).values([
+      { id: 's1', title: 'one' },
+      { id: 's3', title: 'three' },
+    ])
+
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.select().from(posts).leftJoin(sales, eq(posts.id, sales.id)).orderBy(asc(posts.id)),
+      s1,
+    )
+
+    expect(rows.map((row: any) => [row.posts.id, row.sales?.id ?? null])).toEqual([
+      ['s1', 's1'],
+      ['s3', null],
+    ])
+  })
+
+  test('l: joining an unregistered table is untouched', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await pg.db.insert(posts).values([{ id: 's3', title: 'three' }])
+
+    const rows = await runGuarded(
+      engine,
+      cashier,
+      'sales.view',
+      saleResource,
+      () => db.select().from(sales).innerJoin(posts, eq(sales.id, posts.id)),
+    )
+
+    expect(rows.map((row: any) => row.posts.id)).toEqual(['s3'])
+  })
+})
+
+describe('trackedDb — insert paths that skip ownership', () => {
+  test('k: onConflictDoNothing that inserts nothing records no second ownership row', async () => {
+    const { pg, engine, db } = await makeSetup()
+
+    await runAs(engine, u1, async () => {
+      await db.insert(posts).values({ id: 'dup', title: 'first' })
+      await db.insert(posts).values({ id: 'dup', title: 'second' }).onConflictDoNothing()
+    })
+
+    const rows = await ownershipRows(pg)
+    expect(rows).toHaveLength(1)
+  })
+
+  test('k: a conflicting insert by another subject does not take ownership of the existing row', async () => {
+    const { pg, engine, db } = await makeSetup()
+
+    await runAs(engine, u1, () => db.insert(posts).values({ id: 'dup', title: 'mine' }))
+    await runAs(engine, { id: 'u2' }, () =>
+      db.insert(posts).values({ id: 'dup', title: 'theirs' }).onConflictDoNothing(),
+    )
+
+    const rows = await ownershipRows(pg)
+    expect(rows.map(row => row.ownerId)).toEqual(['u1'])
+  })
+
+  test('k: insert().select() records ownership for the rows it created', async () => {
+    const { pg, adapter, engine, db } = await makeSetup()
+
+    await pg.db.insert(events).values([{ title: 'seeded' }])
+
+    await runAs(engine, u1, () =>
+      db
+        .insert(posts)
+        .select((qb: any) =>
+          qb.select({ id: sql`'from-select'`, title: events.title }).from(events),
+        )
+        .returning({ id: posts.id }),
+    )
+
+    expect(await adapter.isOwner('u1', { type: 'post', id: 'from-select' })).toBe(true)
+  })
+})
+
+describe('trackedDb — guard-driven filtering on update and delete (pg)', () => {
+  test('j: update on a registered table only touches rows the grant allows', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.update(sales).set({ status: 'cancelled' }),
+      s1,
+    )
+
+    const after = await pg.db.select().from(sales).orderBy(asc(sales.id))
+    // s3 belongs to u9 — it must be untouched.
+    expect(after.map(row => `${row.id}:${row.status}`)).toEqual([
+      's1:cancelled',
+      's2:cancelled',
+      's3:open',
+    ])
+  })
+
+  test('j: a user .where() on update is ANDed with the guard filter', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.update(sales).set({ status: 'cancelled' }).where(eq(sales.id, 's2')),
+      s1,
+    )
+
+    const after = await pg.db.select().from(sales).orderBy(asc(sales.id))
+    expect(after.map(row => `${row.id}:${row.status}`)).toEqual([
+      's1:open',
+      's2:cancelled',
+      's3:open',
+    ])
+  })
+
+  test('j: update cannot reach another owner\'s row even when addressed by id', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.update(sales).set({ status: 'hijacked' }).where(eq(sales.id, 's3')),
+      s1,
+    )
+
+    const [row] = await pg.db.select().from(sales).where(eq(sales.id, 's3'))
+    expect(row?.status).toBe('open')
+  })
+
+  test('j: delete on a registered table only removes rows the grant allows', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.delete(sales),
+      s1,
+    )
+
+    const after = await pg.db.select().from(sales).orderBy(asc(sales.id))
+    expect(after.map(row => row.id)).toEqual(['s3'])
+  })
+
+  test('j: an unscoped grant leaves update untouched', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      manager,
+      'sales.view',
+      saleResource,
+      () => db.update(sales).set({ status: 'reviewed' }),
+    )
+
+    const after = await pg.db.select().from(sales)
+    expect(after.every(row => row.status === 'reviewed')).toBe(true)
+  })
+
+  test('j: a filter that folds closed updates nothing rather than everything', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.flag',
+      saleResource,
+      () => db.update(sales).set({ status: 'flagged' }),
+      s1,
+    )
+
+    const after = await pg.db.select().from(sales)
+    expect(after.some(row => row.status === 'flagged')).toBe(false)
+  })
+
+  test('j: updates on unregistered tables are never filtered', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await pg.db.insert(posts).values([{ id: 'p1', title: 'one' }])
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.update(posts).set({ title: 'edited' }),
+      s1,
+    )
+
+    const [row] = await pg.db.select().from(posts).where(eq(posts.id, 'p1'))
+    expect(row?.title).toBe('edited')
+  })
+
+  test('j: db.untracked updates are never filtered', async () => {
+    const { engine, db, saleResource, pg } = await makeFilterSetup()
+
+    await runGuarded(
+      engine,
+      cashier,
+      'sales.void',
+      saleResource,
+      () => db.untracked('test-bypass').update(sales).set({ status: 'raw' }),
+      s1,
+    )
+
+    const after = await pg.db.select().from(sales)
+    expect(after.every(row => row.status === 'raw')).toBe(true)
+  })
+})
 
 describe('trackedDb — guard-driven read filtering on select (sqlite)', () => {
   test("i: a route guarded by the 'owned'-scoped void grant filters plain db.select() to the subject's rows", async () => {
@@ -667,7 +948,7 @@ describe('trackedDb — guard-driven read filtering on select (sqlite)', () => {
       cashier,
       'sales.void',
       saleResource,
-      () => db.untracked.select().from(salesLite),
+      () => db.untracked('test-bypass').select().from(salesLite),
       s1,
     )
     expect(rows).toHaveLength(3)

@@ -42,6 +42,7 @@ export default defineConfig({
           { text: 'TypeScript', link: '/guide/typescript' },
           { text: 'Testing', link: '/guide/testing' },
           { text: 'Custom adapters', link: '/guide/custom-adapters' },
+          { text: 'Upgrading to 2.0', link: '/guide/upgrading-to-2' },
         ],
       },
       {

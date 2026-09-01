@@ -9,7 +9,7 @@ import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInp
 
 export interface GuardOptions<TReq> {
   /** Resolves the row-level target for scoped grants; when omitted, defaults to the policy's owning resource type + the route's `params.id` when both exist. */
-  resource?: (req: TReq) => Awaitable<ResourceRef | null | undefined>
+  resource?: (req: TReq) => Awaitable<ResourceRef | ResourceRef[] | null | undefined>
 }
 
 /**
