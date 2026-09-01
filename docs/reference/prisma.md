@@ -91,7 +91,7 @@ A registered model gets [automatic filtering](/guide/scopes#automatic-filtering)
 Reads run unfiltered when no guard activated a filter for the model's resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). Raw SQL, `aggregate`, `groupBy` and relations loaded through `include` are never intercepted.
 
 ::: warning
-Raw SQL, nested writes through relations, `createManyAndReturn`, `updateMany` and deletes are not intercepted. Call `guard.ownership.record()` on those paths, and `guard.ownership.remove()` when deleting an owned resource. Otherwise stale ownership rows keep passing `Scope.owned()` checks for rows that no longer exist. See [Ownership](/guide/ownership).
+Filtering covers reads and writes alike: `findMany`, `findFirst`, `findUnique`, `count`, `updateMany`, `deleteMany`, `update` and `delete` all carry the active grant, so a subject cannot write to rows it cannot read. **Ownership tracking** is narrower — raw SQL, nested writes through relations, `createManyAndReturn` and bulk writes record nothing. Call `guard.ownership.record()` on those paths, and `guard.ownership.remove()` when deleting an owned resource. Otherwise stale ownership rows keep passing `Scope.owned()` checks for rows that no longer exist. See [Ownership](/guide/ownership).
 :::
 
 ## prismaSchemaSnippet

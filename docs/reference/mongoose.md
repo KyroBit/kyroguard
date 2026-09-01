@@ -104,5 +104,5 @@ export const Grade = model('Grade', gradeSchema)
 Reads run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
 
 ::: warning
-`Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no document middleware. Call `guard.ownership.record()` and `guard.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
+Query filtering covers reads and writes alike — `find*`, `countDocuments`, `update*`, `delete*` and `replaceOne` all carry the active grant, so a subject cannot write to documents it cannot read. **Ownership tracking** is narrower: `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no *document* middleware and record nothing. Call `guard.ownership.record()` and `guard.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
 :::

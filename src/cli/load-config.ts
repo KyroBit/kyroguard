@@ -36,11 +36,23 @@ export async function loadModuleExport<T = unknown>(path: string, candidates: st
 }
 
 // Bun executes TypeScript natively; under Node, jiti transpiles the user's files.
+// It is an optional peer so that importing the library never pulls a transpiler
+// into production — only the CLI, on Node, reading a .ts config, needs it.
 async function importModule(absolutePath: string): Promise<Record<string, unknown>> {
   if (typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined') {
     return (await import(pathToFileURL(absolutePath).href)) as Record<string, unknown>
   }
-  const { createJiti } = await import('jiti')
+
+  let createJiti: typeof import('jiti').createJiti
+  try {
+    ;({ createJiti } = await import('jiti'))
+  } catch {
+    throw new Error(
+      `[kyroguard] Reading "${absolutePath}" on Node needs a TypeScript loader. ` +
+        `Install it with: npm i -D jiti — or run the CLI with Bun, which needs none.`,
+    )
+  }
+
   const jiti = createJiti(import.meta.url, { interopDefault: true })
   return await jiti.import<Record<string, unknown>>(absolutePath)
 }

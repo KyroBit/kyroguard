@@ -35,8 +35,16 @@ export interface TrackingExtension {
 }
 
 type ReadOperation = 'findMany' | 'findFirst' | 'findUnique' | 'count'
+type WriteOperation = 'updateMany' | 'deleteMany' | 'update' | 'delete'
+type FilteredOperation = ReadOperation | WriteOperation
 
 const READ_OPERATIONS: ReadOperation[] = ['findMany', 'findFirst', 'findUnique', 'count']
+/** Writes carry the same filter: a grant that narrows reads must narrow writes by as much. */
+const WRITE_OPERATIONS: WriteOperation[] = ['updateMany', 'deleteMany', 'update', 'delete']
+
+/** update/delete take a unique where, so the fragment is ANDed rather than replacing it. */
+const TAKES_UNIQUE_WHERE = new Set<FilteredOperation>(['findUnique', 'update', 'delete'])
+const AFFECTS_MANY = new Set<FilteredOperation>(['updateMany', 'deleteMany'])
 
 // Prisma hands query hooks the schema model name ('BlogPost') while
 // registrations carry the delegate key ('blogPost') — normalize both.
@@ -120,8 +128,8 @@ export function trackingExtension(options: TrackingExtensionOptions): TrackingEx
   }
 
   if (typeForModel.size > 0) {
-    const readHook =
-      (operation: ReadOperation): QueryHook =>
+    const filteredHook =
+      (operation: FilteredOperation): QueryHook =>
       async ({ model, args, query: run }: QueryHookParams): Promise<any> => {
         const type = typeForModel.get(delegateKey(model))
         if (type === undefined) return run(args)
@@ -130,22 +138,31 @@ export function trackingExtension(options: TrackingExtensionOptions): TrackingEx
         if (engine.store.isInAuthz()) return run(args)
         const filter = engine.store.getActiveFilter(type)
         if (!filter || filter.kind === 'all') return run(args)
+
         if (filter.kind === 'none') {
-          return operation === 'findMany' ? [] : operation === 'count' ? 0 : null
+          if (operation === 'findMany') return []
+          if (operation === 'count') return 0
+          if (AFFECTS_MANY.has(operation)) return { count: 0 }
+          if (operation === 'findFirst' || operation === 'findUnique') return null
         }
 
+        // A closed filter still runs for single writes, so Prisma raises its own
+        // not-found rather than this extension inventing a return shape.
+        const fragment = filter.kind === 'none' ? { NOT: {} } : filter.where
         const where: unknown = (args as { where?: unknown } | null | undefined)?.where
-        const merged =
-          operation === 'findUnique'
-            ? mergeUniqueWhere((where ?? {}) as Record<string, unknown>, filter.where)
-            : where === undefined
-              ? filter.where
-              : { AND: [where, filter.where] }
+        const merged = TAKES_UNIQUE_WHERE.has(operation)
+          ? mergeUniqueWhere((where ?? {}) as Record<string, unknown>, fragment)
+          : where === undefined
+            ? fragment
+            : { AND: [where, fragment] }
         return run({ ...args, where: merged })
       }
 
     query['$allModels'] = Object.fromEntries(
-      READ_OPERATIONS.map(operation => [operation, readHook(operation)]),
+      [...READ_OPERATIONS, ...WRITE_OPERATIONS].map(operation => [
+        operation,
+        filteredHook(operation),
+      ]),
     )
   }
 

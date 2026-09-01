@@ -11,5 +11,11 @@ export type {
   TestApp,
   TestAppResponse,
 } from './framework-suite.js'
+export { runQueryIntegrationContractSuite } from './integration-suite.js'
+export type {
+  IntegrationSuiteOptions,
+  IntegrationHarness,
+  IntegrationRows,
+} from './integration-suite.js'
 export { assertScopeParity } from './assert-scope-parity.js'
 export type { AssertScopeParityOptions } from './assert-scope-parity.js'

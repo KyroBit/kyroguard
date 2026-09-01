@@ -1,11 +1,28 @@
 # Upgrading to 2.0
 
-Version 2 closes a set of holes in `trackedDb` where a scoped grant could still
-reach rows it did not allow. If you use scopes, treat this as a security update.
+Version 2 closes a set of holes across every ORM integration where a scoped grant
+could still reach rows it did not allow. If you use scopes, treat this as a
+security update.
 
 Two changes need edits in your code. Everything else is automatic.
 
 ## What was leaking
+
+Every integration filtered reads and left writes alone, so a grant that narrowed
+what a subject could read did not narrow what it could destroy. That is worse than
+no filtering: the reads look safe.
+
+All three now satisfy the same executable contract — `runQueryIntegrationContractSuite`
+(Q1–Q7) in `@kyrobit/kyroguard/testing`. A new integration that skips a clause fails
+CI rather than shipping a quiet gap.
+
+| Integration | Reads | Writes before | Writes now |
+| --- | --- | --- | --- |
+| Drizzle `trackedDb` | filtered | **unfiltered** | filtered |
+| Prisma `trackingExtension` | filtered | **unfiltered** | filtered |
+| Mongoose `trackingPlugin` | filtered | **unfiltered** | filtered |
+
+### Drizzle specifics
 
 | Path | Before | Now |
 | --- | --- | --- |

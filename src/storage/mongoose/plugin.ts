@@ -68,7 +68,10 @@ export function trackingPlugin(schema: Schema, options: TrackingPluginOptions): 
     if (doc) await removeOwnershipFor(doc)
   })
 
-  const applyReadFilter = async function (this: Query<unknown, unknown>): Promise<void> {
+  // Narrows any query — read or write — to the rows the active grant allows. A
+  // subject that may only read its own rows must not be able to update or delete
+  // the others: filtering reads alone leaves writes reaching every document.
+  const applyFilter = async function (this: Query<unknown, unknown>): Promise<void> {
     // Scope checks/filters and resource resolvers must see the unfiltered
     // collection — the engine marks those queries via isInAuthz.
     if (engine.store.isInAuthz()) return
@@ -86,6 +89,10 @@ export function trackingPlugin(schema: Schema, options: TrackingPluginOptions): 
         : ({ $and: [current, where] } as FilterQuery<unknown>),
     )
   }
-  schema.pre(/^find/, applyReadFilter)
-  schema.pre('countDocuments', applyReadFilter)
+  schema.pre(/^find/, applyFilter)
+  schema.pre('countDocuments', applyFilter)
+  // findOneAndUpdate / findOneAndDelete already match /^find/.
+  schema.pre(/^update/, applyFilter)
+  schema.pre(/^delete/, applyFilter)
+  schema.pre('replaceOne', applyFilter)
 }
