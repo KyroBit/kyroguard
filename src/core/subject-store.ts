@@ -7,8 +7,6 @@ export interface RequestStore {
   subject: Subject | null
   /** Per-domain memoized resolutions — two domains on one app never collide. */
   domainSubjects: Map<string, Subject | null>
-  /** One-shot extra columns for the next tracked insert (addExtra). */
-  extraOnce: Record<string, unknown> | null
   /** True while the engine evaluates scopes/filters — wrappers must not auto-filter these queries. */
   inAuthz: boolean
   /**
@@ -54,12 +52,6 @@ export class SubjectStore {
     return this.als.getStore()?.subject ?? null
   }
 
-  addExtra(extra: Record<string, unknown>): void {
-    const store = this.als.getStore()
-    if (!store) return
-    store.extraOnce = { ...(store.extraOnce ?? {}), ...extra }
-  }
-
   setActiveFilter(resourceType: string, filter: FilterResult): void {
     this.als.getStore()?.activeFilters.set(resourceType, filter)
   }
@@ -76,21 +68,12 @@ export class SubjectStore {
   isInAuthz(): boolean {
     return this.als.getStore()?.inAuthz ?? false
   }
-
-  consumeExtra(): Record<string, unknown> | null {
-    const store = this.als.getStore()
-    if (!store?.extraOnce) return null
-    const extra = store.extraOnce
-    store.extraOnce = null
-    return extra
-  }
 }
 
 function createStore(): RequestStore {
   return {
     subject: null,
     domainSubjects: new Map(),
-    extraOnce: null,
     inAuthz: false,
     activeFilters: new Map(),
   }

@@ -1,9 +1,9 @@
-export { prismaAdapter, PRISMA_ID_LIST_CAP } from './adapter.js'
-export { trackingExtension } from './extension.js'
+export { prismaAdapter } from './adapter.js'
+export { scopeExtension } from './extension.js'
 export type {
-  TrackingExtension,
-  TrackingExtensionOptions,
-  TrackingResourceRegistration,
+  ScopeExtension,
+  ScopeExtensionOptions,
+  ScopeResourceRegistration,
 } from './extension.js'
 export type {
   PrismaClientLike,

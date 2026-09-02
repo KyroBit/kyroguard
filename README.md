@@ -15,9 +15,9 @@ TypeScript types in sync.
   `ACCESS_DENIED`, …) through your framework's own error pipeline.
 - **Bounded cache** (LRU + TTL, instance-scoped) with a pluggable
   cross-instance invalidation bus.
-- **Scoped grants** — conditions on a permission: own rows only
-  (`Scope.owned()`, backed by ownership tracking on every storage
-  backend), business hours, amount caps — one line in a role definition.
+- **Scoped grants** — a condition on a permission, written against your own
+  tables: own rows only, this tenant only, business hours. kyroguard ANDs it
+  into every query for that resource — reads, updates and deletes alike.
 
 ## Install
 
@@ -44,9 +44,7 @@ await app.register(kyroguardFastify(guard))
 const admin = app.kyroguard.domain('admin', { getSubject: req => auth.user(req) })
 
 app.get('/transactions/:id', {
-  preHandler: admin.requirePolicy('transactions.view', {
-    resource: req => ({ type: 'transaction', id: req.params.id }),
-  }),
+  preHandler: admin.requirePolicy('transactions.view'),
 }, handler)
 ```
 
@@ -59,9 +57,9 @@ A subject without `admin.transactions.view` receives:
 ## Documentation
 
 Full documentation lives in [`docs/`](./docs) (VitePress — `bun run docs:dev`):
-installation per stack, guides for domains, tenants, scopes,
-ownership, caching and observability, a complete API and CLI reference, the
-database schema and an error encyclopedia.
+installation per stack, guides for domains, tenants, scopes, ownership,
+caching and observability, a complete API and CLI reference, the database
+schema and an error encyclopedia.
 
 ## Requirements
 

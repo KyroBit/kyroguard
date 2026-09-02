@@ -91,30 +91,10 @@ export const kyroguardUserPolicies = mysqlTable(
   ],
 )
 
-export const kyroguardResourceOwners = mysqlTable(
-  'kyroguard_resource_owners',
-  {
-    id: id('id').primaryKey().$defaultFn(() => createId()),
-    resourceType: varchar('resource_type', { length: 191 }).notNull(),
-    resourceId: varchar('resource_id', { length: 191 }).notNull(),
-    ownerId: varchar('owner_id', { length: 191 }).notNull(),
-    relation: varchar('relation', { length: 191 }).notNull().default('owner'),
-    domain: varchar('domain', { length: 191 }).notNull().default(''),
-    tenantId: varchar('tenant_id', { length: 191 }).notNull().default(''),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  table => [
-    uniqueIndex('kyroguard_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId, table.relation),
-    index('kyroguard_ro_resource_idx').on(table.resourceType, table.resourceId),
-    index('kyroguard_ro_owner_idx').on(table.resourceType, table.ownerId),
-  ],
-)
-
 export const tables = {
   policies: kyroguardPolicies,
   policyGroups: kyroguardPolicyGroups,
   policyGroupPolicies: kyroguardPolicyGroupPolicies,
   userPolicyGroups: kyroguardUserPolicyGroups,
   userPolicies: kyroguardUserPolicies,
-  resourceOwners: kyroguardResourceOwners,
 } as const

@@ -1,22 +1,21 @@
-import { normalizeSentinel } from '../../core/types.js'
 import type { GuardEngine } from '../../core/engine.js'
-import type { OwnershipEntry, StorageAdapter } from '../contract.js'
+import type { StorageAdapter } from '../contract.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export interface TrackingResourceRegistration {
-  /** The resource type recorded in the ownership store, e.g. 'post'. */
+export interface ScopeResourceRegistration {
+  /** The resource type the guard activates a filter under, e.g. 'post'. */
   type: string
   /** The Prisma client delegate key, case-exact (`model BlogPost` → `'blogPost'`). */
   model: string
 }
 
-export interface TrackingExtensionOptions {
+export interface ScopeExtensionOptions {
   guard: {
     engine: GuardEngine
     adapter: StorageAdapter
   }
-  resources: TrackingResourceRegistration[]
+  resources: ScopeResourceRegistration[]
 }
 
 /** The params Prisma passes to a `query` extension hook (structural subset). */
@@ -29,7 +28,7 @@ interface QueryHookParams {
 type QueryHook = (params: QueryHookParams) => Promise<any>
 
 /** The extension object shape for `client.$extends(...)`; structural — src/ never imports `@prisma/client`. */
-export interface TrackingExtension {
+export interface ScopeExtension {
   name: string
   query: Record<string, Record<string, QueryHook>>
 }
@@ -66,105 +65,61 @@ function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Re
 }
 
 /**
- * Prisma client extension: automatic ownership tracking for registered models,
- * plus automatic read filtering (findMany/findFirst/findUnique/count) driven
- * by the request's guard-activated filter (the store's activeFilters plan).
- * Interception gaps (raw SQL, nested writes, db-generated createMany ids, …)
- * are documented in docs/reference/prisma.md.
+ * Prisma client extension: merges the request's guard-activated filter into
+ * every query for a registered model — reads (findMany/findFirst/findUnique/
+ * count) and writes (update/delete/updateMany/deleteMany) alike, so a row the
+ * scope excludes can be neither read nor written. Creates pass through: a row
+ * that does not exist yet has nothing to filter on. Interception gaps (raw
+ * SQL, nested writes, …) are documented in docs/reference/prisma.md.
  */
-export function trackingExtension(options: TrackingExtensionOptions): TrackingExtension {
+export function scopeExtension(options: ScopeExtensionOptions): ScopeExtension {
   const { engine, adapter } = options.guard
-
-  const extractId = (value: unknown): string | null => {
-    if (typeof value !== 'object' || value === null) return null
-    const id = (value as { id?: unknown }).id
-    if (typeof id === 'string') return id
-    if (typeof id === 'number' || typeof id === 'bigint') return String(id)
-    return null
-  }
-
-  const recordOwnershipFor = async (type: string, ids: Array<string | null>): Promise<void> => {
-    const subject = engine.store.getSubject()
-    if (!subject) return
-    const domain = normalizeSentinel(subject.domain)
-    const tenantId = normalizeSentinel(subject.tenant_id)
-    const entries: OwnershipEntry[] = []
-    for (const resourceId of ids) {
-      if (resourceId === null) continue
-      entries.push({ resourceType: type, resourceId, ownerId: subject.id, domain, tenantId })
-    }
-    if (entries.length > 0) await adapter.recordOwnership(entries)
-  }
-
-  const query: Record<string, Record<string, QueryHook>> = {}
-  for (const resource of options.resources) {
-    query[resource.model] = {
-      async create({ args, query: run }: QueryHookParams): Promise<any> {
-        const result = await run(args)
-        await recordOwnershipFor(resource.type, [extractId(result)])
-        return result
-      },
-
-      async createMany({ args, query: run }: QueryHookParams): Promise<any> {
-        const result = await run(args)
-        // createMany returns { count } only — db-generated ids are a documented gap.
-        const data: unknown = (args as { data?: unknown } | null | undefined)?.data
-        const rows = Array.isArray(data) ? data : data !== undefined && data !== null ? [data] : []
-        await recordOwnershipFor(resource.type, rows.map(extractId))
-        return result
-      },
-
-      async upsert({ args, query: run }: QueryHookParams): Promise<any> {
-        const result = await run(args)
-        await recordOwnershipFor(resource.type, [extractId(result)])
-        return result
-      },
-    }
-  }
 
   const typeForModel = new Map<string, string>()
   for (const registration of options.resources) {
     typeForModel.set(delegateKey(registration.model), registration.type)
   }
 
-  if (typeForModel.size > 0) {
-    const filteredHook =
-      (operation: FilteredOperation): QueryHook =>
-      async ({ model, args, query: run }: QueryHookParams): Promise<any> => {
-        const type = typeForModel.get(delegateKey(model))
-        if (type === undefined) return run(args)
-        // Scope checks and filter builders must see the unfiltered table —
-        // the isInAuthz contract (core/engine.ts).
-        if (engine.store.isInAuthz()) return run(args)
-        const filter = engine.store.getActiveFilter(type)
-        if (!filter || filter.kind === 'all') return run(args)
+  const query: Record<string, Record<string, QueryHook>> = {}
+  if (typeForModel.size === 0) return { name: '@kyrobit/kyroguard', query }
 
-        if (filter.kind === 'none') {
-          if (operation === 'findMany') return []
-          if (operation === 'count') return 0
-          if (AFFECTS_MANY.has(operation)) return { count: 0 }
-          if (operation === 'findFirst' || operation === 'findUnique') return null
-        }
+  const filteredHook =
+    (operation: FilteredOperation): QueryHook =>
+    async ({ model, args, query: run }: QueryHookParams): Promise<any> => {
+      const type = typeForModel.get(delegateKey(model))
+      if (type === undefined) return run(args)
+      // Scope filters must see the unfiltered table — the isInAuthz contract
+      // (core/engine.ts).
+      if (engine.store.isInAuthz()) return run(args)
+      const filter = engine.store.getActiveFilter(type)
+      if (!filter || filter.kind === 'all') return run(args)
 
-        // A closed filter still runs for single writes, so Prisma raises its own
-        // not-found rather than this extension inventing a return shape.
-        const fragment = filter.kind === 'none' ? { NOT: {} } : filter.where
-        const where: unknown = (args as { where?: unknown } | null | undefined)?.where
-        const merged = TAKES_UNIQUE_WHERE.has(operation)
-          ? mergeUniqueWhere((where ?? {}) as Record<string, unknown>, fragment)
-          : where === undefined
-            ? fragment
-            : { AND: [where, fragment] }
-        return run({ ...args, where: merged })
+      if (filter.kind === 'none') {
+        if (operation === 'findMany') return []
+        if (operation === 'count') return 0
+        if (AFFECTS_MANY.has(operation)) return { count: 0 }
+        if (operation === 'findFirst' || operation === 'findUnique') return null
       }
 
-    query['$allModels'] = Object.fromEntries(
-      [...READ_OPERATIONS, ...WRITE_OPERATIONS].map(operation => [
-        operation,
-        filteredHook(operation),
-      ]),
-    )
-  }
+      // A closed filter still runs for update/delete, so Prisma raises its own
+      // not-found rather than this extension inventing a return shape. It has
+      // to be the adapter's field-level impossible predicate: inside a
+      // WhereUniqueInput, Prisma folds every boolean "always false" away —
+      // NOT:{}, OR:[] and AND:[] each compile to no condition at all, and the
+      // write would land on the row the scope denied.
+      const fragment = filter.kind === 'none' ? adapter.listFilters!.none() : filter.where
+      const where: unknown = (args as { where?: unknown } | null | undefined)?.where
+      const merged = TAKES_UNIQUE_WHERE.has(operation)
+        ? mergeUniqueWhere((where ?? {}) as Record<string, unknown>, fragment)
+        : where === undefined
+          ? fragment
+          : { AND: [where, fragment] }
+      return run({ ...args, where: merged })
+    }
+
+  query['$allModels'] = Object.fromEntries(
+    [...READ_OPERATIONS, ...WRITE_OPERATIONS].map(operation => [operation, filteredHook(operation)]),
+  )
 
   return { name: '@kyrobit/kyroguard', query }
 }

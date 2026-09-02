@@ -70,7 +70,7 @@ describe('seedGroups formats', () => {
 })
 
 describe('seedGroups scope validation', () => {
-  const owned = Scope.owned()
+  const owned = new Scope('owned', 'Owned by the subject', () => true)
 
   test('record-form scope not in the policy scopeOptions throws naming group, policy and scope', async () => {
     const adapter = memoryAdapter()

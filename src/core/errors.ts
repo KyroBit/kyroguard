@@ -1,24 +1,13 @@
-export type GuardErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'ACCESS_DENIED'
-  | 'NOT_FOUND'
-  | 'MISCONFIGURED'
-
-/** Distinguishes the two ACCESS_DENIED denials in error bodies. */
-export type AccessDeniedReason = 'policy' | 'scope'
+export type GuardErrorCode = 'UNAUTHENTICATED' | 'ACCESS_DENIED' | 'MISCONFIGURED'
 
 export interface GuardErrorBody {
   message: string
   code: GuardErrorCode
-  /** Present only when `code` is ACCESS_DENIED. */
-  reason?: AccessDeniedReason
 }
 
 export abstract class GuardError extends Error {
   abstract readonly statusCode: number
   abstract readonly code: GuardErrorCode
-  /** Set only by the ACCESS_DENIED errors. */
-  readonly reason?: AccessDeniedReason
 
   constructor(message: string) {
     super(message)
@@ -27,9 +16,7 @@ export abstract class GuardError extends Error {
 
   /** Default response body. Frameworks may override via formatError. */
   toBody(): GuardErrorBody {
-    return this.code === 'ACCESS_DENIED' && this.reason
-      ? { message: this.message, code: this.code, reason: this.reason }
-      : { message: this.message, code: this.code }
+    return { message: this.message, code: this.code }
   }
 }
 
@@ -47,37 +34,11 @@ export class UnauthenticatedError extends GuardError {
 export class PolicyDeniedError extends GuardError {
   readonly statusCode = 403
   readonly code = 'ACCESS_DENIED'
-  override readonly reason = 'policy'
 
   constructor(
     readonly policy: string,
     message = 'Forbidden',
   ) {
-    super(message)
-  }
-}
-
-/** Policy granted but the scope check rejected this resource. → 403 */
-export class ScopeDeniedError extends GuardError {
-  readonly statusCode = 403
-  readonly code = 'ACCESS_DENIED'
-  override readonly reason = 'scope'
-
-  constructor(
-    readonly policy: string,
-    readonly scope: string,
-    message = 'Forbidden',
-  ) {
-    super(message)
-  }
-}
-
-/** Scoped guard could not resolve the target resource. → 404 */
-export class ResourceNotFoundError extends GuardError {
-  readonly statusCode = 404
-  readonly code = 'NOT_FOUND'
-
-  constructor(message = 'Not found') {
     super(message)
   }
 }

@@ -46,22 +46,23 @@ const teachers = app.kyroguard.domain({
 
 `getSubject` runs once per request, when the first guard fires. Return `null` and the guard responds 401. The `id` is any string that identifies the user. `tenant_id` is optional and marks the school. See [Domains](/guide/domains).
 
-## The four outcomes
+## The outcomes
 
-Every guarded request ends one of four ways:
+Every guarded request ends one of three ways:
 
 | Status | Meaning | `code` in the body |
 | --- | --- | --- |
 | 200 | Allowed | — |
 | 401 | No logged-in user | `UNAUTHENTICATED` |
-| 403 | Policy not granted, or scope check failed | `ACCESS_DENIED` (`reason: 'policy'` / `'scope'`) |
-| 404 | Scoped grant, but the resource does not exist | `NOT_FOUND` |
+| 403 | Policy not granted here | `ACCESS_DENIED` |
+
+A scope never produces its own status: it narrows the query, so a row it excludes is simply not found and your handler's existing 404 branch answers.
 
 The exact response bodies are shown in [Fastify](/guide/fastify) and [Express](/guide/express).
 
-## Scoped grants check the target row
+## Scoped grants narrow the query
 
-A grant can carry a scope: a teacher holds `grades.update` scoped to `owned`; the coordinator holds it scoped to `in-tenant` ([Scopes](/guide/scopes)). A scoped grant checks the row the request targets. On a route with an `:id` param, the guard finds that row by itself:
+A grant can carry a scope: a teacher holds `grades.update` scoped to `entered`; the coordinator holds it scoped to `in-school` ([Scopes](/guide/scopes)). The guard treats both the same way — the subject holds the policy, so the request proceeds. What changes is the query.
 
 ::: code-group
 
@@ -82,16 +83,8 @@ app.delete('/grades/:id', teachers.requirePolicy('grades.delete'), deleteGrade)
 
 :::
 
-The guard pairs the policy's resource type — `grade` — with `req.params.id`. Nothing to configure. A teacher updates only the grades they entered. The coordinator updates any grade in the school. An `'all'` grant skips the row check entirely.
+Nothing to configure. Inside `updateGrade`, the teacher's `UPDATE … WHERE id = :id` also carries `entered_by = :them`; a grade someone else entered matches no rows, and the handler answers 404 exactly as it would for an id that does not exist. The coordinator's version carries `school_id = :theirSchool` instead. An `'all'` grant adds nothing.
 
-A route whose param is not `:id` needs a custom resolver:
+Write the handler as if the row might simply not be there — that branch now does double duty, and it is the only one you need.
 
-```ts
-teachers.requirePolicy('grades.update', {
-  resource: req => ({ type: 'grade', id: (req.params as { gradeId: string }).gradeId }),
-})
-```
-
-Return `null` when the grade does not exist — the guard responds 404. Details in the [Fastify](/reference/fastify#domain-instance) and [Express](/reference/express#domain-instance) references.
-
-On a route with no `:id` and no resolver, row scopes fail closed. The scoped grant is denied; condition scopes like `'grading-window'` still work ([Scopes](/guide/scopes)).
+Which paths carry the condition depends on your ORM integration — [Drizzle](/reference/drizzle#what-gets-filtered), [Prisma](/reference/prisma#what-gets-filtered), [Mongoose](/reference/mongoose). Inserts never do: an owner or tenant column is yours to fill.

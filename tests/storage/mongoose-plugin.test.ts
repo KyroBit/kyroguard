@@ -1,10 +1,9 @@
 /// <reference types="bun-types" />
 /**
- * trackingPlugin behavior on a real mongod (mongodb-memory-server):
- * automatic ownership tracking through document middleware, ownership cleanup
- * on findOneAndDelete, guard-driven read filtering on find/countDocuments
- * (keyed on the request's activeFilters plan), and the DOCUMENTED gap that
- * updateMany fires no document middleware and therefore records nothing.
+ * scopePlugin behaviour on a real mongod (mongodb-memory-server): the
+ * request's activated filter narrows every query the plugin hooks, scopes
+ * build their fragments against the unfiltered collection, and writes through
+ * a document save or a raw collection op are untouched.
  */
 
 import mongoose from 'mongoose'
@@ -14,7 +13,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { inProcessBus } from '../../src/cache/bus.js'
 import { GuardEngine } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
-import { mongooseAdapter, kyroguardModels, trackingPlugin } from '../../src/storage/mongoose/index.js'
+import { mongooseAdapter, scopePlugin } from '../../src/storage/mongoose/index.js'
 import { makeConnection, mongoAvailable, stopMongo } from './helpers/mongo.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
 import type { Subject } from '../../src/core/types.js'
@@ -24,14 +23,17 @@ const available = await mongoAvailable()
 afterAll(stopMongo)
 
 if (!available) {
-  test.skip('trackingPlugin suite (mongod unavailable)', () => {})
+  test.skip('scopePlugin suite (mongod unavailable)', () => {})
 } else {
   const connection = await makeConnection()
   const adapter = mongooseAdapter(connection)
   await adapter.ensureSchema?.()
-  const models = kyroguardModels(connection)
 
-  const scopes = new Map<string, Scope>([['owned', Scope.owned()]])
+  // The scope is written against the consumer's OWN field — kyroguard stores no
+  // ownership of its own.
+  const scopes = new Map<string, Scope>([
+    ['owned', new Scope('owned', 'Own posts', subject => ({ where: { authorId: subject.id } }))],
+  ])
   const engine = new GuardEngine({
     adapter,
     scopes,
@@ -52,8 +54,8 @@ if (!available) {
     branchId: { type: String, required: true },
   })
   const postResource: ResourceDefinition = { type: 'post', policies: [] }
-  trackingPlugin(postSchema as unknown as mongoose.Schema, {
-    guard: { engine, adapter },
+  scopePlugin(postSchema as unknown as mongoose.Schema, {
+    guard: { engine },
     type: 'post',
   })
   const Post = connection.model<PostDoc>('Post', postSchema)
@@ -62,7 +64,7 @@ if (!available) {
   const observedInAuthz: boolean[] = []
   scopes.set(
     'peek',
-    new Scope('peek', 'Peek', () => false, async () => {
+    new Scope('peek', 'Peek', async () => {
       observedInAuthz.push(engine.store.isInAuthz())
       const rows = await Post.find({}).lean()
       return { where: { _id: { $in: rows.map(row => row._id) } } }
@@ -106,17 +108,10 @@ if (!available) {
       return await fn()
     })
 
-  const isOwner = (ownerId: string, id: unknown): Promise<boolean> =>
-    adapter.isOwner(ownerId, { type: 'post', id: String(id) })
-
   const seedBothAuthors = async (): Promise<void> => {
-    await asSubject(cashier, async () => {
-      await Post.create({ title: 'cashier-1', authorId: 'cashier', branchId: 'b1' })
-      await Post.create({ title: 'cashier-2', authorId: 'cashier', branchId: 'b1' })
-    })
-    await asSubject(manager, async () => {
-      await Post.create({ title: 'manager-1', authorId: 'manager', branchId: 'b1' })
-    })
+    await Post.create({ title: 'cashier-1', authorId: 'cashier', branchId: 'b1' })
+    await Post.create({ title: 'cashier-2', authorId: 'cashier', branchId: 'b1' })
+    await Post.create({ title: 'manager-1', authorId: 'manager', branchId: 'b1' })
   }
 
   const titlesFor = (who: Subject, filter: Record<string, unknown> = {}): Promise<string[]> =>
@@ -125,93 +120,37 @@ if (!available) {
       return found.map(doc => doc.title).sort()
     })
 
-  describe('trackingPlugin', () => {
+  describe('scopePlugin', () => {
     beforeEach(async () => {
       await Post.deleteMany({})
-      await models.resourceOwner.deleteMany({})
       observedInAuthz.length = 0
     })
 
-    test("(a) doc.save() inside engine.store context records ownership with the subject's domain/tenant", async () => {
-      const post = await asSubject(cashier, () =>
-        Post.create({ title: 'one', authorId: 'cashier', branchId: 'b1' }),
-      )
-
-      expect(await isOwner('cashier', post._id)).toBe(true)
-      expect(await isOwner('manager', post._id)).toBe(false)
-
-      const row = await models.resourceOwner
-        .findOne({ resourceType: 'post', resourceId: post._id.toString() })
-        .lean()
-      expect(row).not.toBeNull()
-      expect(row?.ownerId).toBe('cashier')
-      expect(row?.domain).toBe('admin')
-      expect(row?.tenantId).toBe('b1')
-    })
-
-    test('(b) Model.insertMany records ownership for every inserted doc', async () => {
-      const docs = await asSubject(cashier, () =>
-        Post.insertMany([
-          { title: 'first', authorId: 'cashier', branchId: 'b1' },
-          { title: 'second', authorId: 'cashier', branchId: 'b1' },
-          { title: 'third', authorId: 'cashier', branchId: 'b1' },
-        ]),
-      )
-
-      expect(docs).toHaveLength(3)
-      for (const doc of docs) {
-        expect(await isOwner('cashier', doc._id)).toBe(true)
-      }
-      expect(
-        await models.resourceOwner.countDocuments({ resourceType: 'post', ownerId: 'cashier' }),
-      ).toBe(3)
-    })
-
-    test('(c) save with no ALS context records no ownership and does not throw', async () => {
-      // Outside any engine.store context: middleware must be a silent no-op.
-      const post = await Post.create({ title: 'orphan', authorId: 'cashier', branchId: 'b1' })
-
-      expect(await isOwner('cashier', post._id)).toBe(false)
-      expect(await models.resourceOwner.countDocuments({})).toBe(0)
-    })
-
-    test('(d) findOneAndDelete removes ownership for the deleted doc only', async () => {
-      const [kept, deleted] = await asSubject(cashier, async () => {
-        const first = await Post.create({ title: 'kept', authorId: 'cashier', branchId: 'b1' })
-        const second = await Post.create({ title: 'doomed', authorId: 'cashier', branchId: 'b1' })
-        return [first, second] as const
-      })
-      expect(await isOwner('cashier', deleted._id)).toBe(true)
-
-      // No subject context: no read filtering interferes with the delete.
-      await Post.findOneAndDelete({ _id: deleted._id })
-
-      expect(await isOwner('cashier', deleted._id)).toBe(false)
-      expect(await isOwner('cashier', kept._id)).toBe(true)
-    })
-
-    test("(e) cashier guarded by the 'owned' grant: find and countDocuments see only owned docs", async () => {
+    test("a guarded read returns only the rows the grant's scope fragment allows", async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(cashier)).toEqual(['cashier-1', 'cashier-2'])
       expect(await asGuarded(cashier, () => Post.countDocuments({}))).toBe(2)
-
-      // The plan composes with the caller's filter ($and), it does not replace it.
-      expect(await titlesFor(cashier, { title: 'cashier-2' })).toEqual(['cashier-2'])
-      expect(await titlesFor(cashier, { title: 'manager-1' })).toEqual([])
       expect(
         await asGuarded(cashier, () => Post.findOne({ title: 'manager-1' }).lean()),
       ).toBeNull()
     })
 
-    test('(e) manager guarded by the unscoped grant: plan is all — find and countDocuments are unfiltered', async () => {
+    test("the grant's fragment composes with the caller's own filter, it does not replace it", async () => {
+      await seedBothAuthors()
+
+      expect(await titlesFor(cashier, { title: 'cashier-2' })).toEqual(['cashier-2'])
+      expect(await titlesFor(cashier, { title: 'manager-1' })).toEqual([])
+    })
+
+    test('an unscoped grant activates no fragment — reads see every row', async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(manager)).toEqual(['cashier-1', 'cashier-2', 'manager-1'])
       expect(await asGuarded(manager, () => Post.countDocuments({}))).toBe(3)
     })
 
-    test('(e) no grant: the stored plan is none — empty results without matching any doc', async () => {
+    test('a subject holding no grant reads nothing rather than everything', async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(nobody)).toEqual([])
@@ -219,7 +158,7 @@ if (!available) {
       expect(await asGuarded(nobody, () => Post.findOne({}).lean())).toBeNull()
     })
 
-    test('(e) a subject WITHOUT a guard reads unfiltered — no static fallback exists', async () => {
+    test('a subject whose request activated no filter reads unfiltered — there is no static fallback', async () => {
       await seedBothAuthors()
 
       const found = await asSubject(cashier, () => Post.find({}).lean())
@@ -227,7 +166,7 @@ if (!available) {
       expect(await asSubject(cashier, () => Post.countDocuments({}))).toBe(3)
     })
 
-    test('(e) no ALS context: find is unfiltered', async () => {
+    test('outside any request context reads are unfiltered', async () => {
       await seedBothAuthors()
 
       const found = await Post.find({}).lean()
@@ -235,7 +174,7 @@ if (!available) {
       expect(await Post.countDocuments({})).toBe(3)
     })
 
-    test('(e) scope filter halves run suppressed: their model queries see the unfiltered collection', async () => {
+    test("a scope's own queries see the unfiltered collection while it builds its fragment", async () => {
       await seedBothAuthors()
 
       expect(await titlesFor(peeker)).toEqual(['cashier-1', 'cashier-2', 'manager-1'])
@@ -246,12 +185,12 @@ if (!available) {
       })
     })
 
-    test("(e) a filter half building while another guard's filter is active still sees every doc", async () => {
+    test("a fragment built while another subject's filter is active still sees every row", async () => {
       await seedBothAuthors()
 
-      // peek's filter half queries Post itself; without isInAuthz suppression
-      // it would be filtered by the cashier's active 'owned' plan (2 docs) —
-      // or re-enter the plugin's read hook and recurse.
+      // peek's filter queries Post itself; without isInAuthz suppression it
+      // would be narrowed by the cashier's active 'owned' plan (2 docs) — or
+      // re-enter the plugin's read hook and recurse.
       await asGuarded(cashier, async () => {
         const plan = await engine.filterFor(peeker, 'admin.posts.read', postResource)
         if (plan.kind !== 'where') throw new Error(`expected where, got ${plan.kind}`)
@@ -260,23 +199,28 @@ if (!available) {
       })
     })
 
-    test('(f) updateMany does NOT record ownership — documented middleware gap', async () => {
-      // Created outside any subject context: no owner on record.
-      const post = await Post.create({ title: 'before', authorId: 'cashier', branchId: 'b1' })
-      expect(await isOwner('cashier', post._id)).toBe(false)
-
-      const result = await asSubject(cashier, () =>
-        Post.updateMany({ _id: post._id }, { $set: { title: 'after' } }),
+    test('a document save passes through untouched, with or without a request context', async () => {
+      const outside = await Post.create({ title: 'outside', authorId: 'cashier', branchId: 'b1' })
+      const inside = await asGuarded(cashier, () =>
+        Post.create({ title: 'inside', authorId: 'manager', branchId: 'b1' }),
       )
-      expect(result.modifiedCount).toBe(1)
 
-      const updated = await Post.findById(post._id).lean()
-      expect(updated?.title).toBe('after')
-      // Documented LIMITATION in src/storage/mongoose/plugin.ts: updateMany
-      // fires no document middleware, so ownership is NOT tracked here —
-      // callers must invoke rbac.ownership.record() explicitly on that path.
-      expect(await isOwner('cashier', post._id)).toBe(false)
-      expect(await models.resourceOwner.countDocuments({})).toBe(0)
+      const stored = await Post.find({}).lean()
+      expect(stored.map(doc => doc.title).sort()).toEqual(['inside', 'outside'])
+      expect(stored.find(doc => doc._id.equals(outside._id))?.authorId).toBe('cashier')
+      // The save is not rewritten to the acting subject, and the active
+      // 'owned' plan does not reject a row the subject could not read back.
+      expect(stored.find(doc => doc._id.equals(inside._id))?.authorId).toBe('manager')
+    })
+
+    test('raw collection operations bypass the plugin entirely — the documented escape hatch', async () => {
+      await seedBothAuthors()
+
+      const seen = await asGuarded(cashier, () => Post.collection.find({}).toArray())
+      expect(seen).toHaveLength(3)
+
+      await asGuarded(cashier, () => Post.collection.deleteMany({}))
+      expect(await Post.collection.countDocuments({})).toBe(0)
     })
   })
 }

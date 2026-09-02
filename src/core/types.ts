@@ -106,7 +106,7 @@ export interface DecisionEvent {
   tenantId: string
   policy: QualifiedPolicyName
   decision: 'allow' | 'deny'
-  reason: 'granted' | 'super' | 'no-policy' | 'scope-denied' | 'no-subject' | 'resource-not-found'
+  reason: 'granted' | 'super' | 'no-policy' | 'scope-denied' | 'no-subject'
   /** Which evaluation path decided: authorize() = 'guard', filterFor() = 'list'. */
   mode: 'guard' | 'list'
   scope: string | null

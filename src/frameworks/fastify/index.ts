@@ -5,7 +5,6 @@ import { qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Guard } from '../../index.js'
-import { defaultResourceResolver } from '../contract.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
 /** Async guard compatible with Fastify's preHandler/onRequest hook slots. */
@@ -22,7 +21,6 @@ export interface FastifyGuardDecoration {
   /** Single-area apps don't need a domain name — policies stay unprefixed. */
   domain(options: DomainOptions<FastifyRequest>): FastifyDomain<''>
   setSubject(subject: Subject): void
-  addExtra(extra: Record<string, unknown>): void
   readonly cache: Guard['cache']
 }
 
@@ -46,7 +44,6 @@ export function kyroguardFastify(guard: Guard, options?: FastifyGuardOptions): F
     const decoration: FastifyGuardDecoration = {
       domain: makeDomainFactory(guard, options),
       setSubject: subject => guard.engine.store.setSubject(subject),
-      addExtra: extra => guard.engine.store.addExtra(extra),
       cache: guard.cache,
     }
     app.decorate('kyroguard', decoration)
@@ -130,19 +127,14 @@ function buildDomain<P extends string>(
   return {
     name,
 
-    requirePolicy(policy, guardOptions) {
+    requirePolicy(policy) {
       const qualified = qualifyPolicyName(name, policy)
-      const resolveResource = guardOptions?.resource
       const filterTarget =
         guard.resourceForPolicy.get(qualified) ?? guard.resourceForPolicy.get(policy)
       return async (req, reply) => {
         try {
           const subject = await resolveSubject(req)
-          await guard.engine.authorize(subject, qualified, {
-            resource: resolveResource
-              ? () => resolveResource(req)
-              : defaultResourceResolver(filterTarget, req.params),
-          })
+          await guard.engine.authorize(subject, qualified)
           if (filterTarget) await guard.engine.storeFilterFor(subject, qualified, filterTarget)
         } catch (error) {
           if (error instanceof GuardError && pluginOptions?.formatError) {

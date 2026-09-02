@@ -13,7 +13,7 @@ This makes the user a teacher in school-1, on the `teachers` domain. Most apps o
 await teachers.assignPolicy(user.id, 'grades.delete')
 
 // scoped: only grades the user entered
-await teachers.assignPolicy(user.id, 'grades.update', { scope: 'owned' })
+await teachers.assignPolicy(user.id, 'grades.update', { scope: 'entered' })
 
 // a promotion, valid in one school only
 await teachers.assignGroup(user.id, 'coordinator', { tenantId: 'school-1' })

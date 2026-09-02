@@ -59,7 +59,7 @@ Assign through the domain, exactly like production code:
 
 ```ts
 await teachers.assignGroup('u1', 'teacher')
-await teachers.assignPolicy('u1', 'grades.update', { scope: 'owned' })
+await teachers.assignPolicy('u1', 'grades.update', { scope: 'entered' })
 ```
 
 `guard.sync()` must run first. It loads the policies and seeds the groups you gave `createGuard`. See [Assigning access](/guide/assigning-access).

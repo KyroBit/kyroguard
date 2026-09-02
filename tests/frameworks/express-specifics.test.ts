@@ -9,7 +9,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import express, { Router } from 'express'
 import { createServer } from 'node:http'
 import { kyroguardExpress } from '../../src/frameworks/express/index.js'
-import { PolicyDeniedError, ScopeDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
+import { PolicyDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
 import { Policy, createGuard } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { Express, Request, RequestHandler } from 'express'
@@ -95,16 +95,13 @@ beforeEach(() => {
 // ── (a) errorHandler ─────────────────────────────────────────────────────────
 
 describe('errorHandler()', () => {
-  test('renders a GuardError as its statusCode + toBody() JSON — ACCESS_DENIED bodies carry reason', async () => {
+  test('renders a GuardError as its statusCode + toBody() JSON', async () => {
     const rbac = await makeGuard()
     try {
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.get('/denied', (_req, _res, next) => {
         next(new PolicyDeniedError('admin.thing.read'))
-      })
-      app.get('/scope-denied', (_req, _res, next) => {
-        next(new ScopeDeniedError('admin.thing.read', 'owned'))
       })
       app.get('/unauth', (_req, _res, next) => {
         next(new UnauthenticatedError())
@@ -114,11 +111,7 @@ describe('errorHandler()', () => {
       try {
         const denied = await getJson(`${served.url}/denied`)
         expect(denied.status).toBe(403)
-        expect(denied.body).toEqual({ message: 'Forbidden', code: 'ACCESS_DENIED', reason: 'policy' })
-
-        const scopeDenied = await getJson(`${served.url}/scope-denied`)
-        expect(scopeDenied.status).toBe(403)
-        expect(scopeDenied.body).toEqual({ message: 'Forbidden', code: 'ACCESS_DENIED', reason: 'scope' })
+        expect(denied.body).toEqual({ message: 'Forbidden', code: 'ACCESS_DENIED' })
 
         const unauth = await getJson(`${served.url}/unauth`)
         expect(unauth.status).toBe(401)

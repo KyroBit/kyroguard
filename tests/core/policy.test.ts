@@ -29,14 +29,14 @@ describe('Policy labels', () => {
 
 describe('Policy options form', () => {
   test('options object replaces the positional undefined hole', () => {
-    const owned = Scope.owned()
+    const ownBranch = new Scope('own-branch', 'Own branch', () => true)
     const policy = new Policy('sales.void', {
       dependsOn: ['sales.view'],
-      scopeOptions: [owned],
+      scopeOptions: [ownBranch],
     })
     expect(policy.label).toBe('Void')
     expect(policy.dependsOn).toEqual(['sales.view'])
-    expect(policy.scopeOptions).toEqual([owned])
+    expect(policy.scopeOptions).toEqual([ownBranch])
   })
 
   test('options object may still set the label', () => {
@@ -54,9 +54,5 @@ describe('Policy options form', () => {
 describe('Scope name reservation', () => {
   test("a Scope named 'all' throws — 'all' is the unrestricted-grant marker", () => {
     expect(() => new Scope('all', 'Everything', () => true)).toThrow(/'all' is reserved/)
-  })
-
-  test('the built-in factories reject the reserved name too', () => {
-    expect(() => Scope.owned('all')).toThrow(/'all' is reserved/)
   })
 })

@@ -27,20 +27,14 @@ const guard = createGuard({ adapter: mongooseAdapter(connection) })
 The returned adapter:
 
 - `id`: `'mongoose'`.
-- `capabilities`: `{ autoOwnershipTracking: true, listFiltering: true }`.
+- `capabilities`: `{ listFiltering: true }`.
 - Creates its indexes when `kyroguard sync` runs. No separate migration step.
 - `close()` closes the connection. The CLI calls it after `sync`/`status`; call it yourself on shutdown. A closed mongoose connection must be reopened explicitly, so only call it when the connection is done for good.
 - Throws `UnknownPolicyError` when an assignment names an unsynced policy.
 
-### List filters
+### Combining fragments
 
-The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor). The built-in scopes take the ID-list route: one `distinct` over the ownership collection for the matching resource ids, returned as
-
-```ts
-{ _id: { $in: [/* ids */] } }
-```
-
-Ids are cast to `ObjectId` when the resource's registered `table` (its Mongoose model) declares an ObjectId `_id`; string `_id` models get the ids as-is. The list grows with the user's rows for that type — past roughly ten thousand, denormalize an owner field onto the document and ship a custom scope filter instead.
+The adapter implements `listFilters` for [`filterFor`](/reference/core-api#filterfor): `or` returns `{ $or: [...] }` and `none` an always-false predicate. They are used only when a subject holds one policy under two [scopes](/guide/scopes) — the fragments themselves are query objects your scopes return.
 
 ## kyroguardModels()
 
@@ -59,7 +53,6 @@ Returns the six kyroguard models for direct queries. Safe to call repeatedly on 
 | `policyGroupPolicy` | `KyroguardPolicyGroupPolicy` | `kyroguardpolicygrouppolicies` |
 | `userPolicyGroup` | `KyroguardUserPolicyGroup` | `kyroguarduserpolicygroups` |
 | `userPolicy` | `KyroguardUserPolicy` | `kyroguarduserpolicies` |
-| `resourceOwner` | `KyroguardResourceOwner` | `kyroguardresourceowners` |
 
 ```ts
 const models = kyroguardModels(connection)
@@ -68,12 +61,12 @@ const teachers = await models.userPolicyGroup.find({ domain: 'teachers' })
 
 The document types (`KyroguardPolicyDoc` and friends) are exported from the same subpath. Field-by-field details are in [Database schema](/reference/database-schema).
 
-## trackingPlugin()
+## scopePlugin()
 
 ```ts
-import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
+import { scopePlugin } from '@kyrobit/kyroguard/mongoose'
 
-function trackingPlugin(schema: Schema, options: TrackingPluginOptions): void
+function scopePlugin(schema: Schema, options: ScopePluginOptions): void
 ```
 
 Schema plugin for your own models. It records ownership on save, and filters reads by the grant of the route's guard. Apply it before compiling the model.
@@ -85,12 +78,12 @@ Schema plugin for your own models. It records ownership on save, and filters rea
 
 ```ts
 import { Schema, model } from 'mongoose'
-import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
+import { scopePlugin } from '@kyrobit/kyroguard/mongoose'
 import { guard } from './kyroguard/domains.js'
 
 const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
 
-gradeSchema.plugin(trackingPlugin, { guard, type: 'grade' })
+gradeSchema.plugin(scopePlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```
@@ -101,8 +94,8 @@ export const Grade = model('Grade', gradeSchema)
 - Document `deleteOne` and `findOneAndDelete` remove the document's ownership rows.
 - `find`-family queries and `countDocuments` gain [automatic filtering](/guide/scopes#automatic-filtering) when the route's guard activated a decision for `type` ([`storeFilterFor`](/reference/core-api#storefilterfor)): `all` runs untouched, `none` matches nothing (`{ _id: { $in: [] } }`), `where` is `$and`ed with your filter.
 
-Reads run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — and while the engine itself is deciding (scope checks and filter halves). `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
+Queries run unfiltered when no guard activated a filter for the resource — unguarded routes, seeders, jobs — and while a scope is building its own fragment. `aggregate`, `distinct` and raw collection reads fire no query middleware, so they are never filtered.
 
 ::: warning
-Query filtering covers reads and writes alike — `find*`, `countDocuments`, `update*`, `delete*` and `replaceOne` all carry the active grant, so a subject cannot write to documents it cannot read. **Ownership tracking** is narrower: `Model.updateMany`, `Model.deleteMany`, `Model.bulkWrite` and raw collection calls fire no *document* middleware and record nothing. Call `guard.ownership.record()` and `guard.ownership.remove()` on those paths. Otherwise stale ownership rows keep passing `Scope.owned()` checks for deleted documents. See [Ownership](/guide/ownership).
+Query filtering covers reads and writes alike — `find*`, `countDocuments`, `update*`, `delete*` and `replaceOne` all carry the active grant, so a subject cannot write to documents it cannot read. **Saves are not filtered** — an owner or tenant field is yours to fill in the handler. `Model.bulkWrite` and raw collection calls fire no query middleware and run unfiltered; use [`filterFor`](/guide/scopes#when-you-want-the-condition-in-hand) there. See [Ownership](/guide/ownership).
 :::

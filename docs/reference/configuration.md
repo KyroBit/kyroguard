@@ -58,17 +58,18 @@ The `policies` module exports a `ResourceDefinition[]` as `resources`, `policies
 
 ```ts
 // src/kyroguard/policies/admin.ts
-import { Policy, Scope } from '@kyrobit/kyroguard'
+import { Policy } from '@kyrobit/kyroguard'
 import type { ResourceDefinition } from '@kyrobit/kyroguard'
+import { entered, inSchool } from '../scopes.js'
 
 export const resources: ResourceDefinition[] = [
   {
     type: 'grade',
     policies: [
-      new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+      new Policy('grades.view', { scopeOptions: [inSchool] }),
       new Policy('grades.enter', { dependsOn: ['grades.view'] }),
-      new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned(), Scope.inTenant()] }),
-      new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [Scope.inTenant()] }),
+      new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [entered, inSchool] }),
+      new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [inSchool] }),
     ],
   },
 ]
@@ -81,11 +82,11 @@ import type { GroupsDefinition } from '@kyrobit/kyroguard'
 export const groups: GroupsDefinition = {
   teacher: {
     label: 'Teacher',
-    policies: { 'grades.view': 'in-tenant', 'grades.enter': 'all', 'grades.update': 'owned' },
+    policies: { 'grades.view': 'in-school', 'grades.enter': 'all', 'grades.update': 'entered' },
   },
   coordinator: {
     label: 'Coordinator',
-    policies: { 'grades.view': 'in-tenant', 'grades.update': 'in-tenant', 'grades.delete': 'in-tenant' },
+    policies: { 'grades.view': 'in-school', 'grades.update': 'in-school', 'grades.delete': 'in-school' },
   },
 }
 ```

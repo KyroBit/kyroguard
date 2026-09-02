@@ -84,7 +84,6 @@ The plugin must still be registered once in your bootstrap — `await app.regist
 | `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `teachers`. |
 | `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `setSubject(subject)` | Set the active user directly (custom auth outside a domain). |
-| `addExtra(extra)` | Override the next tracked insert's ownership row. Applies once. See [ownership](/reference/core-api#kyroguard). |
 | `cache` | Cache control: `invalidateSubject(subjectId)`, `clear()`. |
 
 ## Domain instance
@@ -99,7 +98,7 @@ const admin = app.kyroguard.domain('admin', { getSubject }) // multi-area app
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
-| `requirePolicy(policy, options?)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). `options.resource(req)` resolves the target row for scoped grants; when omitted, the guard defaults to the policy's resource type plus the route's `:id` param when both exist. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
+| `requirePolicy(policy)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). On allow, queries against the policy's resource are narrowed by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Register per scope, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
@@ -121,7 +120,7 @@ A denied guard throws the `GuardError` through Fastify's own error pipeline. You
 { "statusCode": 401, "code": "UNAUTHENTICATED", "error": "Unauthorized", "message": "Unauthorized" }
 ```
 
-A failed scope check produces the same `ACCESS_DENIED` body, and a scoped grant whose resource is missing produces `NOT_FOUND` (404). The default serializer has a fixed shape and does not include the error's `reason` field — return `error.toBody()` from `formatError` (or use `setErrorHandler`) to expose `reason: 'policy' | 'scope'`. See [Errors](/reference/errors).
+`ACCESS_DENIED` is the only denial a guard produces; a scope narrows the query instead of refusing the request. See [Errors](/reference/errors).
 
 ### formatError
 

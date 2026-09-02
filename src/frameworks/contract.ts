@@ -5,30 +5,7 @@
 
 import type { GuardError } from '../core/errors.js'
 import type { ResourceDefinition } from '../core/policy.js'
-import type { Awaitable, DomainPolicyName, FilterResult, ResourceRef, SubjectInput } from '../core/types.js'
-
-export interface GuardOptions<TReq> {
-  /** Resolves the row-level target for scoped grants; when omitted, defaults to the policy's owning resource type + the route's `params.id` when both exist. */
-  resource?: (req: TReq) => Awaitable<ResourceRef | ResourceRef[] | null | undefined>
-}
-
-/**
- * Must return undefined — never a resolver that yields null — when the target
- * or id is missing: a resolver resolving null is a 404, while no resolver
- * lets the scopes decide on null (row scopes fail closed).
- */
-export function defaultResourceResolver(
-  target: { type: string } | undefined,
-  params: unknown,
-): (() => ResourceRef) | undefined {
-  if (!target) return undefined
-  const id =
-    typeof params === 'object' && params !== null
-      ? (params as Record<string, unknown>).id
-      : undefined
-  if (typeof id !== 'string' || id === '') return undefined
-  return () => ({ type: target.type, id })
-}
+import type { Awaitable, DomainPolicyName, FilterResult, SubjectInput } from '../core/types.js'
 
 export interface DomainOptions<TReq> {
   /** Called lazily at guard time, memoized per (request, domain); null → 401. */
@@ -45,7 +22,7 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   readonly name: P
 
   /** Unqualified policy name; the domain qualifies it. */
-  requirePolicy(policy: DomainPolicyName<P>, options?: GuardOptions<TReq>): TGuard
+  requirePolicy(policy: DomainPolicyName<P>): TGuard
 
   /** Resolves and sets the subject without guarding; register in an encapsulated scope, never app-wide. */
   subjectHook(): TGuard
@@ -53,7 +30,6 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   /**
    * List-path counterpart of requirePolicy: same subject resolution and the
    * same UnauthenticatedError, answering with the FilterResult trichotomy.
-   * Optional until every integration ships it (next phase of the RFC).
    */
   filterFor?(req: TReq, policy: DomainPolicyName<P>): Promise<FilterResult>
 

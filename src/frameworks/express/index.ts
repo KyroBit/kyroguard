@@ -4,8 +4,7 @@ import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Guard } from '../../index.js'
-import { defaultResourceResolver } from '../contract.js'
-import type { ErrorFormatter, GuardOptions, DomainInstance, DomainOptions } from '../contract.js'
+import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
 
 export interface ExpressGuardOptions extends ErrorFormatter<Request> {}
 
@@ -120,18 +119,13 @@ function buildDomain<P extends string>(
   return {
     name,
 
-    requirePolicy(policy: string, guardOptions?: GuardOptions<Request>): RequestHandler {
+    requirePolicy(policy: string): RequestHandler {
       const qualified = qualifyPolicyName(name, policy)
-      const resource = guardOptions?.resource
       const filterTarget =
-        guard.resourceForPolicy.get(qualifyPolicyName(name, policy)) ?? guard.resourceForPolicy.get(policy)
+        guard.resourceForPolicy.get(qualified) ?? guard.resourceForPolicy.get(policy)
       return asyncGuard(async req => {
         const subject = await resolveSubject(req)
-        await guard.engine.authorize(subject, qualified, {
-          resource: resource
-            ? () => resource(req)
-            : defaultResourceResolver(filterTarget, req.params),
-        })
+        await guard.engine.authorize(subject, qualified)
         if (filterTarget) await guard.engine.storeFilterFor(subject, qualified, filterTarget)
       })
     },

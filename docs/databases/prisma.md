@@ -68,17 +68,17 @@ npx kyroguard sync
 
 This writes your policies and groups into the kyroguard tables. It also generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. The CLI loads `.env`, so your `DATABASE_URL` is picked up. Details in [Sync](/guide/sync).
 
-## Track ownership with `trackingExtension`
+## Filter queries with `scopeExtension`
 
-Policies with `Scope.owned()` check who created each row. The extension records that for you. Extend your client once and use the extended handle in request handlers:
+A [scope](/guide/scopes) narrows what a grant reaches. The extension is what applies it: extend your client once and use the extended handle in request handlers.
 
 ```ts
 // src/db.ts
-import { trackingExtension } from '@kyrobit/kyroguard/prisma'
+import { scopeExtension } from '@kyrobit/kyroguard/prisma'
 import { client, guard } from './kyroguard/instance.js'
 
 export const db = client.$extends(
-  trackingExtension({
+  scopeExtension({
     guard,
     resources: [{ type: 'grade', model: 'grade' }],
   }),
@@ -87,31 +87,25 @@ export const db = client.$extends(
 
 `model` is the client property name, exactly as Prisma generates it. `model StudentGrade` becomes `'studentGrade'`.
 
-Creating a row now records the current user as its owner:
+Write the scope against your own columns:
 
 ```ts
-const grade = await db.grade.create({ data: { student, subject, score } })
-// the requesting teacher now owns grade.id
+const entered = new Scope('entered', 'Entered by the teacher', subject => ({
+  where: { enteredBy: subject.id },
+}))
 ```
 
-`createMany` and `upsert` are tracked too. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
+On a guarded route, a teacher's `db.grade.findMany()` now returns only the grades they entered, and `updateMany` / `deleteMany` reach only those rows. Fill `enteredBy` yourself when you create the row — the extension does not write it.
 
-::: warning The extension has gaps
-It only sees `create`, `createMany` and `upsert` on registered models. It never sees raw SQL, nested writes through a relation, `createMany` rows without an `id` in the data, or a `create` with a custom `select` that omits `id`. Deletes leave ownership records behind. Cover those paths yourself:
-
-```ts
-await guard.ownership.record(user.id, { type: 'grade', id: grade.id })
-await guard.ownership.remove({ type: 'grade', id: grade.id })
-```
+::: warning What the extension does not see
+Raw SQL (`$queryRaw`, `$executeRaw`) and nested writes through a relation bypass the extension and run unfiltered. Reach for [`filterFor`](/guide/scopes#when-you-want-the-condition-in-hand) on those paths and merge the condition yourself.
 :::
 
-## Filtering lists
-
-The extension also filters reads. On a guarded route, a teacher's `db.grade.findMany()` returns only the grades they entered; unguarded reads are not auto-filtered. Behavior and the manual `filterFor` path: [Filtering lists](/guide/scopes#filtering-lists). Prisma specifics — filtered calls, the ID-list fragment and its cap: [Prisma reference](/reference/prisma#what-gets-filtered).
+Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Prisma specifics — exactly which calls are filtered: [Prisma reference](/reference/prisma#what-gets-filtered).
 
 ## Next steps
 
 - [Assigning access](/guide/assigning-access) — give users groups and policies.
 - [Protecting routes](/guide/protecting-routes) — put guards in front of handlers.
-- [Ownership](/guide/ownership) — how owned-scope checks resolve.
+- [Ownership](/guide/ownership) — the owner-column pattern behind an "own rows only" scope.
 - [Prisma reference](/reference/prisma) — every option of `prismaAdapter` and the extension.

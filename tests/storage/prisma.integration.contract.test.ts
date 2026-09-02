@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the query-integration contract (Q1–Q7) against trackingExtension on the
+ * Runs the query-integration contract (Q1–Q7) against scopeExtension on the
  * real generated client (SQLite). The fixture Post model carries only id and
  * title, so title doubles as the contract's mark field.
  */
@@ -8,7 +8,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
 import { Policy, Scope, createGuard } from '../../src/index.js'
-import { prismaAdapter, trackingExtension } from '../../src/storage/prisma/index.js'
+import { prismaAdapter, scopeExtension } from '../../src/storage/prisma/index.js'
 import { runQueryIntegrationContractSuite } from '../../src/testing/index.js'
 import type { IntegrationHarness } from '../../src/testing/index.js'
 import type { Subject } from '../../src/core/types.js'
@@ -27,11 +27,8 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
   const adapter = prismaAdapter(client)
 
   let allowed: string[] = []
-  const allowedScope = new Scope(
-    'allowed',
-    'Allowed rows',
-    (_s, resource) => (resource ? allowed.includes(resource.id) : false),
-    () => (allowed.length ? { where: { id: { in: allowed } } } : false),
+  const allowedScope = new Scope('allowed', 'Allowed rows', () =>
+    allowed.length ? { where: { id: { in: allowed } } } : false,
   )
 
   const rbac = createGuard({
@@ -59,7 +56,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
   })
 
   const extended = client.$extends(
-    trackingExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
+    scopeExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
   ) as unknown as {
     post: {
       findMany(args?: unknown): Promise<{ id: string }[]>
@@ -107,7 +104,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 }
 
 runQueryIntegrationContractSuite({
-  name: 'prisma / trackingExtension',
+  name: 'prisma / scopeExtension',
   makeHarness,
   test: { describe, it: test, expect, beforeEach, afterAll },
 })

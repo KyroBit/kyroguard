@@ -71,20 +71,6 @@ CREATE TABLE kyroguard_user_policies (
 );
 CREATE UNIQUE INDEX kyroguard_up_tuple_uq ON kyroguard_user_policies (subject_id, policy_id, domain, tenant_id);
 CREATE INDEX kyroguard_up_subject_idx ON kyroguard_user_policies (subject_id);
-
-CREATE TABLE kyroguard_resource_owners (
-  id text PRIMARY KEY NOT NULL,
-  resource_type text NOT NULL,
-  resource_id text NOT NULL,
-  owner_id text NOT NULL,
-  relation text NOT NULL DEFAULT 'owner',
-  domain text NOT NULL DEFAULT '',
-  tenant_id text NOT NULL DEFAULT '',
-  created_at integer NOT NULL
-);
-CREATE UNIQUE INDEX kyroguard_ro_tuple_uq ON kyroguard_resource_owners (resource_type, resource_id, owner_id, relation);
-CREATE INDEX kyroguard_ro_resource_idx ON kyroguard_resource_owners (resource_type, resource_id);
-CREATE INDEX kyroguard_ro_owner_idx ON kyroguard_resource_owners (resource_type, owner_id);
 `
 
 export interface SqliteTestDb {

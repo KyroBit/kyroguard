@@ -55,11 +55,8 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
 
   for (const route of routes) {
     const domain = domainFor(route.domain)
-    const resource = route.resource
     const policies = route.policy ? route.policy.split('+') : []
-    const guards = policies.map(policy =>
-      domain.requirePolicy(policy, resource ? { resource: req => resource(req) } : undefined),
-    )
+    const guards = policies.map(policy => domain.requirePolicy(policy))
     app.route({
       method: route.method,
       url: route.path,

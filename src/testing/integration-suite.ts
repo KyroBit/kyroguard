@@ -1,5 +1,5 @@
 /**
- * Executable specification of what every ORM integration owes — trackedDb
+ * Executable specification of what every ORM integration owes — scopedDb
  * (Drizzle), the Prisma extension, the Mongoose plugin, and whatever comes next.
  *
  * The storage suite proves an adapter can persist grants. This one proves the

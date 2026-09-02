@@ -116,7 +116,7 @@ Connects through your config's adapter and prints diagnostics. Use it to confirm
 ```
 $ kyroguard status
 adapter:      drizzle-pg
-capabilities: autoOwnershipTracking=true listFiltering=true
+capabilities: listFiltering=true
 policies:     4
 groups:       2
 ```

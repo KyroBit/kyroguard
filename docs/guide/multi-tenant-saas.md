@@ -108,9 +108,9 @@ Domains separate audiences, not power — any server code holding the `teachers`
 
 ## 6. A parent logs in
 
-A Greenwood parent should see exactly one thing: their own child's grades. No built-in rule fits. Not "rows I created" — the parent never created a grade. Not "rows in my school" — that is every grade at Greenwood. The rule is "rows about MY child", and it lives in your `parent_children` table. You write that rule once, as a **scope** — a condition on a permission ([Scopes](/guide/scopes)).
+A Greenwood parent should see exactly one thing: their own child's grades. Not "rows I created" — the parent never created a grade. Not "rows in my school" — that is every grade at Greenwood. The rule is "rows about MY child", and it lives in your `parent_children` table. You write that rule once, as a **scope** — a condition on a permission ([Scopes](/guide/scopes)).
 
-This is the "my child only" rule — a check half for one row, a filter half for lists:
+This is the "my child only" rule, as one condition over your own columns:
 
 ```ts
 // parents/scopes.ts
@@ -125,20 +125,10 @@ const childIdsOf = async (parentId: string) => {
   return rows.map(r => r.id)
 }
 
-export const ownChild = new Scope(
-  'own-child',
-  'Own child',
-  async (parent, grade) => {  // check: may this parent see THIS row?
-    if (!grade) return false  // no row named — fail closed
-    const [row] = await db.select().from(grades).where(eq(grades.id, grade.id))
-    if (!row) return false
-    return (await childIdsOf(parent.id)).includes(row.studentId)
-  },
-  async parent => {           // filter: which rows go in their lists?
-    const ids = await childIdsOf(parent.id)
-    return ids.length ? { where: inArray(grades.studentId, ids) } : false
-  },
-)
+export const ownChild = new Scope('own-child', 'Own child', async parent => {
+  const ids = await childIdsOf(parent.id)
+  return ids.length ? { where: inArray(grades.studentId, ids) } : false
+})
 ```
 
 Declare `ownChild` in the policy's `scopeOptions`, then this line attaches the rule to every parent's grant:
@@ -171,4 +161,4 @@ There is one tenant level — tenants never nest, so a district above schools is
 
 - [Domains](/guide/domains) — domains and tenants, taught properly.
 - [Owners and superusers](/guide/owners) — the principal's bypass in full.
-- [Scopes](/guide/scopes) — the check and filter halves in depth.
+- [Scopes](/guide/scopes) — writing conditions over your own tables, in depth.

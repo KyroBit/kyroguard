@@ -49,7 +49,7 @@ Guards throw. Fastify turns the thrown error into a JSON response. Your error ha
 }
 ```
 
-The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors). A failed scope check sends the same `ACCESS_DENIED` body — Fastify's default serializer does not carry the error's `reason` field, so use `formatError` (below) or `setErrorHandler` when clients need to tell the two denials apart.
+The other outcomes are in [Protecting routes](/guide/protecting-routes#the-outcomes); every code is in [Errors](/reference/errors).
 
 Because guards throw, `setErrorHandler` sees the error like any other. `error instanceof PolicyDeniedError` works there. Import `PolicyDeniedError` from `@kyrobit/kyroguard`.
 

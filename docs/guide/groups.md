@@ -10,17 +10,17 @@ export const groups: GroupsDefinition = {
   teacher: {
     label: 'Teacher',
     policies: {
-      'grades.view': 'in-tenant',
+      'grades.view': 'in-school',
       'grades.enter': 'all',
-      'grades.update': 'owned',
+      'grades.update': 'entered',
     },
   },
   coordinator: {
     label: 'Coordinator',
     policies: {
-      'grades.view': 'in-tenant',
-      'grades.update': 'in-tenant',
-      'grades.delete': 'in-tenant',
+      'grades.view': 'in-school',
+      'grades.update': 'in-school',
+      'grades.delete': 'in-school',
     },
   },
 }
@@ -67,17 +67,17 @@ Each listed policy is granted without limits. The registrar manages any student 
 ```ts
 teacher: {
   label: 'Teacher',
-  policies: { 'grades.view': 'in-tenant', 'grades.enter': 'all', 'grades.update': 'owned' },
+  policies: { 'grades.view': 'in-school', 'grades.enter': 'all', 'grades.update': 'entered' },
 }
 ```
 
-`'all'` means no restriction — every row. `'owned'` limits that policy to rows the user owns. A teacher updates only the grades they entered. `'in-tenant'` limits it to rows of the request's school. See [Scopes](/guide/scopes).
+`'all'` means no restriction — every row. Any other value names a [scope](/guide/scopes) the policy declares: `'entered'` limits that policy to grades the teacher entered, `'in-school'` to grades of the request's school. What each name means is a function you wrote against your own columns.
 
 ## Dependencies are filled in
 
 `grades.update` depends on `grades.view` — you must see a grade to update it ([Policies](/guide/policies#dependencies)). Sync adds missing dependencies to every group.
 
-A filled-in dependency inherits the scope of the grant that pulled it in. Grant `grades.update` restricted to `'owned'` and `grades.view` arrives restricted to `'owned'` too — never wider. An unrestricted grant that needs the same dependency widens it to unrestricted. Two different named scopes fall back to unrestricted with a sync warning — define the entry explicitly to control it.
+A filled-in dependency inherits the scope of the grant that pulled it in. Grant `grades.update` restricted to `'entered'` and `grades.view` arrives restricted to `'entered'` too — never wider. An unrestricted grant that needs the same dependency widens it to unrestricted. Two different named scopes fall back to unrestricted with a sync warning — define the entry explicitly to control it.
 
 Explicit entries always win. The teacher group above lists `grades.view` itself, so the fill never touches it.
 
@@ -103,5 +103,5 @@ Set `isActive: false` and the group grants nothing. Members keep the assignment 
 ## Next steps
 
 - [Assigning access](/guide/assigning-access) — give users groups and direct grants
-- [Scopes](/guide/scopes) — conditions like `'owned'` or `'grading-window'`
+- [Scopes](/guide/scopes) — conditions like `'entered'` or `'grading-window'`
 - [Sync](/guide/sync) — how seeding runs

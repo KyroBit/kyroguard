@@ -2,7 +2,6 @@
 
 import { GuardEngine } from './core/engine.js'
 import { qualifyPolicyName } from './core/types.js'
-import { MisconfiguredError } from './core/errors.js'
 import { collectScopes } from './core/scope.js'
 import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
 import { seedGroups } from './core/seed-groups.js'
@@ -10,20 +9,15 @@ import { memoryCache } from './cache/memory.js'
 import { inProcessBus } from './cache/bus.js'
 import type { Policy, ResourceDefinition } from './core/policy.js'
 import type { GroupsDefinition } from './core/seed-groups.js'
-import type {
-  DecisionHook,
-  QualifiedPolicyName,
-  ResourceRef,
-  Subject,
-} from './core/types.js'
+import type { DecisionHook, QualifiedPolicyName } from './core/types.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from './cache/types.js'
-import type { OwnershipEntry, StorageAdapter } from './storage/contract.js'
+import type { StorageAdapter } from './storage/contract.js'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface CreateGuardOptions {
   adapter: StorageAdapter
-  /** Resource definitions — source of the scope registry and tracking config. */
+  /** Resource definitions — source of the scope registry and the scoped-query config. */
   resources?: ResourceDefinition[]
   /** Shorthand for a single guard-only resource definition. */
   policies?: Policy[]
@@ -37,7 +31,7 @@ export interface CreateGuardOptions {
   cacheMaxEntries?: number
   /** Cross-instance invalidation. Default: in-process bus. */
   invalidationBus?: InvalidationBus
-  /** Db handle passed through to scope checks (use the tracked db if you have one). */
+  /** Db handle passed through to scopes (use the scoped db if you have one). */
   db?: unknown
   /** is_super bypasses policy checks. Default true. */
   superBypass?: boolean
@@ -80,26 +74,6 @@ export interface Guard {
     removeGroup(subject: AdminSubjectRef, group: string): Promise<void>
     assignPolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName, scope?: string): Promise<void>
     removePolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName): Promise<void>
-  }
-
-  /** Portable ownership API — works on every storage backend. Records relation 'owner'. */
-  ownership: {
-    record(owner: Subject | string, resource: ResourceRef, at?: { domain?: string; tenantId?: string }): Promise<void>
-    isOwner(ownerId: string, resource: ResourceRef): Promise<boolean>
-    remove(resource: ResourceRef): Promise<void>
-    /** One-shot extra columns for the next tracked insert in this request. */
-    addExtra(extra: Record<string, unknown>): void
-  }
-
-  /** Relation-based access API over the same store — default relation 'granted'. */
-  access: {
-    grant(
-      userId: string,
-      resource: ResourceRef,
-      options?: { relation?: string; domain?: string; tenantId?: string },
-    ): Promise<void>
-    revoke(userId: string, resource: ResourceRef, relation?: string): Promise<void>
-    list(resource: ResourceRef): Promise<OwnershipEntry[]>
   }
 
   cache: {
@@ -226,56 +200,6 @@ export function createGuard(options: CreateGuardOptions): Guard {
       removePolicy: (subject, policy) => engine.removePolicy(normalize(subject), policy),
     },
 
-    ownership: {
-      record: (owner, resource, at) => {
-        const ownerId = typeof owner === 'string' ? owner : owner.id
-        const subject = typeof owner === 'string' ? undefined : owner
-        return options.adapter.recordOwnership([
-          {
-            resourceType: resource.type,
-            resourceId: resource.id,
-            ownerId,
-            relation: 'owner',
-            domain: at?.domain ?? (subject?.domain as string | undefined) ?? '',
-            tenantId: at?.tenantId ?? (subject?.tenant_id as string | undefined) ?? '',
-          },
-        ])
-      },
-      isOwner: (ownerId, resource) => options.adapter.isOwner(ownerId, resource),
-      remove: resource => options.adapter.removeOwnership(resource),
-      addExtra: extra => engine.store.addExtra(extra),
-    },
-
-    access: {
-      grant: (userId, resource, accessOptions) =>
-        options.adapter.recordOwnership([
-          {
-            resourceType: resource.type,
-            resourceId: resource.id,
-            ownerId: userId,
-            relation: accessOptions?.relation ?? 'granted',
-            domain: accessOptions?.domain ?? '',
-            tenantId: accessOptions?.tenantId ?? '',
-          },
-        ]),
-      revoke: async (userId, resource, relation) => {
-        if (!options.adapter.removeAccess) {
-          throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement removeAccess — implement it to use guard.access.`,
-          )
-        }
-        await options.adapter.removeAccess(userId, resource, relation)
-      },
-      list: async resource => {
-        if (!options.adapter.getAccess) {
-          throw new MisconfiguredError(
-            `[kyroguard] Adapter "${options.adapter.id}" does not implement getAccess — implement it to use guard.access.`,
-          )
-        }
-        return options.adapter.getAccess(resource)
-      },
-    },
-
     cache: {
       invalidateSubject: id => engine.invalidateSubject(id),
       clear: () => engine.clearCache(),
@@ -290,24 +214,16 @@ export function createGuard(options: CreateGuardOptions): Guard {
 export { Policy } from './core/policy.js'
 export type { ResourceDefinition } from './core/policy.js'
 export { Scope, collectScopes } from './core/scope.js'
-export type {
-  ScopeCheckFn,
-  ScopeCheckContext,
-  ScopeFilterFn,
-  ScopeFilterContext,
-  ScopeFilterResult,
-} from './core/scope.js'
+export type { ScopeFn, ScopeContext, ScopeResult } from './core/scope.js'
 export {
   GuardError,
   UnauthenticatedError,
   PolicyDeniedError,
-  ScopeDeniedError,
-  ResourceNotFoundError,
   MisconfiguredError,
 } from './core/errors.js'
-export type { AccessDeniedReason, GuardErrorBody, GuardErrorCode } from './core/errors.js'
+export type { GuardErrorBody, GuardErrorCode } from './core/errors.js'
 export { GuardEngine, mergeGrants } from './core/engine.js'
-export type { EngineOptions, AuthorizeOptions } from './core/engine.js'
+export type { EngineOptions } from './core/engine.js'
 export { SubjectStore } from './core/subject-store.js'
 export type { RequestStore } from './core/subject-store.js'
 export { backfillGroupDependencies, syncPolicies } from './core/sync.js'
@@ -340,7 +256,6 @@ export type {
   GroupPolicyEntry,
   GroupRecord,
   ListFilters,
-  OwnershipEntry,
   PolicyDefinitionRow,
   PolicyGrant,
   PolicyRecord,

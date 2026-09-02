@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the query-integration contract (Q1–Q7) against trackedDb on PGlite.
+ * Runs the query-integration contract (Q1–Q7) against scopedDb on PGlite.
  */
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
@@ -9,7 +9,7 @@ import { pgTable, text } from 'drizzle-orm/pg-core'
 
 import { createGuard, Policy, Scope } from '../../src/index.js'
 import type { ResourceDefinition, Subject } from '../../src/index.js'
-import { drizzleAdapter, trackedDb } from '../../src/storage/drizzle/index.js'
+import { drizzleAdapter, scopedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
 import { runQueryIntegrationContractSuite } from '../../src/testing/index.js'
 import type { IntegrationHarness } from '../../src/testing/index.js'
@@ -35,11 +35,8 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 
   // The allowed set is swapped per case; the scope reads it at filter time.
   let allowed: string[] = []
-  const allowedScope = new Scope(
-    'allowed',
-    'Allowed rows',
-    (_s, resource) => (resource ? allowed.includes(resource.id) : false),
-    () => (allowed.length ? { where: inArray(notes.id, allowed) } : false),
+  const allowedScope = new Scope('allowed', 'Allowed rows', () =>
+    allowed.length ? { where: inArray(notes.id, allowed) } : false,
   )
 
   const resource: ResourceDefinition = {
@@ -54,7 +51,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 
   await pg.db.insert(notes).values([{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }])
 
-  const db = trackedDb(pg.db, { guard: { engine: rbac.engine, adapter }, resources: [resource] })
+  const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources: [resource] })
 
   const harness: IntegrationHarness = {
     guarded: (next, fn) =>
@@ -95,7 +92,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 }
 
 runQueryIntegrationContractSuite({
-  name: 'drizzle / trackedDb',
+  name: 'drizzle / scopedDb',
   makeHarness,
   test: { describe, it: test, expect, beforeEach, afterAll },
 })

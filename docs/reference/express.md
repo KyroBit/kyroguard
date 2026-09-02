@@ -62,7 +62,7 @@ const admin = domain('admin', { getSubject }) // multi-area app
 | Method | Description |
 | --- | --- |
 | `name` | The domain name. `''` for the domain-less overload. |
-| `requirePolicy(policy, options?)` | Guard middleware. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). `options.resource(req)` resolves the target row for scoped grants; when omitted, the guard defaults to the policy's resource type plus the route's `:id` param when both exist. On allow, reads of the policy's resource are filtered by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
+| `requirePolicy(policy)` | Guard middleware. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). On allow, queries against the policy's resource are narrowed by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Mount on specific routers, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
@@ -90,7 +90,7 @@ For a `GuardError` it responds with `error.statusCode` and a JSON body. Everythi
 { "message": "Unauthorized", "code": "UNAUTHENTICATED" }
 ```
 
-A failed scope check produces `ACCESS_DENIED` with `"reason": "scope"`, and a scoped grant whose resource is missing produces `NOT_FOUND` (404) the same way. See [Errors](/reference/errors).
+`ACCESS_DENIED` is the only denial a guard produces; a scope narrows the query instead of refusing the request. See [Errors](/reference/errors).
 
 ### formatError
 

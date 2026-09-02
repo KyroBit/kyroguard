@@ -4,7 +4,6 @@ export type {
   DrizzleDialect,
   DrizzleKyroguardSchema,
   DrizzleKyroguardTables,
-  DrizzleStorageAdapter,
 } from './adapter.js'
-export { trackedDb } from './tracked-db.js'
-export type { TrackedDbOptions } from './tracked-db.js'
+export { scopedDb } from './scoped-db.js'
+export type { ScopedDbOptions } from './scoped-db.js'

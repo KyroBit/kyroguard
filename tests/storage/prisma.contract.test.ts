@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * Runs the executable storage contract (S1–S23) against the Prisma adapter on
+ * Runs the executable storage contract against the Prisma adapter on
  * SQLite. The fixture generates the client from
  * helpers/prisma-fixture/schema.prisma and pushes it to a unique tmp database
  * file; every contract case starts from wiped tables (children before
@@ -20,12 +20,11 @@ afterAll(async () => {
   await fixture.cleanup()
 })
 
-/** Fresh state per contract case: wipe all six tables in dependency order. */
+/** Fresh state per contract case: wipe all five tables in dependency order. */
 const resetDb = async (): Promise<void> => {
   await client.kyroguardPolicyGroupPolicy.deleteMany({})
   await client.kyroguardUserPolicyGroup.deleteMany({})
   await client.kyroguardUserPolicy.deleteMany({})
-  await client.kyroguardResourceOwner.deleteMany({})
   await client.kyroguardPolicy.deleteMany({})
   await client.kyroguardPolicyGroup.deleteMany({})
 }

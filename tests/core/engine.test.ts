@@ -1,17 +1,11 @@
 import { describe, test, expect } from 'bun:test'
 import { GuardEngine, mergeGrants } from '../../src/core/engine.js'
 import { Scope } from '../../src/core/scope.js'
-import {
-  PolicyDeniedError,
-  ResourceNotFoundError,
-  ScopeDeniedError,
-  UnauthenticatedError,
-} from '../../src/core/errors.js'
+import { PolicyDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
 import { inProcessBus } from '../../src/cache/bus.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { EngineOptions } from '../../src/core/engine.js'
-import type { ScopeCheckContext } from '../../src/core/scope.js'
-import type { ResourceRef, Subject, SubjectRef } from '../../src/core/types.js'
+import type { Subject, SubjectRef } from '../../src/core/types.js'
 import { UnknownScopeError } from '../../src/storage/contract.js'
 import type { PolicyGrant, StorageAdapter } from '../../src/storage/contract.js'
 
@@ -71,7 +65,7 @@ describe('authorize() decision matrix', () => {
     )
   })
 
-  test('policy not granted → PolicyDeniedError with code ACCESS_DENIED, reason policy (403)', async () => {
+  test('policy not granted → PolicyDeniedError with code ACCESS_DENIED (403)', async () => {
     const { engine } = makeEngine()
     const err = await engine.authorize({ id: 'u1' }, 'admin.posts.read').then(
       () => null,
@@ -80,12 +74,10 @@ describe('authorize() decision matrix', () => {
     expect(err).toBeInstanceOf(PolicyDeniedError)
     expect((err as PolicyDeniedError).statusCode).toBe(403)
     expect((err as PolicyDeniedError).code).toBe('ACCESS_DENIED')
-    expect((err as PolicyDeniedError).reason).toBe('policy')
     expect((err as PolicyDeniedError).policy).toBe('admin.posts.read')
     expect((err as PolicyDeniedError).toBody()).toEqual({
       message: 'Forbidden',
       code: 'ACCESS_DENIED',
-      reason: 'policy',
     })
   })
 
@@ -142,210 +134,52 @@ describe('authorize() decision matrix', () => {
 describe('authorize() scoped grants', () => {
   const ref: SubjectRef = { subjectId: 'u1', domain: 'admin', tenantId: '' }
   const subject: Subject = { id: 'u1', domain: 'admin' }
-  const resource: ResourceRef = { type: 'post', id: 'p1' }
 
-  test('no resource resolver → the scope decides on null (row scope fails closed)', async () => {
-    // A row scope like Scope.owned() must deny when there is no row to check.
-    const scopes = new Map([
-      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? true : false))],
-    ])
+  test('a scoped grant carries the policy, so the request is allowed', async () => {
+    const scopes = new Map([['own-branch', new Scope('own-branch', 'Own branch', () => true)]])
     const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    const err = await engine.authorize(subject, 'admin.posts.update').then(
-      () => null,
-      (e: unknown) => e,
-    )
-    expect(err).toBeInstanceOf(ScopeDeniedError)
-    expect((err as ScopeDeniedError).code).toBe('ACCESS_DENIED')
-    expect((err as ScopeDeniedError).reason).toBe('scope')
-    expect((err as ScopeDeniedError).scope).toBe('owned')
-    expect((err as ScopeDeniedError).toBody()).toEqual({
-      message: 'Forbidden',
-      code: 'ACCESS_DENIED',
-      reason: 'scope',
-    })
-  })
-
-  test('a resolver returning many refs allows only when every one passes', async () => {
-    const mine = new Set(['p1', 'p2'])
-    const scopes = new Map([
-      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? mine.has(r.id) : false))],
-    ])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-
-    await engine.authorize(subject, 'admin.posts.update', {
-      resource: () => [
-        { type: 'post', id: 'p1' },
-        { type: 'post', id: 'p2' },
-      ],
-    })
-  })
-
-  test('a resolver returning many refs denies when any one fails', async () => {
-    const mine = new Set(['p1'])
-    const scopes = new Map([
-      ['owned', new Scope('owned', 'Owned', (_s, r) => (r ? mine.has(r.id) : false))],
-    ])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-
-    const err = await engine
-      .authorize(subject, 'admin.posts.update', {
-        resource: () => [
-          { type: 'post', id: 'p1' },
-          { type: 'post', id: 'p9' },
-        ],
-      })
-      .then(() => null, (e: unknown) => e)
-
-    expect(err).toBeInstanceOf(ScopeDeniedError)
-  })
-
-  test('a resolver returning an empty list is a 404, never a silent allow', async () => {
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-
-    const err = await engine
-      .authorize(subject, 'admin.posts.update', { resource: () => [] })
-      .then(() => null, (e: unknown) => e)
-
-    expect(err).toBeInstanceOf(ResourceNotFoundError)
-  })
-
-  test('no resource resolver → a condition scope can allow (business hours)', async () => {
-    // Condition scopes ignore the row entirely — no resolver needed.
-    const withinHours = new Scope('business-hours', 'Business hours', () => true)
-    const scopes = new Map([['business-hours', withinHours]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.sales.void', 'business-hours')
-    await engine.authorize(subject, 'admin.sales.void')
-  })
-
-  test('no resource resolver → the scope receives resource null', async () => {
-    let seenResource: ResourceRef | null | undefined
-    const scopes = new Map([
-      [
-        'any',
-        new Scope('any', 'Any', (_s, r) => {
-          seenResource = r
-          return true
-        }),
-      ],
-    ])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'any')
+    await grant(adapter, ref, 'admin.posts.update', 'own-branch')
     await engine.authorize(subject, 'admin.posts.update')
-    expect(seenResource).toBeNull()
   })
 
-  test('Scope.owned() fails closed without a resource', async () => {
-    const owned = Scope.owned()
-    const scopes = new Map([[owned.name, owned]])
+  test('a scope excluding every row still allows: the filter empties the query, not the guard', async () => {
+    const scopes = new Map([['own-branch', new Scope('own-branch', 'Own branch', () => false)]])
     const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    await expect(engine.authorize(subject, 'admin.posts.update')).rejects.toBeInstanceOf(
-      ScopeDeniedError,
-    )
+    await grant(adapter, ref, 'admin.posts.update', 'own-branch')
+    await engine.authorize(subject, 'admin.posts.update')
   })
 
-  test('resource resolver returns null → ResourceNotFoundError (404)', async () => {
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    const err = await engine
-      .authorize(subject, 'admin.posts.update', { resource: () => null })
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )
-    expect(err).toBeInstanceOf(ResourceNotFoundError)
-    expect((err as ResourceNotFoundError).statusCode).toBe(404)
-    expect((err as ResourceNotFoundError).code).toBe('NOT_FOUND')
-  })
-
-  test('scope check returns false → ScopeDeniedError', async () => {
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => false)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    expect(
-      engine.authorize(subject, 'admin.posts.update', { resource: () => resource }),
-    ).rejects.toBeInstanceOf(ScopeDeniedError)
-  })
-
-  test('scope check returns true → allow', async () => {
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
-  })
-
-  test('unknown scope name in the grant → ScopeDeniedError (fail closed)', async () => {
-    // Registry has 'owned'; the grant references 'mystery' which no code defines.
-    const scopes = new Map([['owned', new Scope('owned', 'Owned', () => true)]])
+  test('a grant naming a scope no code defines still allows — filterFor is where it fails closed', async () => {
+    const scopes = new Map([['own-branch', new Scope('own-branch', 'Own branch', () => true)]])
     const { adapter, engine } = makeEngine({ scopes })
     await grant(adapter, ref, 'admin.posts.update', 'mystery')
-    const err = await engine
-      .authorize(subject, 'admin.posts.update', { resource: () => resource })
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )
-    expect(err).toBeInstanceOf(ScopeDeniedError)
-    expect((err as ScopeDeniedError).scope).toBe('mystery')
+    await engine.authorize(subject, 'admin.posts.update')
   })
 
-  test('scope check receives (subject, resource, { db, adapter })', async () => {
-    const db = { tag: 'the-db-handle' }
-    let seen: { subject: Subject; resource: ResourceRef | null; ctx: ScopeCheckContext } | null =
-      null
+  test('the scope is never invoked on the guard path', async () => {
+    let ran = false
     const scopes = new Map([
       [
-        'owned',
-        new Scope('owned', 'Owned', (s, r, ctx) => {
-          seen = { subject: s, resource: r, ctx }
+        'own-branch',
+        new Scope('own-branch', 'Own branch', () => {
+          ran = true
           return true
         }),
       ],
     ])
-    const { adapter, engine } = makeEngine({ scopes, db })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
-
-    expect(seen).not.toBeNull()
-    const captured = seen! as {
-      subject: Subject
-      resource: ResourceRef | null
-      ctx: ScopeCheckContext
-    }
-    expect(captured.subject).toBe(subject)
-    expect(captured.resource).toEqual(resource)
-    expect(captured.ctx.db).toBe(db)
-    expect(captured.ctx.adapter).toBe(adapter)
+    const { adapter, engine } = makeEngine({ scopes })
+    await grant(adapter, ref, 'admin.posts.update', 'own-branch')
+    await engine.authorize(subject, 'admin.posts.update')
+    expect(ran).toBe(false)
   })
 
-  test('async scope checks are awaited (allow and deny)', async () => {
-    const scopes = new Map([
-      [
-        'owned',
-        new Scope('owned', 'Owned', async (_s, r) => {
-          await Promise.resolve()
-          return r?.id === 'p1'
-        }),
-      ],
-    ])
+  test('a missing policy still denies, scoped or not', async () => {
+    const scopes = new Map([['own-branch', new Scope('own-branch', 'Own branch', () => true)]])
     const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, ref, 'admin.posts.update', 'owned')
-
-    await engine.authorize(subject, 'admin.posts.update', {
-      resource: async () => ({ type: 'post', id: 'p1' }),
-    })
-    expect(
-      engine.authorize(subject, 'admin.posts.update', {
-        resource: async () => ({ type: 'post', id: 'p2' }),
-      }),
-    ).rejects.toBeInstanceOf(ScopeDeniedError)
+    await grant(adapter, ref, 'admin.posts.read', 'own-branch')
+    await expect(engine.authorize(subject, 'admin.posts.update')).rejects.toBeInstanceOf(
+      PolicyDeniedError,
+    )
   })
 })
 
@@ -433,149 +267,6 @@ describe('mergeGrants precedence', () => {
     expect(map.size).toBe(2)
     expect(map.get('p')).toEqual(['owned'])
     expect(map.get('q')).toBeNull()
-  })
-})
-
-describe('authorize() any-scope-passes', () => {
-  const subject: Subject = { id: 'u1', domain: 'admin' }
-  const resource: ResourceRef = { type: 'post', id: 'p1' }
-
-  /** Adapter whose getSubjectPolicies returns fixed grants — the only way to hold one policy under two scopes. */
-  function multiGrantAdapter(grants: PolicyGrant[]): StorageAdapter {
-    return { ...memoryAdapter(), getSubjectPolicies: async () => grants }
-  }
-
-  test('two scopes, first fails, second passes → allow', async () => {
-    const scopes = new Map([
-      ['first', new Scope('first', 'First', () => false)],
-      ['second', new Scope('second', 'Second', () => true)],
-    ])
-    const adapter = multiGrantAdapter([
-      { name: 'admin.posts.update', scope: 'first' },
-      { name: 'admin.posts.update', scope: 'second' },
-    ])
-    const { engine } = makeEngine({ scopes, adapter })
-    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
-  })
-
-  test('all scopes fail → ScopeDeniedError naming the first scope', async () => {
-    const scopes = new Map([
-      ['first', new Scope('first', 'First', () => false)],
-      ['second', new Scope('second', 'Second', () => false)],
-    ])
-    const adapter = multiGrantAdapter([
-      { name: 'admin.posts.update', scope: 'first' },
-      { name: 'admin.posts.update', scope: 'second' },
-    ])
-    const { engine } = makeEngine({ scopes, adapter })
-    const err = await engine
-      .authorize(subject, 'admin.posts.update', { resource: () => resource })
-      .then(
-        () => null,
-        (e: unknown) => e,
-      )
-    expect(err).toBeInstanceOf(ScopeDeniedError)
-    expect((err as ScopeDeniedError).scope).toBe('first')
-  })
-
-  test('an unknown scope name alongside a passing scope contributes deny, not a crash or bypass', async () => {
-    const scopes = new Map([['known', new Scope('known', 'Known', () => true)]])
-    const adapter = multiGrantAdapter([
-      { name: 'admin.posts.update', scope: 'mystery' },
-      { name: 'admin.posts.update', scope: 'known' },
-    ])
-    const { engine } = makeEngine({ scopes, adapter })
-    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
-  })
-
-  test('a passing scope short-circuits: later scopes are not evaluated', async () => {
-    let secondRan = false
-    const scopes = new Map([
-      ['first', new Scope('first', 'First', () => true)],
-      [
-        'second',
-        new Scope('second', 'Second', () => {
-          secondRan = true
-          return true
-        }),
-      ],
-    ])
-    const adapter = multiGrantAdapter([
-      { name: 'admin.posts.update', scope: 'first' },
-      { name: 'admin.posts.update', scope: 'second' },
-    ])
-    const { engine } = makeEngine({ scopes, adapter })
-    await engine.authorize(subject, 'admin.posts.update', { resource: () => resource })
-    expect(secondRan).toBe(false)
-  })
-})
-
-describe('authorize() inAuthz suppression', () => {
-  const subject: Subject = { id: 'u1', domain: 'admin' }
-  const resource: ResourceRef = { type: 'post', id: 'p1' }
-
-  test('set while the resolver and scope checks run, restored after allow', async () => {
-    const observed: Record<string, boolean> = {}
-    let engineRef: GuardEngine
-    const scopes = new Map([
-      [
-        'probe',
-        new Scope('probe', 'Probe', () => {
-          observed.scopeCheck = engineRef.store.isInAuthz()
-          return true
-        }),
-      ],
-    ])
-    const { adapter, engine } = makeEngine({ scopes })
-    engineRef = engine
-    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'probe')
-
-    await engine.runWithRequestContext(async () => {
-      expect(engine.store.isInAuthz()).toBe(false)
-      await engine.authorize(subject, 'admin.posts.update', {
-        resource: () => {
-          observed.resolver = engine.store.isInAuthz()
-          return resource
-        },
-      })
-      expect(engine.store.isInAuthz()).toBe(false)
-    })
-
-    expect(observed).toEqual({ resolver: true, scopeCheck: true })
-  })
-
-  test('restored even when the scope check denies (throwing path)', async () => {
-    const scopes = new Map([['closed', new Scope('closed', 'Closed', () => false)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'closed')
-
-    await engine.runWithRequestContext(async () => {
-      const err = await engine
-        .authorize(subject, 'admin.posts.update', { resource: () => resource })
-        .then(
-          () => null,
-          (e: unknown) => e,
-        )
-      expect(err).toBeInstanceOf(ScopeDeniedError)
-      expect(engine.store.isInAuthz()).toBe(false)
-    })
-  })
-
-  test('restored when the resource resolver finds nothing (404 path)', async () => {
-    const scopes = new Map([['closed', new Scope('closed', 'Closed', () => false)]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, { subjectId: 'u1', domain: 'admin', tenantId: '' }, 'admin.posts.update', 'closed')
-
-    await engine.runWithRequestContext(async () => {
-      const err = await engine
-        .authorize(subject, 'admin.posts.update', { resource: () => null })
-        .then(
-          () => null,
-          (e: unknown) => e,
-        )
-      expect(err).toBeInstanceOf(ResourceNotFoundError)
-      expect(engine.store.isInAuthz()).toBe(false)
-    })
   })
 })
 

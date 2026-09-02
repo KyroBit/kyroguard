@@ -1,21 +1,14 @@
 import { performance } from 'node:perf_hooks'
-import {
-  PolicyDeniedError,
-  ResourceNotFoundError,
-  ScopeDeniedError,
-  UnauthenticatedError,
-} from './errors.js'
+import { PolicyDeniedError, UnauthenticatedError } from './errors.js'
 import { policyCacheKey } from '../cache/key.js'
 import { SubjectStore } from './subject-store.js'
 import { qualifyPolicyName, toSubjectRef } from './types.js'
 import type {
-  Awaitable,
   DecisionEvent,
   DecisionHook,
   FilterResult,
   PolicyMap,
   QualifiedPolicyName,
-  ResourceRef,
   Subject,
   SubjectRef,
 } from './types.js'
@@ -31,17 +24,12 @@ export interface EngineOptions {
   /** null disables caching entirely. */
   cache: PolicyCache | null
   bus: InvalidationBus
-  /** The db handle handed to scope checks (tracked or raw). */
+  /** The db handle handed to scopes (scoped or raw). */
   db?: unknown
   /** is_super bypasses policy checks. Default true; disable per deployment policy. */
   superBypass?: boolean
   onDecision?: DecisionHook
   onCacheEvent?: CacheHook
-}
-
-export interface AuthorizeOptions {
-  /** Many refs for a bulk route: every one must pass, or the whole call denies. */
-  resource?: () => Awaitable<ResourceRef | ResourceRef[] | null | undefined>
 }
 
 /** Framework-free engine: authorize() resolves (allow) or throws a typed GuardError (deny). */
@@ -116,11 +104,15 @@ export class GuardEngine {
     return { map, cacheHit: false }
   }
 
-  /** The decision procedure: resolves on allow, throws a typed GuardError on deny. */
+  /**
+   * The decision procedure: resolves on allow, throws a typed GuardError on
+   * deny. It answers whether the subject holds the policy at all. Which rows
+   * the grant reaches is the scope's job, and scopes narrow queries rather
+   * than refusing requests — see filterFor.
+   */
   async authorize(
     subject: Subject | null | undefined,
     policy: QualifiedPolicyName,
-    options?: AuthorizeOptions,
   ): Promise<void> {
     const startedAt = performance.now()
 
@@ -143,61 +135,7 @@ export class GuardEngine {
     }
 
     const scopeNames = map.get(policy)!
-    if (scopeNames === null) {
-      this.emitDecision(subject, policy, 'allow', 'granted', null, cacheHit, startedAt)
-      return
-    }
-
-    // Resolver and scope checks run with inAuthz set: their queries must see
-    // the unfiltered table, so filtering wrappers stand down (isInAuthz).
-    const prevInAuthz = this.store.isInAuthz()
-    this.store.setInAuthz(true)
-    try {
-      // No resolver: one null target, so row scopes decide on null and fail closed.
-      // A resolver that finds nothing is a 404.
-      let targets: (ResourceRef | null)[] = [null]
-      if (options?.resource) {
-        const resolved = (await options.resource()) ?? null
-        const list = resolved === null ? [] : Array.isArray(resolved) ? resolved : [resolved]
-        if (!list.length) {
-          this.emitDecision(subject, policy, 'deny', 'resource-not-found', scopeNames[0] ?? null, cacheHit, startedAt)
-          throw new ResourceNotFoundError()
-        }
-        targets = list
-      }
-
-      // Scopes OR together: the first passing scope allows that target. Targets AND
-      // together: a bulk call is only allowed when every row it names passes.
-      const ctx = { db: this.db, adapter: this.adapter }
-      let allowedBy: string | null = null
-      let allAllowed = true
-      for (const target of targets) {
-        let passed = false
-        for (const scopeName of scopeNames) {
-          const scope = this.scopes.get(scopeName)
-          if (!scope) continue
-          if (await scope.check(subject, target, ctx)) {
-            passed = true
-            allowedBy ??= scopeName
-            break
-          }
-        }
-        if (!passed) {
-          allAllowed = false
-          break
-        }
-      }
-      if (allAllowed) {
-        this.emitDecision(subject, policy, 'allow', 'granted', allowedBy, cacheHit, startedAt)
-        return
-      }
-    } finally {
-      this.store.setInAuthz(prevInAuthz)
-    }
-
-    const deniedScope = scopeNames[0] ?? ''
-    this.emitDecision(subject, policy, 'deny', 'scope-denied', deniedScope, cacheHit, startedAt)
-    throw new ScopeDeniedError(policy, deniedScope)
+    this.emitDecision(subject, policy, 'allow', 'granted', scopeNames?.[0] ?? null, cacheHit, startedAt)
   }
 
   /**
@@ -235,11 +173,11 @@ export class GuardEngine {
       return { kind: 'all' }
     }
 
-    const ctx = { db: this.db, adapter: this.adapter }
+    const ctx = { db: this.db, adapter: this.adapter, resource }
     const fragments: unknown[] = []
     const fragmentScopes: string[] = []
-    // Filter building runs with inAuthz set for the same reason as authorize:
-    // a filter half querying the db must not be auto-filtered itself.
+    // Scopes run with inAuthz set: a scope querying the db to build its
+    // fragment must see the unfiltered table, never its own filter.
     const prevInAuthz = this.store.isInAuthz()
     this.store.setInAuthz(true)
     try {
@@ -248,15 +186,11 @@ export class GuardEngine {
         if (!scope) {
           this.warnOnce(
             `unknown-scope:${scopeName}`,
-            `[kyroguard] Grant references unknown scope "${scopeName}" — it contributes a deny on both paths.`,
+            `[kyroguard] Grant references unknown scope "${scopeName}" — it narrows the query to nothing.`,
           )
           continue
         }
-        // A scope without a filter half folds through check(subject, null, ctx):
-        // condition scopes decide once per request, row scopes fail closed.
-        const result = scope.filter
-          ? await scope.filter(subject, { ...ctx, resource })
-          : await scope.check(subject, null, ctx)
+        const result = await scope.filter(subject, ctx)
         if (result === true) {
           this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt, 'list')
           return { kind: 'all' }

@@ -68,12 +68,25 @@ A dependency must name a policy you defined. Sync fails if it does not.
 ## Scopes
 
 ```ts
+// src/kyroguard/scopes.ts — your rules, over your columns
 import { Scope } from '@kyrobit/kyroguard'
+import { eq } from 'drizzle-orm'
+import { grades } from '../db/schema.js'
 
-new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned()] })
+export const entered = new Scope('entered', 'Entered by the teacher', subject => ({
+  where: eq(grades.enteredBy, subject.id),
+}))
+
+export const inSchool = new Scope('in-school', 'In the request school', subject =>
+  subject.tenant_id ? { where: eq(grades.schoolId, subject.tenant_id) } : false,
+)
 ```
 
-`scopeOptions` lists the conditions this policy may be granted with. `Scope.owned()` lets a teacher update only the grades they entered ([Scopes](/guide/scopes)).
+```ts
+new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [entered] })
+```
+
+`scopeOptions` lists the conditions this policy may be granted with. `entered` lets a teacher update only the grades they entered ([Scopes](/guide/scopes)).
 
 The list is enforced. Granting a scope the policy does not declare fails, at sync and at assignment ([Errors](/reference/errors#unknownscopeerror)).
 
@@ -81,24 +94,25 @@ The list is enforced. Granting a scope the policy does not declare fails, at syn
 
 ```ts
 // src/kyroguard/policies/admin.ts
-import { Policy, Scope } from '@kyrobit/kyroguard'
+import { Policy } from '@kyrobit/kyroguard'
 import type { ResourceDefinition } from '@kyrobit/kyroguard'
+import { entered, inSchool } from '../scopes.js'
 
 export const resources: ResourceDefinition[] = [
   {
     type: 'grade',
     // table: grades,       // your Drizzle table or Mongoose model (optional):
-    //                      // enables ownership tracking and read filtering
+    //                      // enables automatic query filtering
     policies: [
-      new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+      new Policy('grades.view', { scopeOptions: [inSchool] }),
       new Policy('grades.enter', { dependsOn: ['grades.view'] }),
       new Policy('grades.update', {
         dependsOn: ['grades.view'],
-        scopeOptions: [Scope.owned(), Scope.inTenant()],
+        scopeOptions: [entered, inSchool],
       }),
       new Policy('grades.delete', {
         dependsOn: ['grades.view'],
-        scopeOptions: [Scope.inTenant()],
+        scopeOptions: [inSchool],
       }),
     ],
   },
@@ -107,7 +121,7 @@ export const resources: ResourceDefinition[] = [
 
 Export the array as `resources`. Point [`kyroguard.config.ts`](/reference/configuration) at this file. Run `npx kyroguard sync` to push it to the database.
 
-`type` names the resource for scoped checks and ownership. `table` is optional — set it to record who entered each row ([Ownership](/guide/ownership)). Reads on guarded routes are then filtered automatically ([Scopes](/guide/scopes#automatic-filtering)).
+`type` names the resource a scope applies to. `table` is optional — set it and queries against that table on guarded routes carry the grant's scope automatically ([Scopes](/guide/scopes#automatic-filtering)).
 
 ## Next steps
 

@@ -95,21 +95,6 @@ describe('SubjectStore.run isolation', () => {
     expect(results).toEqual(['a', 'b'])
     expect(store.getSubject()).toBeNull()
   })
-
-  test('nested extras stay per-context (addExtra in one context invisible to the other)', async () => {
-    const store = new SubjectStore()
-    await Promise.all([
-      store.run(async () => {
-        store.addExtra({ from: 'a' })
-        await tick(3)
-        expect(store.consumeExtra()).toEqual({ from: 'a' })
-      }),
-      store.run(async () => {
-        await tick(1)
-        expect(store.consumeExtra()).toBeNull()
-      }),
-    ])
-  })
 })
 
 describe('engine-scoped stores', () => {
@@ -138,33 +123,5 @@ describe('no-store behavior', () => {
     expect(() => store.setSubject({ id: 'ghost' })).not.toThrow()
     expect(store.getSubject()).toBeNull()
     expect(store.get()).toBeUndefined()
-  })
-
-  test('addExtra/consumeExtra outside any context are no-ops', () => {
-    const store = new SubjectStore()
-    expect(() => store.addExtra({ a: 1 })).not.toThrow()
-    expect(store.consumeExtra()).toBeNull()
-  })
-})
-
-describe('addExtra / consumeExtra one-shot semantics', () => {
-  test('extras merge across addExtra calls and are consumed exactly once', () => {
-    const store = new SubjectStore()
-    store.run(() => {
-      expect(store.consumeExtra()).toBeNull() // nothing queued yet
-
-      store.addExtra({ tenant: 't1' })
-      store.addExtra({ actor: 'u1' })
-      store.addExtra({ tenant: 't2' }) // later value wins on merge
-
-      expect(store.consumeExtra()).toEqual({ tenant: 't2', actor: 'u1' })
-      // One-shot: a second consume returns nothing.
-      expect(store.consumeExtra()).toBeNull()
-
-      // A fresh addExtra starts a new one-shot batch.
-      store.addExtra({ again: true })
-      expect(store.consumeExtra()).toEqual({ again: true })
-      expect(store.consumeExtra()).toBeNull()
-    })
   })
 })

@@ -86,20 +86,4 @@ model KyroguardUserPolicy {
   @@index([subjectId], map: "kyroguard_up_subject_idx")
   @@map("kyroguard_user_policies")
 }
-
-model KyroguardResourceOwner {
-  id           String   @id @default(cuid())
-  resourceType String   @map("resource_type")
-  resourceId   String   @map("resource_id")
-  ownerId      String   @map("owner_id")
-  relation     String   @default("owner")
-  domain       String   @default("")
-  tenantId     String   @default("") @map("tenant_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@unique([resourceType, resourceId, ownerId, relation], map: "kyroguard_ro_tuple_uq")
-  @@index([resourceType, resourceId], map: "kyroguard_ro_resource_idx")
-  @@index([resourceType, ownerId], map: "kyroguard_ro_owner_idx")
-  @@map("kyroguard_resource_owners")
-}
 `

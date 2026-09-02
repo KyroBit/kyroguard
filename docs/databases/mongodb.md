@@ -52,46 +52,48 @@ npx kyroguard sync
 
 Run this before first traffic — it creates the MongoDB indexes. It also writes your policies and groups, and generates `kyroguard.d.ts` for typed policy names. Re-run it whenever they change. Details in [Sync](/guide/sync).
 
-## Track ownership with `trackingPlugin`
+## Filter queries with `scopePlugin`
 
-Policies with `Scope.owned()` check who created each document. The plugin records that for you. Add it to each schema whose documents can be owned:
+A [scope](/guide/scopes) narrows what a grant reaches. The plugin is what applies it: add it to each schema whose documents a scope can restrict.
 
 ```ts
 // src/models/grade.ts
 import { Schema, model } from 'mongoose'
-import { trackingPlugin } from '@kyrobit/kyroguard/mongoose'
+import { scopePlugin } from '@kyrobit/kyroguard/mongoose'
 import { guard } from '../kyroguard/instance.js'
 
-const gradeSchema = new Schema({ student: String, subject: String, score: Number, schoolId: String })
+const gradeSchema = new Schema({
+  student: String,
+  subject: String,
+  score: Number,
+  schoolId: String,
+  enteredBy: String,
+})
 
-gradeSchema.plugin(trackingPlugin, { guard, type: 'grade' })
+gradeSchema.plugin(scopePlugin, { guard, type: 'grade' })
 
 export const Grade = model('Grade', gradeSchema)
 ```
 
-Saving a document now records the current user as its owner:
+Write the scope against your own fields:
 
 ```ts
-const grade = await Grade.create({ student, subject, score, schoolId })
-// the requesting teacher now owns grade.id
+const entered = new Scope('entered', 'Entered by the teacher', subject => ({
+  where: { enteredBy: subject.id },
+}))
 ```
 
-`insertMany` is tracked too. Deleting a document with `deleteOne` or `findOneAndDelete` removes its ownership records. Writes with no logged-in user (seeders, jobs, scripts) record nothing.
+On a guarded route, a teacher's `Grade.find()` now returns only the grades they entered, and `Grade.updateMany` / `Grade.deleteMany` reach only those documents. Fill `enteredBy` yourself when you create the document — the plugin does not write it.
 
-::: warning Bulk operations skip the plugin
-`Model.updateMany`, `Model.deleteMany`, `bulkWrite` and raw collection calls fire no document middleware, so the plugin never sees them. Record or remove ownership yourself on those paths:
-
-```ts
-await guard.ownership.record(user.id, { type: 'grade', id: gradeId })
-await guard.ownership.remove({ type: 'grade', id: gradeId })
-```
+::: warning Raw collection calls skip the plugin
+`bulkWrite` and calls through `Model.collection` fire no middleware, so the plugin never sees them and they run unfiltered. Reach for [`filterFor`](/guide/scopes#when-you-want-the-condition-in-hand) on those paths and merge the condition yourself.
 :::
 
-The plugin also filters reads: on a guarded route, a teacher's `Grade.find()` returns only the grades they entered. Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Mongoose specifics: [reference](/reference/mongoose).
+Behavior: [Automatic filtering](/guide/scopes#automatic-filtering). Mongoose specifics: [reference](/reference/mongoose).
 
 ## Next steps
 
 - [Assigning access](/guide/assigning-access) — give users groups and policies.
 - [Protecting routes](/guide/protecting-routes) — put guards in front of handlers.
-- [Ownership](/guide/ownership) — how owned-scope checks resolve.
+- [Ownership](/guide/ownership) — the owner-field pattern behind an "own rows only" scope.
 - [Mongoose reference](/reference/mongoose) — every option of `mongooseAdapter` and the plugin.

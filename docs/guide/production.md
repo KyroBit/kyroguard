@@ -59,7 +59,7 @@ const guard = createGuard({
 })
 ```
 
-`reason` says why: `granted`, `super`, `no-policy`, `scope-denied`, `no-subject` or `resource-not-found`. An error thrown inside the hook is ignored. The hook can never block or change a decision.
+`reason` says why: `granted`, `super`, `no-policy`, `scope-denied` or `no-subject`. An error thrown inside the hook is ignored. The hook can never block or change a decision.
 
 ## Health check
 
@@ -68,7 +68,7 @@ const guard = createGuard({
 ```
 $ npx kyroguard status
 adapter:      drizzle-pg
-capabilities: autoOwnershipTracking=true listFiltering=true
+capabilities: listFiltering=true
 policies:     7
 groups:       2
 ```

@@ -44,7 +44,7 @@ function capitalize(text: string): string {
 export interface ResourceDefinition {
   type: string
   policies: Policy[]
-  /** Drizzle table or Mongoose model — consumed by trackedDb / the plugin. */
+  /** Drizzle table or Mongoose model — consumed by scopedDb / the plugin. */
   table?: unknown
   /** Abstract field name → native column / path / field name, read by resource-generic scope filters. */
   fields?: Record<string, unknown>

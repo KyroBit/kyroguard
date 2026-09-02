@@ -10,7 +10,7 @@ export async function run(config: GuardConfig): Promise<void> {
 
     console.log(`adapter:      ${adapter.id}`)
     console.log(
-      `capabilities: autoOwnershipTracking=${adapter.capabilities.autoOwnershipTracking} listFiltering=${adapter.capabilities.listFiltering === true}`,
+      `capabilities: listFiltering=${adapter.capabilities.listFiltering === true}`,
     )
     console.log(`policies:     ${policies.length}`)
     console.log(`groups:       ${groups.length}`)

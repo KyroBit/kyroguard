@@ -6,7 +6,7 @@ import { inProcessBus } from '../../src/cache/bus.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { EngineOptions } from '../../src/core/engine.js'
 import type { ResourceDefinition } from '../../src/core/policy.js'
-import type { ScopeFilterContext } from '../../src/core/scope.js'
+import type { ScopeContext } from '../../src/core/scope.js'
 import type { Subject, SubjectRef } from '../../src/core/types.js'
 import type { PolicyGrant, StorageAdapter } from '../../src/storage/contract.js'
 
@@ -86,24 +86,16 @@ describe('filterFor() decision procedure', () => {
     expect(await engine.filterFor(subject, 'admin.sales.view', saleResource)).toEqual({ kind: 'all' })
   })
 
-  test('condition scope without a filter half folds through check(subject, null, ctx): true → all', async () => {
-    let seenResource: unknown = 'unset'
+  test('a scope returning true imposes no restriction → all (a condition met, e.g. business hours)', async () => {
     const scopes = new Map([
-      [
-        'business-hours',
-        new Scope('business-hours', 'Business hours', (_s, resource) => {
-          seenResource = resource
-          return true
-        }),
-      ],
+      ['business-hours', new Scope('business-hours', 'Business hours', () => true)],
     ])
     const { adapter, engine } = makeEngine({ scopes })
     await grant(adapter, 'admin.sales.view', 'business-hours')
     expect(await engine.filterFor(subject, 'admin.sales.view', saleResource)).toEqual({ kind: 'all' })
-    expect(seenResource).toBeNull()
   })
 
-  test('condition scope check false → none/scope-denied', async () => {
+  test('a scope returning false → none/scope-denied (a condition unmet)', async () => {
     const scopes = new Map([['after-hours', new Scope('after-hours', 'After hours', () => false)]])
     const { adapter, engine } = makeEngine({ scopes })
     await grant(adapter, 'admin.sales.view', 'after-hours')
@@ -113,21 +105,10 @@ describe('filterFor() decision procedure', () => {
     })
   })
 
-  test('Scope.owned() on an adapter without listFilters fails closed → none/scope-denied', async () => {
-    const owned = Scope.owned()
-    const scopes = new Map([[owned.name, owned]])
-    const { adapter, engine } = makeEngine({ scopes })
-    await grant(adapter, 'admin.sales.view', 'owned')
-    expect(await engine.filterFor(subject, 'admin.sales.view', saleResource)).toEqual({
-      kind: 'none',
-      reason: 'scope-denied',
-    })
-  })
-
   test('a filter returning { where } → kind where carrying the fragment untouched', async () => {
     const fragment = { column: 'cashier_id', equals: 'u1' }
     const scopes = new Map([
-      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: fragment }))],
+      ['mine', new Scope('mine', 'Mine', () => ({ where: fragment }))],
     ])
     const { adapter, engine } = makeEngine({ scopes })
     await grant(adapter, 'admin.sales.view', 'mine')
@@ -135,13 +116,13 @@ describe('filterFor() decision procedure', () => {
     expect(result).toEqual({ kind: 'where', where: fragment })
   })
 
-  test('the filter half receives (subject, { db, adapter, resource })', async () => {
+  test('the scope receives (subject, { db, adapter, resource })', async () => {
     const db = { tag: 'the-db-handle' }
-    let seen: { subject: Subject; ctx: ScopeFilterContext } | null = null
+    let seen: { subject: Subject; ctx: ScopeContext } | null = null
     const scopes = new Map([
       [
         'mine',
-        new Scope('mine', 'Mine', () => false, (s, ctx) => {
+        new Scope('mine', 'Mine', (s, ctx) => {
           seen = { subject: s, ctx }
           return { where: 'w' }
         }),
@@ -152,7 +133,7 @@ describe('filterFor() decision procedure', () => {
     await engine.filterFor(subject, 'admin.sales.view', saleResource)
 
     expect(seen).not.toBeNull()
-    const captured = seen! as { subject: Subject; ctx: ScopeFilterContext }
+    const captured = seen! as { subject: Subject; ctx: ScopeContext }
     expect(captured.subject).toBe(subject)
     expect(captured.ctx.db).toBe(db)
     expect(captured.ctx.adapter).toBe(adapter)
@@ -161,7 +142,7 @@ describe('filterFor() decision procedure', () => {
 
   test('OR fold: a scope returning true short-circuits to all even when another yields a fragment', async () => {
     const scopes = new Map([
-      ['fragment', new Scope('fragment', 'Fragment', () => false, () => ({ where: 'w' }))],
+      ['fragment', new Scope('fragment', 'Fragment', () => ({ where: 'w' }))],
       ['open', new Scope('open', 'Open', () => true)],
     ])
     const adapter = multiGrantAdapter([
@@ -175,7 +156,7 @@ describe('filterFor() decision procedure', () => {
   test('OR fold: false branches drop out, the single surviving fragment is returned', async () => {
     const scopes = new Map([
       ['closed', new Scope('closed', 'Closed', () => false)],
-      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
+      ['mine', new Scope('mine', 'Mine', () => ({ where: 'mine-rows' }))],
     ])
     const adapter = multiGrantAdapter([
       { name: 'admin.sales.view', scope: 'closed' },
@@ -190,8 +171,8 @@ describe('filterFor() decision procedure', () => {
 
   test('two fragments on an adapter without listFilters → none/unfilterable', async () => {
     const scopes = new Map([
-      ['a', new Scope('a', 'A', () => false, () => ({ where: 'a-rows' }))],
-      ['b', new Scope('b', 'B', () => false, () => ({ where: 'b-rows' }))],
+      ['a', new Scope('a', 'A', () => ({ where: 'a-rows' }))],
+      ['b', new Scope('b', 'B', () => ({ where: 'b-rows' }))],
     ])
     const adapter = multiGrantAdapter([
       { name: 'admin.sales.view', scope: 'a' },
@@ -228,7 +209,7 @@ describe('storeFilterFor() — the guard-path entry', () => {
 
   test('the stored plan follows the policy the request exercises — same table, per request', async () => {
     const scopes = new Map([
-      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
+      ['mine', new Scope('mine', 'Mine', () => ({ where: 'mine-rows' }))],
     ])
     const adapter = multiGrantAdapter([
       { name: 'admin.sales.view', scope: null },
@@ -248,7 +229,7 @@ describe('storeFilterFor() — the guard-path entry', () => {
 
   test('a later guard in the same request replaces the stored plan for the type', async () => {
     const scopes = new Map([
-      ['mine', new Scope('mine', 'Mine', () => false, () => ({ where: 'mine-rows' }))],
+      ['mine', new Scope('mine', 'Mine', () => ({ where: 'mine-rows' }))],
     ])
     const adapter = multiGrantAdapter([
       { name: 'admin.sales.view', scope: null },
@@ -305,13 +286,13 @@ describe('storeFilterFor() — the guard-path entry', () => {
 })
 
 describe('inAuthz suppression flag', () => {
-  test('set while filterFor builds filters, restored after (both outcomes observed in-context)', async () => {
+  test('set while filterFor runs scopes, restored after', async () => {
     const observed: boolean[] = []
     let engineRef: GuardEngine
     const scopes = new Map([
       [
         'mine',
-        new Scope('mine', 'Mine', () => false, () => {
+        new Scope('mine', 'Mine', () => {
           observed.push(engineRef.store.isInAuthz())
           return { where: 'w' }
         }),
@@ -330,7 +311,7 @@ describe('inAuthz suppression flag', () => {
     expect(observed).toEqual([true])
   })
 
-  test('condition scopes folded through check() on the list path also run suppressed', async () => {
+  test('a scope answering true rather than a fragment also runs suppressed', async () => {
     const observed: boolean[] = []
     let engineRef: GuardEngine
     const scopes = new Map([
@@ -386,8 +367,8 @@ describe('filterFor() one-time warnings', () => {
   test('unfilterable warns once per adapter across repeated calls', async () => {
     warn = spyOn(console, 'warn').mockImplementation(() => {})
     const scopes = new Map([
-      ['a', new Scope('a', 'A', () => false, () => ({ where: 'a-rows' }))],
-      ['b', new Scope('b', 'B', () => false, () => ({ where: 'b-rows' }))],
+      ['a', new Scope('a', 'A', () => ({ where: 'a-rows' }))],
+      ['b', new Scope('b', 'B', () => ({ where: 'b-rows' }))],
     ])
     const adapter = multiGrantAdapter([
       { name: 'admin.sales.view', scope: 'a' },

@@ -18,31 +18,32 @@ function createGuard(options: CreateGuardOptions): Guard
 | `cacheTtlMs` | `number` | `30_000` | TTL for the default cache. Ignored when `cache` is set. |
 | `cacheMaxEntries` | `number` | `10_000` | Size limit for the default cache. Ignored when `cache` is set. |
 | `invalidationBus` | `InvalidationBus` | `inProcessBus()` | Cross-instance cache invalidation. |
-| `db` | `unknown` | — | Db handle passed to scope checks. |
+| `db` | `unknown` | — | Db handle passed to scopes. |
 | `superBypass` | `boolean` | `true` | `is_super: true` users skip policy checks. |
 | `onDecision` | `DecisionHook` | — | Fires on every allow/deny decision. |
 | `onCacheEvent` | `CacheHook` | — | Fires on cache hits, misses and invalidations. |
 
 ```ts
-import { createGuard, Policy, Scope } from '@kyrobit/kyroguard'
+import { createGuard, Policy } from '@kyrobit/kyroguard'
+import { entered, inSchool } from './scopes.js'
 import { memoryAdapter } from '@kyrobit/kyroguard/testing'
 
 const guard = createGuard({
   adapter: memoryAdapter(),
   policies: [
-    new Policy('grades.view', { scopeOptions: [Scope.inTenant()] }),
+    new Policy('grades.view', { scopeOptions: [inSchool] }),
     new Policy('grades.enter', { dependsOn: ['grades.view'] }),
-    new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned(), Scope.inTenant()] }),
-    new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [Scope.inTenant()] }),
+    new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [entered, inSchool] }),
+    new Policy('grades.delete', { dependsOn: ['grades.view'], scopeOptions: [inSchool] }),
   ],
   groups: {
     teacher: {
       label: 'Teacher',
-      policies: { 'grades.view': 'in-tenant', 'grades.enter': 'all', 'grades.update': 'owned' },
+      policies: { 'grades.view': 'in-school', 'grades.enter': 'all', 'grades.update': 'entered' },
     },
     coordinator: {
       label: 'Coordinator',
-      policies: { 'grades.view': 'in-tenant', 'grades.update': 'in-tenant', 'grades.delete': 'in-tenant' },
+      policies: { 'grades.view': 'in-school', 'grades.update': 'in-school', 'grades.delete': 'in-school' },
     },
   },
 })
@@ -68,13 +69,6 @@ The instance returned by `createGuard()`.
 | `admin.removeGroup(subject, group)` | Remove a group. |
 | `admin.assignPolicy(subject, policy, scope?)` | Grant one policy directly. `scope` is a scope name; omitted or `'all'` means no restriction — every row. |
 | `admin.removePolicy(subject, policy)` | Remove a direct grant. |
-| `ownership.record(owner, resource, at?)` | Record who owns a resource (relation `'owner'`). `at`: `domain`, `tenantId`. |
-| `ownership.isOwner(ownerId, resource)` | Check ownership. Matches only `'owner'` entries. |
-| `ownership.remove(resource)` | Remove every entry for a resource — all users, all relations. |
-| `ownership.addExtra(extra)` | Override the next tracked insert's ownership row. Applies once. See [Drizzle](/reference/drizzle). |
-| `access.grant(userId, resource, options?)` | Grant a user access to a resource. Default relation `'granted'`. `options`: `relation`, `domain`, `tenantId`. |
-| `access.revoke(userId, resource, relation?)` | Remove that user's entries for the resource. A relation narrows the removal to it. |
-| `access.list(resource)` | Every access entry for the resource, all relations, as `OwnershipEntry[]`. |
 | `cache.invalidateSubject(subjectId)` | Drop one user's cached policies on every instance. |
 | `cache.clear()` | Drop all cached policies on every instance. |
 | `dispose()` | Detach bus subscriptions (shutdown, tests). |
@@ -110,7 +104,7 @@ class Policy {
 ```
 
 ```ts
-const updateGrades = new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [Scope.owned()] })
+const updateGrades = new Policy('grades.update', { dependsOn: ['grades.view'], scopeOptions: [entered] })
 ```
 
 `scopeOptions` is enforced at grant time: `seedGroups` rejects a group entry whose scope the policy does not declare, and `assignPolicy` throws [`UnknownScopeError`](#error-classes). See [Policies](/guide/policies).
@@ -119,45 +113,33 @@ const updateGrades = new Policy('grades.update', { dependsOn: ['grades.view'], s
 
 ```ts
 interface ResourceDefinition {
-  type: string                     // resource name in scoped checks and the ownership store
+  type: string                     // resource name a scope applies to
   policies: Policy[]
-  table?: unknown                  // Drizzle table or Mongoose model — read by trackedDb / the plugin
-  fields?: Record<string, unknown> // abstract field name → native column, for resource-generic filters
+  table?: unknown                  // Drizzle table or Mongoose model — read by scopedDb / the plugin
+  fields?: Record<string, unknown> // abstract field name → native column, for resource-generic scopes
 }
 ```
 
-The registration ties policies to rows. A guard whose policy appears in `policies` activates [automatic filtering](/guide/scopes#automatic-filtering) for this resource — reads of it apply that guard's grant for the rest of the request. Reads of an unregistered resource, or on a request no guard filtered, run plainly; lists outside a guard go through [`filterFor`](#filterfor) by hand.
+The registration ties policies to rows. A guard whose policy appears in `policies` activates [automatic filtering](/guide/scopes#automatic-filtering) for this resource — queries against it carry that guard's grant for the rest of the request. Queries against an unregistered resource, or on a request no guard filtered, run plainly; lists outside a guard go through [`filterFor`](#filterfor) by hand.
 
 ## Scope
 
 ```ts
 class Scope {
-  constructor(name: string, label: string, check: ScopeCheckFn, filter?: ScopeFilterFn)
-  static owned(name?: string, label?: string): Scope    // the user created the row
-  static granted(name?: string, label?: string): Scope  // the row was granted to the user
-  static inTenant(name?: string, label?: string): Scope // the row is in the subject's tenant
+  constructor(name: string, label: string, filter: ScopeFn)
 }
 
-type ScopeCheckFn = (
+type ScopeFn = (
   subject: Subject,
-  resource: ResourceRef | null,
-  ctx: ScopeCheckContext, // { db: unknown; adapter: StorageAdapter }
-) => Awaitable<boolean>
+  ctx: ScopeContext, // { db: unknown; adapter: StorageAdapter; resource: ResourceDefinition }
+) => Awaitable<ScopeResult>
 
-type ScopeFilterFn = (
-  subject: Subject,
-  ctx: ScopeFilterContext, // ScopeCheckContext & { resource: ResourceDefinition }
-) => Awaitable<ScopeFilterResult>
-
-type ScopeFilterResult = boolean | { where: unknown }
+type ScopeResult = boolean | { where: unknown }
 ```
 
-A scope is a named condition on a grant — about the row (`Scope.owned()`: only grades the user entered) or about anything else (a date window, a published flag, a subject attribute). One scope owns both evaluation paths:
+A scope is a named condition on a grant, written against your own tables. It returns `true` (no restriction), `false` (no rows — fail closed), or `{ where }` — a native fragment for your ORM. The integration ANDs that fragment into every query for the resource: reads, updates and deletes alike, so there is no separate single-row check.
 
-- `check` guards a single row. It receives the resource when the guard resolves one, or `null` — row scopes must fail closed on `null`.
-- `filter` compiles the same condition for list queries. It returns `true` (no row restriction), `false` (no rows — fail closed), or `{ where }` — a native fragment for the app's ORM. Optional: a scope without one is folded through `check(subject, null, ctx)` on the list path, which makes condition scopes work in lists with no extra code and keeps filterless row scopes from leaking.
-
-The built-ins ship both halves. Default names: `owned`, `granted`, `in-tenant`. The name `'all'` is reserved — it marks an unrestricted grant, and the constructor rejects it. See [Scopes](/guide/scopes).
+kyroguard ships no built-in scopes; it has no table of its own describing your rows. The name `'all'` is reserved — it marks an unrestricted grant, and the constructor rejects it. See [Scopes](/guide/scopes).
 
 ## filterFor()
 
@@ -180,7 +162,7 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 | --- | --- |
 | `{ kind: 'all' }` | Query unfiltered — an unrestricted grant, a passing condition scope, or a superuser. |
 | `{ kind: 'none', reason: 'no-policy' }` | The policy is not granted. Serve `[]`, or branch for a 403. |
-| `{ kind: 'none', reason: 'scope-denied' }` | Every granted scope contributed nothing. Serve `[]` without querying. |
+| `{ kind: 'none', reason: 'scope-denied' }` | Every granted scope returned `false`. Serve `[]` without querying. |
 | `{ kind: 'none', reason: 'unfilterable' }` | Multiple fragments and the adapter cannot OR-combine them. Serve `[]`. |
 | `{ kind: 'where', where }` | `AND` the fragment into your query. Native to the adapter: Drizzle SQL, Prisma `WhereInput`, Mongo filter. |
 
@@ -192,7 +174,7 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 guard.engine.storeFilterFor(subject, qualifiedPolicy, resource: ResourceDefinition): Promise<FilterResult>
 ```
 
-The guard-path entry behind [automatic filtering](/guide/scopes#automatic-filtering). After `requirePolicy` allows, the framework guard calls it with the policy it just checked and that policy's resource (from [`resourceForPolicy`](#kyroguard)): it runs [`filterFor`](#filterfor) and activates the result for the rest of the request, keyed by `resource.type`. `trackedDb`, the Prisma extension and the Mongoose plugin key their read filtering on that per-request state alone — a resource with no active filter is read unfiltered.
+The guard-path entry behind [automatic filtering](/guide/scopes#automatic-filtering). After `requirePolicy` allows, the framework guard calls it with the policy it just checked and that policy's resource (from [`resourceForPolicy`](#kyroguard)): it runs [`filterFor`](#filterfor) and activates the result for the rest of the request, keyed by `resource.type`. `scopedDb`, the Prisma extension and the Mongoose plugin key their read filtering on that per-request state alone — a resource with no active filter is read unfiltered.
 
 ## GroupDefinition
 
@@ -224,15 +206,13 @@ interface Subject {
 
 ## Error classes
 
-All guards throw subclasses of `GuardError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`, plus `reason` on the `ACCESS_DENIED` errors. See [Errors](/reference/errors).
+All guards throw subclasses of `GuardError`. Each carries `statusCode` and a stable `code`. `toBody()` returns `{ message, code }`. See [Errors](/reference/errors).
 
-| Class | Status | Code | `reason` |
-| --- | --- | --- | --- |
-| `UnauthenticatedError` | 401 | `UNAUTHENTICATED` | — |
-| `PolicyDeniedError` | 403 | `ACCESS_DENIED` | `'policy'` |
-| `ScopeDeniedError` | 403 | `ACCESS_DENIED` | `'scope'` |
-| `ResourceNotFoundError` | 404 | `NOT_FOUND` | — |
-| `MisconfiguredError` | 500 | `MISCONFIGURED` | — |
+| Class | Status | Code |
+| --- | --- | --- |
+| `UnauthenticatedError` | 401 | `UNAUTHENTICATED` |
+| `PolicyDeniedError` | 403 | `ACCESS_DENIED` |
+| `MisconfiguredError` | 500 | `MISCONFIGURED` |
 
 `UnknownPolicyError` and `UnknownScopeError` are not `GuardError`s. `assignPolicy` throws the first when the policy was never synced, the second when the grant carries a scope outside the policy's `scopeOptions`. Both signal a setup problem, not a request denial. See [Errors](/reference/errors).
 
@@ -247,7 +227,7 @@ Functions:
 - `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.
 - `normalizeSentinel(value)` — returns `value ?? ''`. Storage stores `''`, never null, for a missing domain or tenant.
-- `mergeGrants(grants)` — merge grant rows into a `PolicyMap` (`Map<string, string[] | null>`). An unrestricted grant from anywhere wins the whole policy; otherwise the value is every granted scope name, deduped. Scopes OR on both paths: `authorize()` passes when any scope passes, `filterFor()` combines their fragments.
+- `mergeGrants(grants)` — merge grant rows into a `PolicyMap` (`Map<string, string[] | null>`). An unrestricted grant from anywhere wins the whole policy; otherwise the value is every granted scope name, deduped. `filterFor()` unions their fragments.
 - `defineConfig(config)` — returns `config` unchanged, with types. Use it in `kyroguard.config.ts`. See [Configuration](/reference/configuration).
 - `createId()` — random string id generator (cuid2). Used by generated schemas.
 
@@ -262,8 +242,8 @@ Types:
 - Policies: `ResourceDefinition`, `PolicyMap`, `ResourceRef`.
 - Groups: `GroupsDefinition`, `GroupDefinition`, `GroupPoliciesInput`.
 - Names: `GuardTypes`, `DomainName`, `AnyPolicyName`, `DomainPolicyName`, `QualifiedPolicyName`. See [TypeScript](/guide/typescript).
-- Storage contract: `StorageAdapter`, `AdapterCapabilities`, `ListFilters`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`, `OwnershipEntry`. See [Custom adapters](/guide/custom-adapters).
+- Storage contract: `StorageAdapter`, `AdapterCapabilities`, `ListFilters`, `PolicyDefinitionRow`, `PolicyRecord`, `PolicyGrant`, `GroupRecord`, `GroupPolicyEntry`. See [Custom adapters](/guide/custom-adapters).
 - Cache: `PolicyCache`, `PolicyCacheKey`, `InvalidationBus`, `InvalidationEvent`, `CacheEvent`, `CacheHook`. See [Cache](/reference/cache).
 - Hooks: `DecisionEvent`, `DecisionHook`, `GuardErrorCode`.
-- Engine: `EngineOptions`, `AuthorizeOptions`, `FilterResult`, `RequestStore`, `ScopeCheckFn`, `ScopeCheckContext`, `ScopeFilterFn`, `ScopeFilterContext`, `ScopeFilterResult`, `Awaitable`.
+- Engine: `EngineOptions`, `FilterResult`, `RequestStore`, `ScopeFn`, `ScopeContext`, `ScopeResult`, `Awaitable`.
 - Config: `GuardConfig`, `DomainConfig`.

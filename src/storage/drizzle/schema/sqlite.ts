@@ -83,30 +83,10 @@ export const kyroguardUserPolicies = sqliteTable(
   ],
 )
 
-export const kyroguardResourceOwners = sqliteTable(
-  'kyroguard_resource_owners',
-  {
-    id: text('id').primaryKey().$defaultFn(() => createId()),
-    resourceType: text('resource_type').notNull(),
-    resourceId: text('resource_id').notNull(),
-    ownerId: text('owner_id').notNull(),
-    relation: text('relation').notNull().default('owner'),
-    domain: text('domain').notNull().default(''),
-    tenantId: text('tenant_id').notNull().default(''),
-    createdAt: timestampCol('created_at'),
-  },
-  table => [
-    uniqueIndex('kyroguard_ro_tuple_uq').on(table.resourceType, table.resourceId, table.ownerId, table.relation),
-    index('kyroguard_ro_resource_idx').on(table.resourceType, table.resourceId),
-    index('kyroguard_ro_owner_idx').on(table.resourceType, table.ownerId),
-  ],
-)
-
 export const tables = {
   policies: kyroguardPolicies,
   policyGroups: kyroguardPolicyGroups,
   policyGroupPolicies: kyroguardPolicyGroupPolicies,
   userPolicyGroups: kyroguardUserPolicyGroups,
   userPolicies: kyroguardUserPolicies,
-  resourceOwners: kyroguardResourceOwners,
 } as const

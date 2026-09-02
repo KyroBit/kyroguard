@@ -13,7 +13,6 @@ export interface RouteSpec {
   path: string
   domain: string
   policy?: string
-  resource?: (req: any) => { type: string; id: string } | null
   getSubjectFrom?: 'header'
 }
 
@@ -43,7 +42,14 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
 
   const makeResources = (): ResourceDefinition[] => [
     { type: 'thing', policies: [new Policy('thing.read'), new Policy('other.read')] },
-    { type: 'doc', policies: [new Policy('docs.read', undefined, [], [Scope.owned()])] },
+    {
+      type: 'doc',
+      policies: [
+        new Policy('docs.read', undefined, [], [
+          new Scope('none', 'Nothing at all', () => false),
+        ]),
+      ],
+    },
   ]
 
   const withApp = async (
@@ -81,12 +87,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
   })
 
   const docRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
-    route({
-      path: '/docs/d1',
-      policy: 'docs.read',
-      resource: () => ({ type: 'doc', id: 'd1' }),
-      ...over,
-    })
+    route({ path: '/docs/d1', policy: 'docs.read', ...over })
 
   const get = (
     app: TestApp,
@@ -180,47 +181,15 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         expect(res.status).toBe(200)
       }))
 
-    it('7: scoped grant + resource found + scope passes → 200', () =>
+    it('7: scoped grant → 200; the scope narrows the query, it does not refuse the request', () =>
       withApp(
         {
           routes: [docRoute()],
-          seed: async guard => {
-            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
-            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
-          },
+          seed: guard => grant(guard, 'u1', 'docs.read', { scope: 'none' }),
         },
         async app => {
           const res = await get(app, '/docs/d1', asUser('u1'))
           expect(res.status).toBe(200)
-        },
-      ))
-
-    it('8: scoped grant + scope check fails → 403 ACCESS_DENIED', () =>
-      withApp(
-        {
-          routes: [docRoute()],
-          seed: async guard => {
-            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
-            await guard.ownership.record('someone-else', { type: 'doc', id: 'd1' })
-          },
-        },
-        async app => {
-          const res = await get(app, '/docs/d1', asUser('u1'))
-          expect(res.status).toBe(403)
-          expect(res.body.code).toBe('ACCESS_DENIED')
-        },
-      ))
-
-    it('9: scoped grant + resource resolver returns null → 404 NOT_FOUND', () =>
-      withApp(
-        {
-          routes: [docRoute({ resource: () => null })],
-          seed: guard => grant(guard, 'u1', 'docs.read', { scope: 'owned' }),
-        },
-        async app => {
-          const res = await get(app, '/docs/d1', asUser('u1'))
-          expect(res.status).toBe(404)
-          expect(res.body.code).toBe('NOT_FOUND')
         },
       ))
 
@@ -308,67 +277,6 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           const revoked = await get(app, '/thing', asUser('u1'))
           expect(revoked.status).toBe(403)
           expect(revoked.body.code).toBe('ACCESS_DENIED')
-        },
-      ))
-
-    it('14: scoped grant + :id route + no resource option → params.id is the row target', () =>
-      withApp(
-        {
-          routes: [docRoute({ path: '/docs/:id', resource: undefined })],
-          seed: async guard => {
-            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
-            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
-            await guard.ownership.record('someone-else', { type: 'doc', id: 'd2' })
-          },
-        },
-        async app => {
-          expect((await get(app, '/docs/d1', asUser('u1'))).status).toBe(200)
-
-          const foreign = await get(app, '/docs/d2', asUser('u1'))
-          expect(foreign.status).toBe(403)
-          expect(foreign.body.code).toBe('ACCESS_DENIED')
-        },
-      ))
-
-    it('15: scoped grant + no :id and no resource option → row scope fails closed', () =>
-      withApp(
-        {
-          routes: [docRoute({ path: '/docs-inbox', resource: undefined })],
-          seed: async guard => {
-            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
-            await guard.ownership.record('u1', { type: 'doc', id: 'd1' })
-          },
-        },
-        async app => {
-          const res = await get(app, '/docs-inbox', asUser('u1'))
-          expect(res.status).toBe(403)
-          expect(res.body.code).toBe('ACCESS_DENIED')
-        },
-      ))
-
-    it('16: explicit resource option wins over params.id', () =>
-      withApp(
-        {
-          routes: [docRoute({ path: '/docs/:id', resource: () => ({ type: 'doc', id: 'd9' }) })],
-          seed: async guard => {
-            await grant(guard, 'u1', 'docs.read', { scope: 'owned' })
-            await guard.ownership.record('u1', { type: 'doc', id: 'd9' })
-          },
-        },
-        async app => {
-          // u1 owns d9 but not d1 — a 200 proves the explicit resolver decided.
-          expect((await get(app, '/docs/d1', asUser('u1'))).status).toBe(200)
-        },
-      ))
-
-    it('17: unscoped grant on a :id route → 200 with no ownership recorded', () =>
-      withApp(
-        {
-          routes: [docRoute({ path: '/docs/:id', resource: undefined })],
-          seed: guard => grant(guard, 'u1', 'docs.read'),
-        },
-        async app => {
-          expect((await get(app, '/docs/d2', asUser('u1'))).status).toBe(200)
         },
       ))
   })

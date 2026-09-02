@@ -1,74 +1,80 @@
 # Ownership
 
-`Scope.owned()` needs to know who created what. Ownership records answer that:
+"Only the rows they created" is the most common scope there is. kyroguard has no opinion about how you record that — ownership is a column in **your** schema, and a [scope](/guide/scopes) is where you name it.
+
+## The column
 
 ```ts
-await guard.ownership.isOwner(user.id, { type: 'grade', id: '42' })
+export const grades = pgTable('grades', {
+  id: text('id').primaryKey(),
+  enteredBy: text('entered_by').notNull(),
+  schoolId: text('school_id').notNull(),
+  // …
+})
 ```
 
-Each record says: this user created this row. When a teacher enters a grade, the grade is theirs.
-
-## Automatic tracking
-
-The ORM integrations write ownership records on insert, attributed to the logged-in user. Wiring lives in your database page:
-
-- [Drizzle](/databases/drizzle#_5-track-ownership-optional) — wrap your db with `trackedDb`.
-- [Prisma](/databases/prisma#track-ownership-with-kyroguardprismaextension) — extend your client with `trackingExtension`.
-- [MongoDB](/databases/mongodb#track-ownership-with-kyroguardmongooseplugin) — add `trackingPlugin` to each schema.
-
-The same integrations also filter reads on guarded routes — see [Automatic filtering](/guide/scopes#automatic-filtering).
-
-::: warning What is not tracked
-Tracking hooks into the ORM. Raw SQL, bulk operations and other writes that bypass the hooks record nothing — each database page lists its exact gaps. On those paths, call `guard.ownership.record()` yourself.
-:::
-
-## The manual API
+Fill it where you create the row — the same handler that already knows who is logged in:
 
 ```ts
-// After creating a row outside the tracked path:
-await guard.ownership.record(user.id, { type: 'grade', id: grade.id })
-
-// Ask the store directly:
-const mine = await guard.ownership.isOwner(user.id, { type: 'grade', id: grade.id })
-
-// After deleting a row:
-await guard.ownership.remove({ type: 'grade', id: grade.id })
+await db.insert(grades).values({ ...input, enteredBy: req.authUser.id })
 ```
 
-Recording twice is safe. `remove` clears everyone from the row — owners and grants alike.
+kyroguard does not write this for you and does not watch your inserts. That is deliberate: a hidden write is a hidden bug, and only your handler knows which column means "owner" for this table.
 
-## Owner entries and granted entries
-
-Every record carries a relation. `guard.ownership.record()` writes relation `'owner'`: the row's creator, what `Scope.owned()` checks. `guard.access.grant()` writes relation `'granted'`: a row someone chose to share, what `Scope.granted()` checks. Same store, different meaning — a granted entry never passes an owned check.
-
-## The access API
-
-Ownership covers rows a user created. For rows someone *picks* — a substitute teacher covers two classes this week and needs exactly those classes' grades — grant access directly:
+## The scope
 
 ```ts
-// For each grade in the two covered classes:
-await guard.access.grant(substitute.id, { type: 'grade', id: grade.id })
-
-// The week is over — take it back:
-await guard.access.revoke(substitute.id, { type: 'grade', id: grade.id })
-
-// Everyone on the grade — owner and grants:
-const entries = await guard.access.list({ type: 'grade', id: grade.id })
+export const entered = new Scope('entered', 'Entered by the teacher', subject => ({
+  where: eq(grades.enteredBy, subject.id),
+}))
 ```
 
-`Scope.granted()` is the built-in scope that turns these grants into access:
+Declare it on the policy and grant it to the role that should be limited:
 
 ```ts
-new Policy('grades.view', { scopeOptions: [Scope.granted()] })
+new Policy('grades.update', { scopeOptions: [entered] })
 
 // groups.ts
-substitute: { policies: { 'grades.view': 'granted' } },
+teacher: { policies: { 'grades.update': 'entered' } },
 ```
 
-The substitute now sees the two classes' grades — at the guard and in their lists — until you revoke.
+From then on every read, update and delete of `grades` under that grant carries `entered_by = :them`. A grade somebody else entered is invisible and unwritable — the query simply does not match it.
 
-`grant` takes options: `relation` for a custom relation name, `domain` and `tenantId` to place the entry. `revoke` without a relation removes that user's entries under every relation; pass one to remove just it. Granting twice is safe, like recording.
+## Sharing chosen rows
+
+Ownership covers rows a user created. For rows someone *picks* — a substitute teacher covers two classes this week and needs exactly those classes' grades — the same pattern applies, with a join table you own:
+
+```ts
+export const gradeShares = pgTable('grade_shares', {
+  gradeId: text('grade_id').notNull(),
+  userId: text('user_id').notNull(),
+})
+```
+
+```ts
+export const shared = new Scope('shared', 'Shared with the subject', (subject, ctx) => ({
+  where: exists(
+    (ctx.db as Db)
+      .select({ one: sql`1` })
+      .from(gradeShares)
+      .where(and(eq(gradeShares.gradeId, grades.id), eq(gradeShares.userId, subject.id))),
+  ),
+}))
+```
+
+```ts
+new Policy('grades.view', { scopeOptions: [entered, shared] })
+
+// groups.ts
+substitute: { policies: { 'grades.view': 'shared' } },
+```
+
+Insert a row into `grade_shares` to share, delete it to revoke. A subject holding both `entered` and `shared` on the same policy sees the union of both.
+
+::: tip
+Index the columns your scopes filter on. A scope becomes a `WHERE` on every query for that resource, so an unindexed owner column turns every list into a table scan.
+:::
 
 ## Background jobs
 
-Automatic tracking attributes rows to the logged-in user. Seeders and background jobs have none, so their inserts record nothing. That is usually right. When a job imports last term's grades for a teacher, call `guard.ownership.record()` with that teacher's id.
+A seeder or background job has no logged-in subject, so no guard runs and no scope is attached — its queries are unfiltered. Set the owner column explicitly in the job, exactly as a handler would.

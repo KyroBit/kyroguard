@@ -1,9 +1,9 @@
 // Test fixture schema for the Prisma storage adapter.
 //
-// The six Kyroguard* models below are a paste of `prismaSchemaSnippet`
+// The five Kyroguard* models below are a paste of `prismaSchemaSnippet`
 // (src/storage/prisma/schema-snippet.ts) — KEEP THEM IN SYNC. The `Post`
-// model at the bottom is fixture-only, used by the extension tests as a
-// tracked resource model.
+// model at the bottom is fixture-only: the consumer's own table, carrying the
+// `ownerId` column the extension tests write scope filters against.
 //
 // The datasource url comes from KYROGUARD_PRISMA_DB_URL so each test run points
 // at its own unique tmp sqlite file (a hardcoded file url is not
@@ -98,27 +98,12 @@ model KyroguardUserPolicy {
   @@map("kyroguard_user_policies")
 }
 
-model KyroguardResourceOwner {
-  id           String   @id @default(cuid())
-  resourceType String   @map("resource_type")
-  resourceId   String   @map("resource_id")
-  ownerId      String   @map("owner_id")
-  relation     String   @default("owner")
-  domain       String   @default("")
-  tenantId     String   @default("") @map("tenant_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@unique([resourceType, resourceId, ownerId, relation], map: "kyroguard_ro_tuple_uq")
-  @@index([resourceType, resourceId], map: "kyroguard_ro_resource_idx")
-  @@index([resourceType, ownerId], map: "kyroguard_ro_owner_idx")
-  @@map("kyroguard_resource_owners")
-}
-
 // ── Fixture-only resource model (extension tests) ────────────────────────────
 
 model Post {
-  id    String @id @default(cuid())
-  title String
+  id      String @id @default(cuid())
+  title   String
+  ownerId String @default("") @map("owner_id")
 
   @@map("fixture_posts")
 }

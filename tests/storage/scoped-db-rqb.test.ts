@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 /**
- * trackedDb against Drizzle's relational query API (db.query.*).
+ * scopedDb against Drizzle's relational query API (db.query.*).
  *
  * A registered table carries its filter however it is reached, so db.query must
  * behave like db.select(). Drizzle only exposes `where` on `many` relations, so a
@@ -16,7 +16,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 
 import { createGuard, MisconfiguredError, Policy, Scope } from '../../src/index.js'
 import type { GuardEngine, ResourceDefinition, Subject } from '../../src/index.js'
-import { drizzleAdapter, trackedDb } from '../../src/storage/drizzle/index.js'
+import { drizzleAdapter, scopedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
 import { KYROGUARD_PG_DDL } from './helpers/pg.js'
 
@@ -82,7 +82,7 @@ const runGuarded = <T>(
 ): Promise<T> =>
   engine.store.run(async () => {
     engine.store.setSubject(subject)
-    await engine.authorize(subject, policy, { resource: () => ({ type: 'article', id: 'a1' }) })
+    await engine.authorize(subject, policy)
     await engine.storeFilterFor(subject, policy, resource)
     return await fn()
   })
@@ -97,13 +97,9 @@ async function makeSetup(options?: { registerAuthors?: boolean }) {
   const raw = drizzle(client, { schema })
   const adapter = drizzleAdapter(raw, { schema: pgSchema })
 
-  const mine = new Set(['a1', 'a2'])
-  const ownScope = new Scope(
-    'own-articles',
-    'Own articles',
-    (_subject, resource) => (resource ? mine.has(resource.id) : false),
-    () => ({ where: eq(articles.id, 'a1') }),
-  )
+  const ownScope = new Scope('own-articles', 'Own articles', subject => ({
+    where: eq(articles.author_id, subject.id),
+  }))
 
   const articleResource: ResourceDefinition = {
     type: 'article',
@@ -122,19 +118,22 @@ async function makeSetup(options?: { registerAuthors?: boolean }) {
   await rbac.sync()
   await rbac.admin.assignPolicy({ subjectId: 'writer' }, 'articles.read', 'own-articles')
 
-  await raw.insert(authors).values([{ id: 'w1', name: 'Writer' }])
+  await raw.insert(authors).values([
+    { id: 'writer', name: 'Writer' },
+    { id: 'other', name: 'Other' },
+  ])
   await raw.insert(articles).values([
-    { id: 'a1', title: 'mine', author_id: 'w1' },
-    { id: 'a2', title: 'also mine', author_id: 'w1' },
-    { id: 'a9', title: 'someone else', author_id: 'w1' },
+    { id: 'a1', title: 'mine', author_id: 'writer' },
+    { id: 'a2', title: 'also mine', author_id: 'writer' },
+    { id: 'a9', title: 'someone else', author_id: 'other' },
   ])
   await raw.insert(comments).values([{ id: 'c1', body: 'nice', article_id: 'a9' }])
 
-  const db = trackedDb(raw, { guard: { engine: rbac.engine, adapter }, resources, untracked: ['test-bypass'] })
+  const db = scopedDb(raw, { guard: { engine: rbac.engine }, resources, unscoped: ['test-bypass'] })
   return { raw, db, engine: rbac.engine, articleResource }
 }
 
-describe('trackedDb — db.query carries the same filter as db.select', () => {
+describe('scopedDb — db.query carries the same filter as db.select', () => {
   test('m: findMany on a registered table applies the active filter', async () => {
     const { db, engine, articleResource } = await makeSetup()
 
@@ -142,7 +141,7 @@ describe('trackedDb — db.query carries the same filter as db.select', () => {
       db.query.articles.findMany(),
     )
 
-    expect(rows.map((row: any) => row.id)).toEqual(['a1'])
+    expect(rows.map((row: any) => row.id).sort()).toEqual(['a1', 'a2'])
   })
 
   test('m: a caller where() is ANDed with the filter, never replaced', async () => {
@@ -172,7 +171,11 @@ describe('trackedDb — db.query carries the same filter as db.select', () => {
       db.query.authors.findMany({ with: { articles: true } }),
     )
 
-    expect(rows[0]?.articles.map((row: any) => row.id)).toEqual(['a1'])
+    // 'other' wrote a9, which the subject's scope excludes — nested rows narrow too.
+    const byAuthor = Object.fromEntries(
+      rows.map((row: any) => [row.id, row.articles.map((article: any) => article.id).sort()]),
+    )
+    expect(byAuthor).toEqual({ writer: ['a1', 'a2'], other: [] })
   })
 
   test('m: a one relation pointing at a filtered table throws rather than leaking', async () => {
@@ -199,14 +202,14 @@ describe('trackedDb — db.query carries the same filter as db.select', () => {
       db.query.authors.findMany(),
     )
 
-    expect(rows.map((row: any) => row.id)).toEqual(['w1'])
+    expect(rows.map((row: any) => row.id).sort()).toEqual(['other', 'writer'])
   })
 
-  test('m: db.untracked.query is never filtered', async () => {
+  test('m: db.unscoped.query is never filtered', async () => {
     const { db, engine, articleResource } = await makeSetup()
 
     const rows = await runGuarded(engine, writer, 'articles.read', articleResource, () =>
-      db.untracked('test-bypass').query.articles.findMany(),
+      db.unscoped('test-bypass').query.articles.findMany(),
     )
 
     expect(rows.map((row: any) => row.id).sort()).toEqual(['a1', 'a2', 'a9'])

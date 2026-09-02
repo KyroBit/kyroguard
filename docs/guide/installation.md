@@ -46,7 +46,7 @@ Output shown for Drizzle. Prisma projects get `prisma/kyroguard.prisma` instead 
 
 ## 3. Create the tables
 
-@kyrobit/kyroguard stores its data in six tables in your own database.
+@kyrobit/kyroguard stores its data in five tables in your own database.
 
 Migrate, then point the adapter at your database. MongoDB skips migration — `kyroguard sync` creates the collections.
 

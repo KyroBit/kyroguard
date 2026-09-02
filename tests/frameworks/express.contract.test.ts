@@ -79,10 +79,7 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
     const domain = domains.get(route.domain)
     if (!domain) throw new Error(`missing domain ${route.domain}`)
     const guards: RequestHandler[] = (route.policy ? route.policy.split('+') : []).map(policy =>
-      domain.requirePolicy(
-        policy,
-        route.resource ? { resource: req => route.resource!(req) } : undefined,
-      ),
+      domain.requirePolicy(policy),
     )
     const handler: RequestHandler = (_req, res) => {
       res.status(200).json({ ok: true })

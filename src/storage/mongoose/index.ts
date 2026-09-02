@@ -5,9 +5,8 @@ export type {
   KyroguardPolicyDoc,
   KyroguardPolicyGroupDoc,
   KyroguardPolicyGroupPolicyDoc,
-  KyroguardResourceOwnerDoc,
   KyroguardUserPolicyDoc,
   KyroguardUserPolicyGroupDoc,
 } from './models.js'
-export { trackingPlugin } from './plugin.js'
-export type { TrackingPluginOptions } from './plugin.js'
+export { scopePlugin } from './plugin.js'
+export type { ScopePluginOptions } from './plugin.js'

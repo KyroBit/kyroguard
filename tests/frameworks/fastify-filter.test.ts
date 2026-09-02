@@ -15,15 +15,28 @@ import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../.
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
+/** The consumer's own data: which subjects each sale belongs to. */
+const cashiersBySale: Record<string, string[]> = {
+  s1: ['cashier', 'supervisor'],
+  s2: ['cashier'],
+  s3: ['someone-else'],
+}
+
+const rangUp = (): Scope =>
+  new Scope('rang-up', 'Sales the subject rang up', subject => ({
+    where: ((row: { id: string }) =>
+      cashiersBySale[row.id]?.includes(subject.id) === true) satisfies MemoryWhere,
+  }))
+
 const makeResources = (): ResourceDefinition[] => [
   {
     type: 'sale',
     policies: [
       new Policy('sales.view', undefined, [], [
-        Scope.owned(),
+        rangUp(),
         new Scope('closed-hours', 'Always closed', () => false),
       ]),
-      new Policy('sales.void', undefined, [], [Scope.owned()]),
+      new Policy('sales.void', undefined, [], [rangUp()]),
     ],
   },
 ]
@@ -38,15 +51,11 @@ async function seed(rbac: Guard): Promise<void> {
       qualifyPolicyName('staff', policy),
       scope,
     )
-  await grant('cashier', 'owned')
+  await grant('cashier', 'rang-up')
   await grant('manager', 'all')
   await grant('nightowl', 'closed-hours')
   await grant('supervisor', 'all')
-  await grant('supervisor', 'owned', 'sales.void')
-  await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
-  await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
-  await rbac.ownership.record('someone-else', { type: 'sale', id: 's3' })
-  await rbac.ownership.record('supervisor', { type: 'sale', id: 's1' })
+  await grant('supervisor', 'rang-up', 'sales.void')
 }
 
 function render(filter: FilterResult): unknown {
@@ -79,9 +88,7 @@ async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<voi
     app.get(
       '/guarded-void',
       {
-        preHandler: staff.requirePolicy('sales.void', {
-          resource: () => ({ type: 'sale', id: 's1' }),
-        }),
+        preHandler: staff.requirePolicy('sales.void'),
       },
       async () => renderActive(),
     )
@@ -105,7 +112,7 @@ const list = (app: FastifyInstance, subjectId?: string, url = '/sales') =>
   })
 
 describe('fastify domain.filterFor', () => {
-  test("cashier ('owned' grant) → kind where; the predicate admits only the cashier's rows", () =>
+  test("cashier ('rang-up' grant) → kind where; the predicate admits only the sales they rang up", () =>
     withApp(async app => {
       const res = await list(app, 'cashier')
       expect(res.statusCode).toBe(200)
@@ -126,7 +133,7 @@ describe('fastify domain.filterFor', () => {
       expect(JSON.parse(res.body)).toEqual({ kind: 'none', reason: 'no-policy' })
     }))
 
-  test('false condition scope → kind none, reason scope-denied', () =>
+  test('a scope that admits nothing → kind none, reason scope-denied', () =>
     withApp(async app => {
       const res = await list(app, 'nightowl')
       expect(res.statusCode).toBe(200)

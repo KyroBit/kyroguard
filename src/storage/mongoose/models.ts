@@ -38,22 +38,12 @@ export interface KyroguardUserPolicyDoc {
   scope: string | null
 }
 
-export interface KyroguardResourceOwnerDoc {
-  resourceType: string
-  resourceId: string
-  ownerId: string
-  relation: string
-  domain: string
-  tenantId: string
-}
-
 export interface KyroguardModels {
   policy: Model<KyroguardPolicyDoc>
   policyGroup: Model<KyroguardPolicyGroupDoc>
   policyGroupPolicy: Model<KyroguardPolicyGroupPolicyDoc>
   userPolicyGroup: Model<KyroguardUserPolicyGroupDoc>
   userPolicy: Model<KyroguardUserPolicyDoc>
-  resourceOwner: Model<KyroguardResourceOwnerDoc>
 }
 
 const policySchema = new Schema<KyroguardPolicyDoc>(
@@ -107,22 +97,6 @@ const userPolicySchema = new Schema<KyroguardUserPolicyDoc>({
 userPolicySchema.index({ subjectId: 1, policyId: 1, domain: 1, tenantId: 1 }, { unique: true })
 userPolicySchema.index({ subjectId: 1 })
 
-const resourceOwnerSchema = new Schema<KyroguardResourceOwnerDoc>({
-  resourceType: { type: String, required: true },
-  resourceId: { type: String, required: true },
-  ownerId: { type: String, required: true },
-  relation: { type: String, required: true, default: 'owner' },
-  domain: { type: String, required: true, default: '' },
-  tenantId: { type: String, required: true, default: '' },
-})
-resourceOwnerSchema.index(
-  { resourceType: 1, resourceId: 1, ownerId: 1, relation: 1 },
-  { unique: true },
-)
-resourceOwnerSchema.index({ resourceType: 1, resourceId: 1 })
-resourceOwnerSchema.index({ resourceType: 1, ownerId: 1, relation: 1 })
-resourceOwnerSchema.index({ resourceType: 1, tenantId: 1 })
-
 function scopedModel<T>(connection: Connection, name: string, schema: Schema<T>): Model<T> {
   const existing = connection.models[name] as Model<T> | undefined
   return existing ?? connection.model<T>(name, schema)
@@ -136,6 +110,5 @@ export function kyroguardModels(connection: Connection): KyroguardModels {
     policyGroupPolicy: scopedModel(connection, 'KyroguardPolicyGroupPolicy', policyGroupPolicySchema),
     userPolicyGroup: scopedModel(connection, 'KyroguardUserPolicyGroup', userPolicyGroupSchema),
     userPolicy: scopedModel(connection, 'KyroguardUserPolicy', userPolicySchema),
-    resourceOwner: scopedModel(connection, 'KyroguardResourceOwner', resourceOwnerSchema),
   }
 }

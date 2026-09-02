@@ -45,7 +45,6 @@ describe('prismaAdapter close()', () => {
       kyroguardPolicyGroupPolicy: unusedDelegate(),
       kyroguardUserPolicyGroup: unusedDelegate(),
       kyroguardUserPolicy: unusedDelegate(),
-      kyroguardResourceOwner: unusedDelegate(),
       $transaction: () => Promise.reject(new Error('close() must not open a transaction')),
       $disconnect: async () => {
         disconnects += 1

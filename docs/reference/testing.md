@@ -24,7 +24,7 @@ await guard.sync()
 ```
 
 - `id` is `'memory'`.
-- `capabilities` are `{ autoOwnershipTracking: false, listFiltering: true }`.
+- `capabilities` are `{ listFiltering: true }`.
 - `ensureSchema()` is a no-op.
 
 ## SuiteTestApi

@@ -1,7 +1,7 @@
 {
   "name": "@kyrobit/kyroguard",
   "version": "2.0.0",
-  "description": "Policy-based access control with domains, tenants, scopes and resource ownership. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite) and Mongoose integrations.",
+  "description": "Policy-based access control with domains, tenants and scopes. A scope is a condition you write against your own tables; kyroguard adds it to every query for that resource. Framework-agnostic core with Fastify, Express, Drizzle (PostgreSQL/MySQL/SQLite), Prisma and Mongoose integrations.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

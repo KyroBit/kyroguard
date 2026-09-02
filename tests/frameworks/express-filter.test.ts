@@ -15,15 +15,28 @@ import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../.
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
 
+/** The consumer's own data: which subjects each sale belongs to. */
+const cashiersBySale: Record<string, string[]> = {
+  s1: ['cashier', 'supervisor'],
+  s2: ['cashier'],
+  s3: ['someone-else'],
+}
+
+const rangUp = (): Scope =>
+  new Scope('rang-up', 'Sales the subject rang up', subject => ({
+    where: ((row: { id: string }) =>
+      cashiersBySale[row.id]?.includes(subject.id) === true) satisfies MemoryWhere,
+  }))
+
 const makeResources = (): ResourceDefinition[] => [
   {
     type: 'sale',
     policies: [
       new Policy('sales.view', undefined, [], [
-        Scope.owned(),
+        rangUp(),
         new Scope('closed-hours', 'Always closed', () => false),
       ]),
-      new Policy('sales.void', undefined, [], [Scope.owned()]),
+      new Policy('sales.void', undefined, [], [rangUp()]),
     ],
   },
 ]
@@ -38,15 +51,11 @@ async function seed(rbac: Guard): Promise<void> {
       qualifyPolicyName('staff', policy),
       scope,
     )
-  await grant('cashier', 'owned')
+  await grant('cashier', 'rang-up')
   await grant('manager', 'all')
   await grant('nightowl', 'closed-hours')
   await grant('supervisor', 'all')
-  await grant('supervisor', 'owned', 'sales.void')
-  await rbac.ownership.record('cashier', { type: 'sale', id: 's1' })
-  await rbac.ownership.record('cashier', { type: 'sale', id: 's2' })
-  await rbac.ownership.record('someone-else', { type: 'sale', id: 's3' })
-  await rbac.ownership.record('supervisor', { type: 'sale', id: 's1' })
+  await grant('supervisor', 'rang-up', 'sales.void')
 }
 
 function render(filter: FilterResult): unknown {
@@ -92,7 +101,7 @@ async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
     })
     app.get(
       '/guarded-void',
-      staff.requirePolicy('sales.void', { resource: () => ({ type: 'sale', id: 's1' }) }),
+      staff.requirePolicy('sales.void'),
       (_req, res) => {
         res.json(renderActive())
       },
@@ -125,7 +134,7 @@ async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
 }
 
 describe('express domain.filterFor', () => {
-  test("cashier ('owned' grant) → kind where; the predicate admits only the cashier's rows", () =>
+  test("cashier ('rang-up' grant) → kind where; the predicate admits only the sales they rang up", () =>
     withApp(async h => {
       const res = await h.get('/sales', 'cashier')
       expect(res.status).toBe(200)
@@ -146,7 +155,7 @@ describe('express domain.filterFor', () => {
       expect(res.body).toEqual({ kind: 'none', reason: 'no-policy' })
     }))
 
-  test('false condition scope → kind none, reason scope-denied', () =>
+  test('a scope that admits nothing → kind none, reason scope-denied', () =>
     withApp(async h => {
       const res = await h.get('/sales', 'nightowl')
       expect(res.status).toBe(200)

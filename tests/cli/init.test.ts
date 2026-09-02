@@ -58,7 +58,6 @@ const KYROGUARD_TABLES = [
   'kyroguard_policy_group_policies',
   'kyroguard_user_policy_groups',
   'kyroguard_user_policies',
-  'kyroguard_resource_owners',
 ]
 
 const PRISMA_MODELS = [
@@ -67,7 +66,6 @@ const PRISMA_MODELS = [
   'KyroguardPolicyGroupPolicy',
   'KyroguardUserPolicyGroup',
   'KyroguardUserPolicy',
-  'KyroguardResourceOwner',
 ]
 
 describe('kyroguard init --yes', () => {
@@ -96,16 +94,18 @@ describe('kyroguard init --yes', () => {
     expect(policies).toContain('resources')
     expect(policies).toContain('new Policy(')
     expect(groups).toContain('GroupsDefinition')
-    // School starter groups: teacher (updates own grades) + coordinator (school-wide).
+    // School starter groups: teacher (updates only what they entered) + coordinator (school-wide).
     expect(groups).toContain('teacher:')
-    expect(groups).toContain("'grades.update': 'owned'")
+    expect(groups).toContain("'grades.update': 'entered'")
+    // The scope the groups name must be declared on the policy, or sync rejects the seed.
+    expect(policies).toContain("new Scope('entered'")
 
     // Fastify domains variant.
     expect(domains).toContain('kyroguardFastify')
     expect(domains).not.toContain('kyroguardExpress')
     expect(domains).not.toContain('{{DOMAIN}}')
 
-    // The pg schema defines exactly the 6 kyroguard tables.
+    // The pg schema defines exactly the kyroguard tables.
     expect(schema).toContain('pgTable')
     const tables = [...schema.matchAll(/pgTable\(\s*'([a-z_]+)'/g)].map(match => match[1])
     expect(tables.toSorted()).toEqual(KYROGUARD_TABLES.toSorted())
@@ -193,7 +193,7 @@ describe('kyroguard init --yes', () => {
     expect(config).toContain("domains: './src/kyroguard'")
     expect(config).not.toContain('{{DOMAIN}}')
 
-    // The snippet lands in prisma/ with all six models mapped to the kyroguard tables.
+    // The snippet lands in prisma/ with every model mapped to a kyroguard table.
     const snippet = await readFile(join(cwd, 'prisma', 'kyroguard.prisma'), 'utf8')
     for (const model of PRISMA_MODELS) expect(snippet).toContain(`model ${model} {`)
     for (const table of KYROGUARD_TABLES) expect(snippet).toContain(`@@map("${table}")`)

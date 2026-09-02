@@ -54,7 +54,7 @@ A denied guard never writes the response itself. It passes the error to `errorHa
 }
 ```
 
-That is the 403 for a missing policy — a failed scope check sends the same code with `"reason": "scope"`. The other outcomes are in [Protecting routes](/guide/protecting-routes#the-four-outcomes); every code is in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
+That is the 403 for a missing policy — the only one a guard produces. The other outcomes are in [Protecting routes](/guide/protecting-routes#the-outcomes); every code is in [Errors](/reference/errors). Errors that are not from this library pass through to your own error handler untouched.
 
 To change the response shape, pass `formatError`:
 

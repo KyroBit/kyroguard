@@ -2,8 +2,8 @@
  * Structural contract for the Prisma client. `@prisma/client` is an optional
  * peer with per-project generated types, so nothing under src/ may import it.
  * The `any`s are deliberate: Prisma's generated signatures are generic over
- * the select shape, which a structural type cannot capture; the S1–S23 suite
- * pins runtime behavior.
+ * the select shape, which a structural type cannot capture; the storage
+ * contract suite pins runtime behavior.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -21,17 +21,16 @@ export interface PrismaModelDelegateLike {
   deleteMany(args?: any): Promise<any>
 }
 
-/** The six kyroguard model delegates; property names are fixed by the `prismaSchemaSnippet` model names. */
+/** The five kyroguard model delegates; property names are fixed by the `prismaSchemaSnippet` model names. */
 export interface PrismaKyroguardModelDelegates {
   readonly kyroguardPolicy: PrismaModelDelegateLike
   readonly kyroguardPolicyGroup: PrismaModelDelegateLike
   readonly kyroguardPolicyGroupPolicy: PrismaModelDelegateLike
   readonly kyroguardUserPolicyGroup: PrismaModelDelegateLike
   readonly kyroguardUserPolicy: PrismaModelDelegateLike
-  readonly kyroguardResourceOwner: PrismaModelDelegateLike
 }
 
-/** What `prismaAdapter` requires: the six delegates, interactive `$transaction` and `$disconnect`. */
+/** What `prismaAdapter` requires: the five delegates, interactive `$transaction` and `$disconnect`. */
 export interface PrismaClientLike extends PrismaKyroguardModelDelegates {
   $transaction<T>(fn: (tx: PrismaKyroguardModelDelegates) => Promise<T>): Promise<T>
   $disconnect(): Promise<void>
