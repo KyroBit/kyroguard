@@ -64,7 +64,7 @@ The instance returned by `createGuard()`.
 | `sync()` | Load the `createGuard` policies and seed its groups. Same as [`kyroguard sync`](/reference/cli). |
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
-| `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
+| `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly, then fills in their dependencies. `options`: `domain`, `allPolicies`. |
 | `cache.invalidateSubject(subjectId)` | Drop one user's cached policies on every instance. |
 | `cache.clear()` | Drop all cached policies on every instance. |
 | `dispose()` | Detach bus subscriptions (shutdown, tests). |
@@ -286,8 +286,8 @@ All guards throw subclasses of `GuardError`. Each carries `statusCode` and a sta
 Functions:
 
 - `syncPolicies(adapter, resources, domain?, options?)` — sync one domain's policies into storage. `guard.sync()` calls this. See [Sync](/guide/sync).
-- `seedGroups(adapter, groups, allPolicies?, domain?)` — upsert groups and replace their policies. `guard.seedGroups()` calls this.
-- `backfillGroupDependencies(adapter, resources, domain?, options?)` — add missing policy dependencies to every group.
+- `seedGroups(adapter, groups, allPolicies?, domain?, options?)` — upsert groups, replace their policies, and fill in their dependencies from the synced policies. `guard.seedGroups()` calls this.
+- `backfillGroupDependencies(adapter, resources, domain?, options?)` — add missing policy dependencies to every group. `syncPolicies` runs it, so it is rarely needed on its own.
 - `collectScopes(resources)` — build the scope registry from resource definitions. `createGuard()` calls this.
 - `qualifyPolicyName(domain, policy)` — returns `` `${domain}.${policy}` ``, or `policy` when there is no domain.
 - `toSubjectRef(subject)` — normalize a `Subject` into `{ subjectId, domain, tenantId }`.

@@ -75,7 +75,7 @@ teacher: {
 
 ## Dependencies are filled in
 
-`grades.update` depends on `grades.view` — you must see a grade to update it ([Policies](/guide/policies#dependencies)). Sync adds missing dependencies to every group.
+`grades.update` depends on `grades.view` — you must see a grade to update it ([Policies](/guide/policies#dependencies)). Sync adds missing dependencies to every group, and seeding fills them into each group it writes.
 
 A filled-in dependency inherits the scope of the grant that pulled it in. Grant `grades.update` restricted to `'entered'` and `grades.view` arrives restricted to `'entered'` too — never wider. An unrestricted grant that needs the same dependency widens it to unrestricted. Two different named scopes fall back to unrestricted with a sync warning — define the entry explicitly to control it.
 
@@ -84,7 +84,7 @@ Explicit entries always win. The teacher group above lists `grades.view` itself,
 ## Re-seeding
 
 ::: warning Sync replaces each group's policy list
-Every sync sets a group's policies to exactly what `groups.ts` says. Changes made anywhere else are lost on the next sync. Keep this file as the single source of truth.
+Every sync sets a group's policies to exactly what `groups.ts` says, plus their dependencies. Changes made anywhere else are lost on the next sync. Keep this file as the single source of truth.
 :::
 
 Members are untouched. Re-seeding changes what a group grants, never who has it.

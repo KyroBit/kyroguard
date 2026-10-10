@@ -3,7 +3,7 @@
 import { GuardEngine } from './core/engine.js'
 import { qualifyPolicyName } from './core/types.js'
 import { collectScopes } from './core/scope.js'
-import { backfillGroupDependencies, syncPolicies } from './core/sync.js'
+import { syncPolicies } from './core/sync.js'
 import { seedGroups } from './core/seed-groups.js'
 import { memoryCache } from './cache/memory.js'
 import { inProcessBus } from './cache/bus.js'
@@ -162,7 +162,6 @@ export function createGuard(options: CreateGuardOptions): Guard {
             resources.flatMap(resource => resource.policies),
             domainName,
           )
-          await backfillGroupDependencies(options.adapter, res, domainName)
         }
       }
     },

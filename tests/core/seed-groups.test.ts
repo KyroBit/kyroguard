@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 import { seedGroups } from '../../src/core/seed-groups.js'
+import { syncPolicies } from '../../src/core/sync.js'
 import { Policy } from '../../src/core/policy.js'
 import { Scope } from '../../src/core/scope.js'
 import { memoryAdapter } from '../../src/testing/index.js'
@@ -269,5 +270,90 @@ describe("seedGroups 'all' takes each policy's declared reach", () => {
         { name: 'sales.view', scopeOptions: [{ name: 'own' }, { name: 'in-business' }] },
       ]),
     ).rejects.toThrow(/sales\.view/)
+  })
+})
+
+describe('seedGroups fills the dependencies of what it grants', () => {
+  const chain = [
+    {
+      policies: [
+        new Policy('posts.read'),
+        new Policy('posts.write', undefined, ['posts.read']),
+        new Policy('posts.publish', undefined, ['posts.write']),
+        new Policy('posts.unrelated'),
+      ],
+    },
+  ]
+
+  test('a seeded group holds every policy its grants depend on, transitively', async () => {
+    const adapter = memoryAdapter()
+    await syncPolicies(adapter, chain, 'admin')
+
+    await seedGroups(adapter, { publishers: { label: 'Publishers', policies: ['posts.publish'] } }, undefined, 'admin')
+
+    expect(await entriesOf(adapter, 'publishers')).toEqual([
+      { policyName: 'admin.posts.publish', scope: null },
+      { policyName: 'admin.posts.read', scope: null },
+      { policyName: 'admin.posts.write', scope: null },
+    ])
+  })
+
+  test('a filled dependency takes the scope of the grant that pulled it in', async () => {
+    const adapter = memoryAdapter()
+    await syncPolicies(adapter, chain, 'admin')
+
+    await seedGroups(
+      adapter,
+      { authors: { label: 'Authors', policies: { 'posts.write': 'owned' } } },
+      undefined,
+      'admin',
+    )
+
+    expect(await entriesOf(adapter, 'authors')).toEqual([
+      { policyName: 'admin.posts.read', scope: 'owned' },
+      { policyName: 'admin.posts.write', scope: 'owned' },
+    ])
+  })
+
+  test('a dependency the group grants itself keeps the scope it was given', async () => {
+    const adapter = memoryAdapter()
+    await syncPolicies(adapter, chain, 'admin')
+
+    await seedGroups(
+      adapter,
+      { authors: { label: 'Authors', policies: { 'posts.write': 'owned', 'posts.read': 'all' } } },
+      undefined,
+      'admin',
+    )
+
+    expect(await entriesOf(adapter, 'authors')).toEqual([
+      { policyName: 'admin.posts.read', scope: null },
+      { policyName: 'admin.posts.write', scope: 'owned' },
+    ])
+  })
+
+  test('seeding again leaves the group complete rather than stripped to its listed grants', async () => {
+    const adapter = memoryAdapter()
+    await syncPolicies(adapter, chain, 'admin')
+    const groups = { publishers: { label: 'Publishers', policies: ['posts.publish'] } }
+
+    await seedGroups(adapter, groups, undefined, 'admin')
+    await seedGroups(adapter, groups, undefined, 'admin')
+
+    expect((await entriesOf(adapter, 'publishers')).map(entry => entry.policyName)).toEqual([
+      'admin.posts.publish',
+      'admin.posts.read',
+      'admin.posts.write',
+    ])
+  })
+
+  test("leaves another domain's policies out of a group's dependencies", async () => {
+    const adapter = memoryAdapter()
+    await syncPolicies(adapter, chain, 'admin')
+    await syncPolicies(adapter, chain, 'branch')
+
+    await seedGroups(adapter, { publishers: { label: 'Publishers', policies: ['posts.publish'] } }, undefined, 'admin')
+
+    expect((await entriesOf(adapter, 'publishers')).every(entry => entry.policyName.startsWith('admin.'))).toBe(true)
   })
 })

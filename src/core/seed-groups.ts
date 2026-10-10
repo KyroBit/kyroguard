@@ -1,5 +1,6 @@
 import { blanketScopeName } from './policy.js'
 import { qualifyPolicyName } from './types.js'
+import { fillGroupDependencies } from './sync.js'
 import type { GroupPolicyEntry, StorageAdapter } from '../storage/contract.js'
 
 /** Policy names are UNQUALIFIED — seedGroups qualifies them with the domain sentinel. */
@@ -25,6 +26,7 @@ export async function seedGroups(
   groups: GroupsDefinition,
   allPolicies?: SeedPolicyInfo[],
   domain?: string,
+  options?: { logger?: (msg: string) => void },
 ): Promise<void> {
   const domainSentinel = domain ?? ''
 
@@ -49,6 +51,9 @@ export async function seedGroups(
     })
     await adapter.setGroupPolicies(name, entries)
   }
+
+  // Seeding replaces each group's policies (S8), dropping the dependencies the last sync filled.
+  await fillGroupDependencies(adapter, Object.keys(groups), domainSentinel, options)
 }
 
 function validateScopes(

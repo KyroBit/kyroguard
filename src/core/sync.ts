@@ -60,11 +60,7 @@ export async function syncPolicies(
   log(`[kyroguard] Synced ${all.length} policies.`)
 }
 
-/**
- * Fill missing transitive dependsOn entries into every group (additive, S9).
- * Must run AGAIN after group seeding — seeding is replace-all per group (S8)
- * and wipes dependencies filled before it.
- */
+/** Fill missing transitive dependsOn entries into every group (additive, S9). */
 export async function backfillGroupDependencies(
   adapter: StorageAdapter,
   resources: { policies: Policy[] }[],
@@ -74,10 +70,8 @@ export async function backfillGroupDependencies(
   const all = resources.flatMap(resource => resource.policies)
   if (all.length === 0) return
 
-  const log = options?.logger ?? (() => {})
   const domainSentinel = domain ?? ''
-  const qualify = (name: string) => qualifyPolicyName(domainSentinel, name)
-  const qualifiedNames = new Set(all.map(policy => qualify(policy.name)))
+  const qualifiedNames = new Set(all.map(policy => qualifyPolicyName(domainSentinel, policy.name)))
 
   const records = await adapter.listPolicies()
   const depsByName = new Map(
@@ -87,8 +81,37 @@ export async function backfillGroupDependencies(
   )
 
   const groups = await adapter.listGroups()
-  for (const group of groups) {
-    const assigned = await adapter.getGroupPolicies(group.name)
+  await fillGroups(adapter, groups.map(group => group.name), depsByName, options?.logger)
+}
+
+/** The back-fill for the named groups only, against the domain's policies already in storage. */
+export async function fillGroupDependencies(
+  adapter: StorageAdapter,
+  groupNames: string[],
+  domain?: string,
+  options?: { logger?: (msg: string) => void },
+): Promise<void> {
+  const domainSentinel = domain ?? ''
+  const records = await adapter.listPolicies()
+  const depsByName = new Map(
+    records
+      .filter(record => record.domain === domainSentinel)
+      .map(record => [record.name, record.dependsOn]),
+  )
+
+  await fillGroups(adapter, groupNames, depsByName, options?.logger)
+}
+
+async function fillGroups(
+  adapter: StorageAdapter,
+  groupNames: string[],
+  depsByName: Map<string, string[]>,
+  logger?: (msg: string) => void,
+): Promise<void> {
+  const log = logger ?? (() => {})
+
+  for (const groupName of groupNames) {
+    const assigned = await adapter.getGroupPolicies(groupName)
     const explicitScopes = new Map(assigned.map(entry => [entry.policyName, entry.scope]))
 
     // Least privilege: a filled-in dependency inherits the scope of the grant
@@ -120,17 +143,17 @@ export async function backfillGroupDependencies(
     const missing = [...effective.keys()].filter(name => !explicitScopes.has(name))
     if (missing.length > 0) {
       await adapter.addGroupPolicies(
-        group.name,
+        groupName,
         missing.map(name => ({ policyName: name, scope: effective.get(name) ?? null })),
       )
       log(
-        `[kyroguard] Filled ${missing.length} missing deps for group ${group.name}: ${missing
+        `[kyroguard] Filled ${missing.length} missing deps for group ${groupName}: ${missing
           .map(name => `${name}${effective.get(name) ? ` (scope: ${effective.get(name)})` : ''}`)
           .join(', ')}`,
       )
       for (const name of conflicts) {
         log(
-          `[kyroguard] WARNING: "${name}" is required by grants with different scopes in group ${group.name} — filled unrestricted. Define it explicitly in the group to control its scope.`,
+          `[kyroguard] WARNING: "${name}" is required by grants with different scopes in group ${groupName} — filled unrestricted. Define it explicitly in the group to control its scope.`,
         )
       }
     }

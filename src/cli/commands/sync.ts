@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { backfillGroupDependencies, syncPolicies } from '../../core/sync.js'
+import { syncPolicies } from '../../core/sync.js'
 import { seedGroups } from '../../core/seed-groups.js'
 import { closeAdapter } from './close-adapter.js'
 import { loadModuleExport } from '../load-config.js'
@@ -26,13 +26,10 @@ export async function run(config: ResolvedGuardConfig, baseDir: string): Promise
 
       if (domain.groups) {
         const groups = await loadGroups(resolve(baseDir, domain.groups))
-        await seedGroups(adapter, groups, allPolicies, domainName)
+        await seedGroups(adapter, groups, allPolicies, domainName, { logger: console.log })
         console.log(
           `[kyroguard] Seeded ${Object.keys(groups).length} groups${domainName ? ` for domain "${domainName}"` : ''}.`,
         )
-        // Seeding is replace-all per group (S8), which wipes the dependencies
-        // syncPolicies just filled — run the back-fill again so they stick.
-        await backfillGroupDependencies(adapter, resources, domainName, { logger: console.log })
       }
 
       domains.push({ name: domainName, policyNames: allPolicies.map(policy => policy.name) })

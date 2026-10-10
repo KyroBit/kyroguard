@@ -17,7 +17,7 @@ One run does five things:
 1. Creates your policies and updates the ones that changed.
 2. Deletes policies you removed from code.
 3. Adds declared dependencies to every group that needs them ([how scopes carry over](/guide/groups#dependencies-are-filled-in)).
-4. Seeds your groups from `groups.ts`.
+4. Seeds your groups from `groups.ts`, each with its dependencies filled in.
 5. Writes `kyroguard.d.ts` so policy names autocomplete.
 
 Your code is the source of truth. The database follows it. Every domain in [`kyroguard.config.ts`](/reference/configuration) is synced in one run.
