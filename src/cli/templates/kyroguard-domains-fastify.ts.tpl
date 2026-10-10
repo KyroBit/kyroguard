@@ -8,8 +8,8 @@
  *   await app.register(kyroguardFastify(guard))
  *
  * Guards throw typed GuardErrors through Fastify's own error pipeline:
- * 401 unauthenticated, 403 policy/scope denied, 404 resource not found —
- * your error handler and onSend hooks keep working.
+ * 401 unauthenticated, 403 policy not granted — your error handler and onSend
+ * hooks keep working.
  */
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain } from '@kyrobit/kyroguard/fastify'
@@ -42,14 +42,12 @@ export const {{DOMAIN_EXPORT}} = createDomain(guard, '{{DOMAIN}}', {
 //   async request => { /* ... */ },
 // )
 //
-// Scoped policies need a resource resolver so row-level scopes can run:
+// A scoped policy is guarded the same way — a scope narrows the query rather
+// than denying the request, so a row it excludes is simply not found and your
+// handler's existing "missing row" branch answers:
 //
 // app.patch(
 //   '/posts/:id',
-//   {
-//     preHandler: {{DOMAIN_EXPORT}}.requirePolicy('posts.update', {
-//       resource: request => ({ type: 'post', id: (request.params as { id: string }).id }),
-//     }),
-//   },
+//   { preHandler: {{DOMAIN_EXPORT}}.requirePolicy('posts.update') },
 //   async request => { /* ... */ },
 // )

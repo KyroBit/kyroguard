@@ -153,6 +153,7 @@ Now it is a function, and the reason must be registered up front:
 const db = scopedDb(raw, {
   guard,
   resources,
+  schema,
   unscoped: ['seeders', 'jobs/sweep'],
 })
 

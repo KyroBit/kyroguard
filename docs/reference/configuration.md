@@ -38,7 +38,6 @@ export default defineConfig({
 Passing a directory derives the domains from file names:
 
 - `policies/<name>.ts` — one file per domain, named after it. A sibling `groups/<name>.ts` is attached when present.
-- Flat `policies.ts` (+ optional `groups.ts`) — a single-app setup with the unnamed domain.
 
 Mixing both shapes in one directory is an error. Explicit entries remain available for layouts the convention cannot express:
 

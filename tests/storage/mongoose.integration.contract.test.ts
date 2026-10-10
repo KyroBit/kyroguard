@@ -35,9 +35,10 @@ if (!available) {
     await adapter.ensureSchema?.()
 
     let allowed: string[] = []
-    const allowedScope = new Scope('allowed', 'Allowed rows', () =>
-      allowed.length ? { where: { key: { $in: allowed } } } : false,
-    )
+    const allowedScope = new Scope('allowed', 'Allowed rows', {
+      match: () => (allowed.length ? { where: { key: { $in: allowed } } } : false),
+      insert: () => ({ mark: 'stamped' }),
+    })
 
     const engine = new GuardEngine({
       adapter,
@@ -110,6 +111,9 @@ if (!available) {
         await Note.updateMany({}, { $set: { mark } })
       },
       marked: mark => keys({ mark }),
+      create: async (id, mark) => {
+        await new Note(mark === undefined ? { key: id } : { key: id, mark }).save()
+      },
       deleteAll: async () => {
         await Note.deleteMany({})
       },

@@ -216,3 +216,58 @@ describe('seedGroups semantics', () => {
     expect(listed[0]).toMatchObject({ name: 'editors', label: 'Editors', isSystem: false })
   })
 })
+
+describe("seedGroups 'all' takes each policy's declared reach", () => {
+  test('a policy declaring one scope is granted with it, not unrestricted', async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(
+      adapter,
+      { owner: { label: 'Owner', policies: 'all' } },
+      [{ name: 'sales.view', scopeOptions: [{ name: 'in-business' }] }],
+    )
+
+    expect(await adapter.getGroupPolicies('owner')).toEqual([
+      { policyName: 'sales.view', scope: 'in-business' },
+    ])
+  })
+
+  test('a policy declaring no scope stays unrestricted — the simple, single-tenant app', async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(adapter, { staff: { label: 'Staff', policies: 'all' } }, [
+      { name: 'sales.view' },
+    ])
+
+    expect(await adapter.getGroupPolicies('staff')).toEqual([
+      { policyName: 'sales.view', scope: null },
+    ])
+  })
+
+  test('superScope decides when a policy declares several scopes', async () => {
+    const adapter = memoryAdapter()
+    await seedGroups(
+      adapter,
+      { owner: { label: 'Owner', policies: 'all' } },
+      [
+        {
+          name: 'sales.view',
+          scopeOptions: [{ name: 'own' }, { name: 'in-business' }],
+          superScope: { name: 'in-business' },
+        },
+      ],
+    )
+
+    expect(await adapter.getGroupPolicies('owner')).toEqual([
+      { policyName: 'sales.view', scope: 'in-business' },
+    ])
+  })
+
+  test('several scopes with no superScope is ambiguous and says so, naming the policy', async () => {
+    const adapter = memoryAdapter()
+
+    await expect(
+      seedGroups(adapter, { owner: { label: 'Owner', policies: 'all' } }, [
+        { name: 'sales.view', scopeOptions: [{ name: 'own' }, { name: 'in-business' }] },
+      ]),
+    ).rejects.toThrow(/sales\.view/)
+  })
+})

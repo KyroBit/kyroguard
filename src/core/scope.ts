@@ -12,29 +12,49 @@ export interface ScopeContext {
 }
 
 /**
- * What a scope decides: `true` = no restriction, `false` = no rows (fail
+ * What a scope decides: `true` = every row matches, `false` = none do (fail
  * closed), `{ where }` = a native fragment for the active backend.
  */
 export type ScopeResult = boolean | { where: unknown }
 
 export type ScopeFn = (subject: Subject, ctx: ScopeContext) => Awaitable<ScopeResult>
 
+/** Columns a row created under this grant must carry. */
+export type ScopeInsertFn = (
+  subject: Subject,
+  ctx: ScopeContext,
+) => Awaitable<Record<string, unknown>>
+
+export interface ScopeDefinition {
+  match: ScopeFn
+  insert?: ScopeInsertFn
+}
+
 /**
  * A named condition on a permission, written against the consumer's own tables.
- * It compiles to a fragment the integration adds to every query for the
- * resource — reads, updates and deletes alike — so a row the scope excludes
- * cannot be reached at all. A request naming such a row finds nothing and
- * answers 404; there is no separate single-row check.
+ * `match` compiles to a fragment the integration adds to every query for the
+ * resource — reads, updates and deletes alike — so a row it excludes cannot be
+ * reached at all. A request naming such a row finds nothing and answers 404;
+ * there is no separate single-row check.
  */
 export class Scope {
+  readonly match: ScopeFn
+  readonly insert?: ScopeInsertFn
+
   constructor(
     readonly name: string,
     readonly label: string,
-    readonly filter: ScopeFn,
+    definition: ScopeFn | ScopeDefinition,
   ) {
     // 'all' is the reserved unrestricted-grant marker — a scope by that name could never be granted.
     if (name === 'all') {
       throw new Error(`[kyroguard] Scope: the name 'all' is reserved — it marks an unrestricted grant.`)
+    }
+    if (typeof definition === 'function') {
+      this.match = definition
+    } else {
+      this.match = definition.match
+      this.insert = definition.insert
     }
   }
 }

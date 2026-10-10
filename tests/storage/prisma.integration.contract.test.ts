@@ -7,7 +7,7 @@
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createGuard } from '../../src/index.js'
+import { Policy, Scope, createGuard, toSubjectRef } from '../../src/index.js'
 import { prismaAdapter, scopeExtension } from '../../src/storage/prisma/index.js'
 import { runQueryIntegrationContractSuite } from '../../src/testing/index.js'
 import type { IntegrationHarness } from '../../src/testing/index.js'
@@ -27,9 +27,10 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
   const adapter = prismaAdapter(client)
 
   let allowed: string[] = []
-  const allowedScope = new Scope('allowed', 'Allowed rows', () =>
-    allowed.length ? { where: { id: { in: allowed } } } : false,
-  )
+  const allowedScope = new Scope('allowed', 'Allowed rows', {
+    match: () => (allowed.length ? { where: { id: { in: allowed } } } : false),
+    insert: () => ({ title: 'stamped' }),
+  })
 
   const rbac = createGuard({
     adapter,
@@ -39,7 +40,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
   const resource = rbac.resources[0]!
 
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.write', 'allowed')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1' }), 'posts.write', 'allowed')
 
   const raw = client as unknown as {
     post: {
@@ -59,6 +60,7 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
     scopeExtension({ guard: rbac, resources: [{ type: 'post', model: 'post' }] }),
   ) as unknown as {
     post: {
+      create(args: unknown): Promise<unknown>
       findMany(args?: unknown): Promise<{ id: string }[]>
       updateMany(args: unknown): Promise<unknown>
       deleteMany(args?: unknown): Promise<unknown>
@@ -89,6 +91,11 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
       await extended.post.updateMany({ data: { title: mark } })
     },
     marked: mark => ids({ title: mark }),
+    create: async (id, mark) => {
+      // title is this fixture's mark column, and the grant supplies it when
+      // the caller does not.
+      await extended.post.create({ data: mark === undefined ? { id } : { id, title: mark } })
+    },
     deleteAll: async () => {
       await extended.post.deleteMany({})
     },

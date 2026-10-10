@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createGuard } from '../../src/index.js'
+import { Policy, Scope, createGuard, toSubjectRef } from '../../src/index.js'
 import type { FilterResult, Guard, StorageAdapter } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
@@ -75,7 +75,7 @@ describe('filterFor end-to-end through createGuard', () => {
 
   test('a single scoped grant narrows the list to the rows its fragment admits', async () => {
     const { rbac } = await buildGuard()
-    await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view', 'authored')
+    await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1' }), 'posts.view', 'authored')
 
     const filter = await rbac.engine.filterFor({ id: 'u1' }, 'posts.view', rbac.resources[0]!)
     expect(filter.kind).toBe('where')
@@ -84,7 +84,7 @@ describe('filterFor end-to-end through createGuard', () => {
 
   test('two scopes on one policy — one direct, one via a group — union their rows', async () => {
     const { adapter, rbac } = await buildGuard()
-    await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view', 'authored')
+    await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1' }), 'posts.view', 'authored')
     await adapter.upsertGroup({ name: 'viewers', label: 'Viewers' })
     await adapter.setGroupPolicies('viewers', [{ policyName: 'posts.view', scope: 'shared' }])
     await adapter.assignGroup({ subjectId: 'u1', domain: '', tenantId: '' }, 'viewers')
@@ -95,7 +95,7 @@ describe('filterFor end-to-end through createGuard', () => {
 
   test('a scope reading the subject tenant admits only that tenant rows', async () => {
     const { rbac } = await buildGuard()
-    await rbac.admin.assignPolicy({ subjectId: 'u9', tenantId: 't1' }, 'posts.view', 'same-tenant')
+    await rbac.engine.assignPolicy(toSubjectRef({ id: 'u9', tenant_id: 't1' }), 'posts.view', 'same-tenant')
 
     const filter = await rbac.engine.filterFor(
       { id: 'u9', tenant_id: 't1' },
@@ -107,7 +107,7 @@ describe('filterFor end-to-end through createGuard', () => {
 
   test('a scope that returns false for this subject empties the list', async () => {
     const { rbac } = await buildGuard()
-    await rbac.admin.assignPolicy({ subjectId: 'u8' }, 'posts.view', 'same-tenant')
+    await rbac.engine.assignPolicy(toSubjectRef({ id: 'u8' }), 'posts.view', 'same-tenant')
 
     const filter = await rbac.engine.filterFor({ id: 'u8' }, 'posts.view', rbac.resources[0]!)
     expect(filter).toEqual({ kind: 'none', reason: 'scope-denied' })
@@ -124,7 +124,7 @@ describe('filterFor end-to-end through createGuard', () => {
 
   test('an unscoped grant leaves the query untouched', async () => {
     const { rbac } = await buildGuard()
-    await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'posts.view')
+    await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1' }), 'posts.view')
 
     const filter = await rbac.engine.filterFor({ id: 'u1' }, 'posts.view', rbac.resources[0]!)
     expect(filter).toEqual({ kind: 'all' })

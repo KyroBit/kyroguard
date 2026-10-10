@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { pgTable, text } from 'drizzle-orm/pg-core'
 
-import { createGuard, Policy, Scope } from '../../src/index.js'
+import { createGuard, Policy, Scope, toSubjectRef } from '../../src/index.js'
 import type { ResourceDefinition, Subject } from '../../src/index.js'
 import { drizzleAdapter, scopedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
@@ -35,9 +35,10 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 
   // The allowed set is swapped per case; the scope reads it at filter time.
   let allowed: string[] = []
-  const allowedScope = new Scope('allowed', 'Allowed rows', () =>
-    allowed.length ? { where: inArray(notes.id, allowed) } : false,
-  )
+  const allowedScope = new Scope('allowed', 'Allowed rows', {
+    match: () => (allowed.length ? { where: inArray(notes.id, allowed) } : false),
+    insert: () => ({ mark: 'stamped' }),
+  })
 
   const resource: ResourceDefinition = {
     type: 'note',
@@ -47,11 +48,11 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
 
   const rbac = createGuard({ adapter, resources: [resource], cache: false })
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'u1' }, 'notes.write', 'allowed')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1' }), 'notes.write', 'allowed')
 
   await pg.db.insert(notes).values([{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }])
 
-  const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources: [resource] })
+  const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources: [resource], schema: { notes } })
 
   const harness: IntegrationHarness = {
     guarded: (next, fn) =>
@@ -77,6 +78,9 @@ async function makeHarness(): Promise<{ harness: IntegrationHarness; cleanup: ()
       (await pg.db.select().from(notes).where(eq(notes.mark, mark)).orderBy(asc(notes.id))).map(
         row => row.id,
       ),
+    create: async (id, mark) => {
+      await db.insert(notes).values(mark === undefined ? { id } : { id, mark })
+    },
     deleteAll: async () => {
       await db.delete(notes)
     },

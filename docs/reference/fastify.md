@@ -25,7 +25,8 @@ import { guard } from './kyroguard/domains.js'
 const app = Fastify()
 await app.register(kyroguardFastify(guard))
 
-const teachers = app.kyroguard.domain({
+const teachers = app.kyroguard.domain('teachers', {
+  resources,
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id, tenant_id: user.schoolId } : null
@@ -43,15 +44,14 @@ app.get('/grades', { preHandler: teachers.requirePolicy('grades.view') }, async 
 import { createDomain } from '@kyrobit/kyroguard/fastify'
 
 function createDomain(guard: Guard, name: string, options): FastifyDomain
-function createDomain(guard: Guard, options): FastifyDomain<''>
 ```
 
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `guard` | `Guard` | The instance from [`createGuard()`](/reference/core-api#createguard). |
-| `name` | `string` | Domain name. Omit it for single-area apps — policies stay unprefixed. |
+| `name` | `string` | Domain name. Required — every domain is named. |
 | `options.getSubject` | `(req: FastifyRequest) => SubjectInput \| null` | Resolves the authenticated user. `null` → 401. |
-| `options.resources` | `ResourceDefinition[]` | Optional. This domain's resource definitions, registered on the guard at creation. |
+| `options.resources` | `ResourceDefinition[]` | Required. This domain's resource definitions, registered on the guard at creation. |
 | `options.formatError` | `(error: GuardError, req: FastifyRequest) => { status: number; body: unknown }` | Optional. Custom response body for denials. |
 
 Creates the same [domain instance](#domain-instance) as [`app.kyroguard.domain`](#app-kyroguard), without needing the app — so domains are plain values a module exports and any route file imports. This is the pattern `kyroguard init` scaffolds in `src/kyroguard/domains.ts`:
@@ -82,24 +82,24 @@ The plugin must still be registered once in your bootstrap — `await app.regist
 | Member | Description |
 | --- | --- |
 | `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `teachers`. |
-| `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `setSubject(subject)` | Set the active user directly (custom auth outside a domain). |
 | `cache` | Cache control: `invalidateSubject(subjectId)`, `clear()`. |
 
 ## Domain instance
 
 ```ts
-const teachers = app.kyroguard.domain({ getSubject })       // single-area app
-const admin = app.kyroguard.domain('admin', { getSubject }) // multi-area app
+const admin = app.kyroguard.domain('admin', { resources, getSubject })
 ```
 
 `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
 | Method | Description |
 | --- | --- |
-| `name` | The domain name. `''` for the domain-less overload. |
+| `name` | The domain name. |
 | `requirePolicy(policy)` | Returns a guard for `preHandler` or `onRequest`. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). On allow, queries against the policy's resource are narrowed by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
+| `can(req, policy)` | `Promise<boolean>` — does the subject hold this policy? Never throws: no user answers `false`, not 401. See [`can()`](/reference/core-api#can). |
+| `grantsFor(req)` | `Promise<DomainGrants>` — every policy the subject holds in this domain, to serialize to a client. See [`grantsFor()`](/reference/core-api#grantsfor). |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Register per scope, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |

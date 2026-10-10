@@ -1,10 +1,13 @@
 import { MisconfiguredError, GuardError } from '../../core/errors.js'
-import { qualifyPolicyName } from '../../core/types.js'
+import { normalizeSentinel, qualifyPolicyName } from '../../core/types.js'
 import type { ErrorRequestHandler, Request, RequestHandler } from 'express'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Guard } from '../../index.js'
+import { domainGrants } from '../contract.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
+
+export type { DomainGrants } from '../contract.js'
 
 export interface ExpressGuardOptions extends ErrorFormatter<Request> {}
 
@@ -16,8 +19,6 @@ export interface ExpressGuard {
     name: P,
     options: DomainOptions<Request>,
   ): DomainInstance<Request, RequestHandler, P>
-  /** Single-area apps don't need a domain name — policies stay unprefixed. */
-  domain(options: DomainOptions<Request>): DomainInstance<Request, RequestHandler, ''>
   /** Terminal error middleware: renders GuardError, delegates everything else. */
   errorHandler(): ErrorRequestHandler
 }
@@ -32,13 +33,8 @@ export function kyroguardExpress(guard: Guard, options: ExpressGuardOptions = {}
       }
     },
 
-    domain: (<P extends string>(
-      nameOrOptions: P | DomainOptions<Request>,
-      domainOptions?: DomainOptions<Request>,
-    ) =>
-      typeof nameOrOptions === 'string'
-        ? buildDomain(guard, nameOrOptions, domainOptions!)
-        : buildDomain(guard, '', nameOrOptions)) as ExpressGuard['domain'],
+    domain: (<P extends string>(name: P, domainOptions: DomainOptions<Request>) =>
+      buildDomain(guard, name, domainOptions)) as ExpressGuard['domain'],
 
     errorHandler() {
       return (error: unknown, req, res, next) => {
@@ -67,19 +63,8 @@ export function createDomain<P extends string>(
   guard: Guard,
   name: P,
   options: DomainOptions<Request>,
-): DomainInstance<Request, RequestHandler, P>
-export function createDomain(
-  guard: Guard,
-  options: DomainOptions<Request>,
-): DomainInstance<Request, RequestHandler, ''>
-export function createDomain(
-  guard: Guard,
-  nameOrOptions: string | DomainOptions<Request>,
-  maybeOptions?: DomainOptions<Request>,
-): DomainInstance<Request, RequestHandler, string> {
-  return typeof nameOrOptions === 'string'
-    ? buildDomain(guard, nameOrOptions, maybeOptions!)
-    : buildDomain(guard, '', nameOrOptions)
+): DomainInstance<Request, RequestHandler, P> {
+  return buildDomain(guard, name, options)
 }
 
 function buildDomain<P extends string>(
@@ -87,7 +72,7 @@ function buildDomain<P extends string>(
   name: P,
   options: DomainOptions<Request>,
 ): DomainInstance<Request, RequestHandler, P> {
-  if (options.resources) guard.registerResources(name, options.resources)
+  guard.registerResources(name, options.resources)
   const resolveSubject = async (req: Request): Promise<Subject | null> => {
     const store = guard.engine.store.get()
     if (!store) {
@@ -110,10 +95,12 @@ function buildDomain<P extends string>(
     return subject
   }
 
-  const adminRef = (subjectId: string, tenantId?: string) => ({
+  // The domain supplies its own name, so a grant can never be filed under one
+  // domain while naming another's policy.
+  const ref = (subjectId: string, tenantId?: string) => ({
     subjectId,
     domain: name,
-    tenantId,
+    tenantId: normalizeSentinel(tenantId),
   })
 
   return {
@@ -141,22 +128,32 @@ function buildDomain<P extends string>(
       return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, name, policy))
     },
 
+    can: async (req: Request, policy: string) => {
+      const subject = await resolveSubject(req)
+      return guard.engine.can(subject, qualifyPolicyName(name, policy))
+    },
+
+    grantsFor: async (req: Request) => {
+      const subject = await resolveSubject(req)
+      return domainGrants(guard, name, options.resources, subject)
+    },
+
     assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
-      guard.admin.assignGroup(adminRef(subjectId, opts?.tenantId), group),
+      guard.engine.assignGroup(ref(subjectId, opts?.tenantId), group),
     removeGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
-      guard.admin.removeGroup(adminRef(subjectId, opts?.tenantId), group),
+      guard.engine.removeGroup(ref(subjectId, opts?.tenantId), group),
     assignPolicy: (
       subjectId: string,
       policy: string,
       opts?: { tenantId?: string; scope?: string },
     ) =>
-      guard.admin.assignPolicy(
-        adminRef(subjectId, opts?.tenantId),
+      guard.engine.assignPolicy(
+        ref(subjectId, opts?.tenantId),
         qualifyPolicyName(name, policy),
         opts?.scope,
       ),
     removePolicy: (subjectId: string, policy: string, opts?: { tenantId?: string }) =>
-      guard.admin.removePolicy(adminRef(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
+      guard.engine.removePolicy(ref(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
   }
 }
 

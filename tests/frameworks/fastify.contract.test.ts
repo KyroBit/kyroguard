@@ -32,11 +32,15 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
 
   await app.register(kyroguardFastify(rbac))
 
+  // Captured before any domain registers its own, so every domain in this
+  // harness owns the same policy set the guard was built with.
+  const baseResources = [...rbac.resources]
   const domains = new Map<string, FastifyDomain>()
   const domainFor = (name: string): FastifyDomain => {
     let domain = domains.get(name)
     if (!domain) {
       domain = app.kyroguard.domain(name, {
+        resources: baseResources,
         getSubject: req => {
           getSubjectCalls.set(req, (getSubjectCalls.get(req) ?? 0) + 1)
           const id = req.headers['x-subject-id']
@@ -55,6 +59,19 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
 
   for (const route of routes) {
     const domain = domainFor(route.domain)
+
+    if (route.answers) {
+      const answers = route.answers
+      const policy = route.policy
+      app.route({
+        method: route.method,
+        url: route.path,
+        handler: async req =>
+          answers === 'can' ? { can: await domain.can!(req, policy!) } : domain.grantsFor!(req),
+      })
+      continue
+    }
+
     const policies = route.policy ? route.policy.split('+') : []
     const guards = policies.map(policy => domain.requirePolicy(policy))
     app.route({

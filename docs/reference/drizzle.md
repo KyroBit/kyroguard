@@ -51,6 +51,7 @@ Wraps your Drizzle database. Queries against a registered resource's table carry
 | --- | --- | --- | --- |
 | `guard` | `Guard` | required | Your `createGuard` instance. |
 | `resources` | `ResourceDefinition[]` | required | Only resources with a `table` are filtered. Other tables pass through. |
+| `schema` | `Record<string, unknown>` | required | The same schema module you pass to `drizzle()`. kyroguard reads the relation graph from it. |
 | `unscoped` | `readonly string[]` | `[]` | Reasons `db.unscoped(reason)` accepts. Omit it and nothing may bypass. |
 
 ```ts
@@ -59,9 +60,11 @@ import { scopedDb } from '@kyrobit/kyroguard/drizzle'
 import { guard } from './kyroguard/domains.js'
 import { resources } from './kyroguard/policies.js'
 
-const rawDb = drizzle(process.env.DATABASE_URL!)
+import * as schema from './db/schema.js'
 
-export const db = scopedDb(rawDb, { guard, resources })
+const rawDb = drizzle(process.env.DATABASE_URL!, { schema })
+
+export const db = scopedDb(rawDb, { guard, resources, schema })
 ```
 
 ### What gets filtered

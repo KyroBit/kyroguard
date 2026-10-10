@@ -19,7 +19,8 @@ const { context, domain, errorHandler } = kyroguardExpress(guard)
 const app = express()
 app.use(context())
 
-const teachers = domain({
+const teachers = domain('teachers', {
+  resources,
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
@@ -40,7 +41,7 @@ app.listen(3000)
 Register `context()` before any guard and `errorHandler()` after your routes. In the wrong order, guards fail with a 500 instead of denying properly.
 :::
 
-`resources` holds your policy definitions ([Policies](/guide/policies)). `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Domains](/guide/domains).
+`resources` holds your policy definitions ([Policies](/guide/policies)). `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). Every domain is named, and its name prefixes its policies — see [Domains](/guide/domains).
 
 ## Errors
 

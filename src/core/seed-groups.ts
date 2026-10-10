@@ -1,3 +1,4 @@
+import { blanketScopeName } from './policy.js'
 import { qualifyPolicyName } from './types.js'
 import type { GroupPolicyEntry, StorageAdapter } from '../storage/contract.js'
 
@@ -16,6 +17,7 @@ export type GroupsDefinition = Record<string, GroupDefinition>
 export interface SeedPolicyInfo {
   name: string
   scopeOptions?: readonly { name: string }[]
+  superScope?: { name: string }
 }
 
 export async function seedGroups(
@@ -73,7 +75,10 @@ function normalize(
   input: GroupPoliciesInput,
   allPolicies: { name: string }[],
 ): Record<string, string | null> {
-  if (input === 'all') return Object.fromEntries(allPolicies.map(policy => [policy.name, null]))
+  // 'all' grants every policy wholesale, and wholesale reach is the policy's
+  // to state — otherwise a blanket role would read every tenant's rows.
+  if (input === 'all')
+    return Object.fromEntries(allPolicies.map(policy => [policy.name, blanketScopeName(policy)]))
   if (Array.isArray(input)) return Object.fromEntries(input.map(name => [name, null]))
   return Object.fromEntries(
     Object.entries(input).map(([name, scope]) => [name, scope === 'all' ? null : scope]),

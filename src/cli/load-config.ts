@@ -76,10 +76,9 @@ function findModule(dir: string, base: string): string | null {
 }
 
 /**
- * Convention scan for `domains: '<dir>'`. Two shapes:
- * - single domain: `<dir>/policies.ts` (+ optional `<dir>/groups.ts`) — the unnamed domain;
- * - multi-domain:  `<dir>/policies/<name>.ts` per domain, with `<dir>/groups/<name>.ts`
- *   attached when present. Adding a domain is adding a file.
+ * Convention scan for `domains: '<dir>'`: `<dir>/policies/<name>.ts` per domain,
+ * with `<dir>/groups/<name>.ts` attached when present. The file name is the
+ * domain name, so adding a domain is adding a file.
  */
 function expandDomainsDir(configDir: string, dir: string): DomainConfig[] {
   const root = isAbsolute(dir) ? dir : resolve(configDir, dir)
@@ -87,16 +86,8 @@ function expandDomainsDir(configDir: string, dir: string): DomainConfig[] {
     throw new Error(`[kyroguard] domains directory not found: ${root}`)
   }
   const policiesDir = join(root, 'policies')
-  const flat = findModule(root, 'policies')
-  const hasPoliciesDir = existsSync(policiesDir) && statSync(policiesDir).isDirectory()
 
-  if (hasPoliciesDir && flat) {
-    throw new Error(
-      `[kyroguard] ${root} has BOTH a policies/ directory and a flat policies module — keep one: flat for a single domain, policies/<name>.ts per domain.`,
-    )
-  }
-
-  if (hasPoliciesDir) {
+  if (existsSync(policiesDir) && statSync(policiesDir).isDirectory()) {
     const groupsDir = join(root, 'groups')
     const domains: DomainConfig[] = []
     for (const file of readdirSync(policiesDir).sort()) {
@@ -111,13 +102,8 @@ function expandDomainsDir(configDir: string, dir: string): DomainConfig[] {
     return domains
   }
 
-  if (flat) {
-    const groups = findModule(root, 'groups')
-    return [{ name: '', policies: flat, ...(groups ? { groups } : {}) }]
-  }
-
   throw new Error(
-    `[kyroguard] ${root} has no policies — add policies.ts (single domain) or policies/<name>.ts (one per domain), or list domains explicitly.`,
+    `[kyroguard] ${root} has no policies/ directory — add policies/<name>.ts, one per domain, or list domains explicitly in the config.`,
   )
 }
 

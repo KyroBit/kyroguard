@@ -1,3 +1,4 @@
+import { MisconfiguredError } from '../../core/errors.js'
 import type { GuardEngine } from '../../core/engine.js'
 import type { StorageAdapter } from '../contract.js'
 
@@ -33,10 +34,12 @@ export interface ScopeExtension {
   query: Record<string, Record<string, QueryHook>>
 }
 
+type CreateOperation = 'create' | 'createMany'
 type ReadOperation = 'findMany' | 'findFirst' | 'findUnique' | 'count'
 type WriteOperation = 'updateMany' | 'deleteMany' | 'update' | 'delete'
 type FilteredOperation = ReadOperation | WriteOperation
 
+const CREATE_OPERATIONS: CreateOperation[] = ['create', 'createMany']
 const READ_OPERATIONS: ReadOperation[] = ['findMany', 'findFirst', 'findUnique', 'count']
 /** Writes carry the same filter: a grant that narrows reads must narrow writes by as much. */
 const WRITE_OPERATIONS: WriteOperation[] = ['updateMany', 'deleteMany', 'update', 'delete']
@@ -65,12 +68,36 @@ function mergeUniqueWhere(where: Record<string, unknown>, fragment: unknown): Re
 }
 
 /**
+ * The grant's insert columns are the same fact its filter reads by, so a row
+ * created with a different value would be invisible to its creator.
+ */
+function applyStamp(
+  row: Record<string, unknown>,
+  stamp: Record<string, unknown>,
+  type: string,
+): Record<string, unknown> {
+  const next = { ...row }
+  for (const [column, value] of Object.entries(stamp)) {
+    if (next[column] !== undefined && next[column] !== value) {
+      throw new MisconfiguredError(
+        `[kyroguard] create on "${type}": the grant sets "${column}" to ${JSON.stringify(value)}, ` +
+          `but this create passes ${JSON.stringify(next[column])} — the row would be unreadable ` +
+          `to whoever created it.`,
+      )
+    }
+    next[column] = value
+  }
+  return next
+}
+
+/**
  * Prisma client extension: merges the request's guard-activated filter into
  * every query for a registered model — reads (findMany/findFirst/findUnique/
  * count) and writes (update/delete/updateMany/deleteMany) alike, so a row the
- * scope excludes can be neither read nor written. Creates pass through: a row
- * that does not exist yet has nothing to filter on. Interception gaps (raw
- * SQL, nested writes, …) are documented in docs/reference/prisma.md.
+ * scope excludes can be neither read nor written. Creates carry the grant's
+ * insert columns instead of a filter — a row created under a grant must be one
+ * the same grant can read back. Interception gaps (raw SQL, nested writes, …)
+ * are documented in docs/reference/prisma.md.
  */
 export function scopeExtension(options: ScopeExtensionOptions): ScopeExtension {
   const { engine, adapter } = options.guard
@@ -117,9 +144,25 @@ export function scopeExtension(options: ScopeExtensionOptions): ScopeExtension {
       return run({ ...args, where: merged })
     }
 
-  query['$allModels'] = Object.fromEntries(
-    [...READ_OPERATIONS, ...WRITE_OPERATIONS].map(operation => [operation, filteredHook(operation)]),
-  )
+  const stampedHook =
+    (operation: CreateOperation): QueryHook =>
+    async ({ model, args, query: run }: QueryHookParams): Promise<any> => {
+      const type = typeForModel.get(delegateKey(model))
+      if (type === undefined || engine.store.isInAuthz()) return run(args)
+      const stamp = engine.store.getActiveInsert(type)
+      if (!stamp || Object.keys(stamp).length === 0) return run(args)
+
+      const data = (args as { data?: unknown } | null | undefined)?.data
+      const stamped = Array.isArray(data)
+        ? data.map(row => applyStamp(row as Record<string, unknown>, stamp, type))
+        : applyStamp((data ?? {}) as Record<string, unknown>, stamp, type)
+      return run({ ...args, data: stamped })
+    }
+
+  query['$allModels'] = Object.fromEntries([
+    ...[...READ_OPERATIONS, ...WRITE_OPERATIONS].map(operation => [operation, filteredHook(operation)]),
+    ...CREATE_OPERATIONS.map(operation => [operation, stampedHook(operation)]),
+  ])
 
   return { name: '@kyrobit/kyroguard', query }
 }

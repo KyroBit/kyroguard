@@ -14,7 +14,7 @@ import { asc, eq } from 'drizzle-orm'
 import { pgTable, text } from 'drizzle-orm/pg-core'
 import { sqliteTable, text as sqliteText } from 'drizzle-orm/sqlite-core'
 
-import { createGuard, MisconfiguredError, Policy, Scope } from '../../src/index.js'
+import { createGuard, MisconfiguredError, Policy, Scope, toSubjectRef } from '../../src/index.js'
 import type { GuardEngine, ResourceDefinition, Subject } from '../../src/index.js'
 import { drizzleAdapter, scopedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
@@ -109,14 +109,19 @@ async function makeFilterSetup() {
   const rbac = createGuard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources, unscoped: ['test-bypass'] })
+  const db = scopedDb(pg.db, {
+    guard: { engine: rbac.engine },
+    resources,
+    unscoped: ['test-bypass'],
+    schema: { sales, posts },
+  })
 
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.void', 'own')
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.audit', 'audit-window')
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.flag', 'in-window')
-  await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.view')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.void', 'own')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.audit', 'audit-window')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.flag', 'in-window')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'manager' }), 'sales.view')
 
   await pg.db.insert(sales).values([
     { id: 's1', status: 'open', sellerId: 'cashier' },
@@ -524,7 +529,7 @@ describe('scopedDb — unscoped is a registered decision', () => {
     const resources: ResourceDefinition[] = [{ type: 'post', policies: [], table: posts }]
     const rbac = createGuard({ adapter, resources, cache: false })
     cleanups.push(async () => rbac.dispose())
-    const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources })
+    const db = scopedDb(pg.db, { guard: { engine: rbac.engine }, resources, schema: { posts } })
 
     expect(() => db.unscoped('anything')).toThrow(MisconfiguredError)
   })
@@ -562,12 +567,17 @@ async function makeSqliteFilterSetup() {
   const rbac = createGuard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
 
-  const db = scopedDb(raw, { guard: { engine: rbac.engine }, resources, unscoped: ['test-bypass'] })
+  const db = scopedDb(raw, {
+    guard: { engine: rbac.engine },
+    resources,
+    unscoped: ['test-bypass'],
+    schema: { salesLite },
+  })
 
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.view')
-  await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'sales.void', 'own')
-  await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'sales.view')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.view')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'sales.void', 'own')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'manager' }), 'sales.view')
 
   await raw.insert(salesLite).values([
     { id: 's1', status: 'open', sellerId: 'cashier' },

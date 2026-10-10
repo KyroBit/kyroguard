@@ -91,30 +91,4 @@ describe('createGuard sugar', () => {
     rbac.dispose()
   })
 
-  test('domain({ getSubject }) guards with unqualified policy names end to end', async () => {
-    const adapter = memoryAdapter()
-    const { policies, groups } = definitions()
-    const rbac = createGuard({ adapter, policies, groups })
-    await rbac.sync()
-
-    const app = Fastify()
-    await app.register(kyroguardFastify(rbac))
-    const shop = app.kyroguard.domain({
-      getSubject: async req => {
-        const id = req.headers['x-user-id']
-        return typeof id === 'string' ? { id } : null
-      },
-    })
-    app.get('/sales', { preHandler: shop.requirePolicy('sales.view') }, async () => [])
-
-    const denied = await app.inject({ url: '/sales', headers: { 'x-user-id': 'u1' } })
-    expect(denied.statusCode).toBe(403)
-
-    await shop.assignGroup('u1', 'cashier')
-    const allowed = await app.inject({ url: '/sales', headers: { 'x-user-id': 'u1' } })
-    expect(allowed.statusCode).toBe(200)
-
-    await app.close()
-    rbac.dispose()
-  })
 })

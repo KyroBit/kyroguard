@@ -24,7 +24,8 @@ async function buildApp() {
   const app = Fastify()
   await app.register(kyroguardFastify(guard))
 
-  const teachers = app.kyroguard.domain({
+  const teachers = app.kyroguard.domain('teachers', {
+    resources,
     getSubject: req =>
       req.headers['x-user'] ? { id: String(req.headers['x-user']) } : null,
   })

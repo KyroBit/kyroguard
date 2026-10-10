@@ -275,3 +275,28 @@ describe('kyroguard init --yes', () => {
     expect(schema).toContain("pgTable('kyroguard_policies'")
   })
 })
+
+describe('kyroguard init scaffolds only the current API', () => {
+  for (const [label, dependencies] of [
+    ['fastify', { fastify: '^5.0.0', 'drizzle-orm': '^0.36.0', pg: '^8.13.0' }],
+    ['express', { express: '^5.0.0', 'drizzle-orm': '^0.36.0', pg: '^8.13.0' }],
+  ] as const) {
+    test(`${label}: domains.ts never shows the removed requirePolicy resource resolver`, async () => {
+      const cwd = await projectDir(dependencies)
+      await runInitQuiet(cwd)
+      const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+
+      expect(domains).not.toContain('resource:')
+      expect(domains).not.toContain('resource resolver')
+    })
+
+    test(`${label}: domains.ts never promises the removed 404 guard outcome`, async () => {
+      const cwd = await projectDir(dependencies)
+      await runInitQuiet(cwd)
+      const domains = await readFile(join(cwd, 'src', 'kyroguard', 'domains.ts'), 'utf8')
+
+      expect(domains).not.toContain('404')
+      expect(domains).not.toContain('resource not found')
+    })
+  }
+})

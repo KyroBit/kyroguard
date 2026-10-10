@@ -86,7 +86,7 @@ A [scope](/guide/scopes) narrows what a grant reaches. `scopedDb` is what applie
 // src/kyroguard/instance.ts
 import { scopedDb } from '@kyrobit/kyroguard/drizzle'
 
-export const db = scopedDb(rawDb, { guard, resources })
+export const db = scopedDb(rawDb, { guard, resources, schema })
 ```
 
 Link each resource to its table in its policies file, and write the scope against your own columns:

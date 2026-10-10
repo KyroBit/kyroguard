@@ -12,7 +12,7 @@
 
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 
-import { Policy, Scope, createGuard } from '../../src/index.js'
+import { Policy, Scope, createGuard, toSubjectRef } from '../../src/index.js'
 import { prismaAdapter, scopeExtension } from '../../src/storage/prisma/index.js'
 import { makePrismaFixture } from './helpers/prisma-fixture/setup.js'
 import type { Subject } from '../../src/core/types.js'
@@ -61,11 +61,11 @@ const rbac = createGuard({
 const postResource = rbac.resources[0]!
 
 await rbac.sync()
-await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.view', 'all')
-await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.void', 'own')
-await rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.audit', 'sighted')
-await rbac.admin.assignPolicy({ subjectId: 'manager' }, 'posts.view', 'all')
-await rbac.admin.assignPolicy({ subjectId: 'stranger' }, 'posts.flag', 'window')
+await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'posts.view', 'all')
+await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'posts.void', 'own')
+await rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'posts.audit', 'sighted')
+await rbac.engine.assignPolicy(toSubjectRef({ id: 'manager' }), 'posts.view', 'all')
+await rbac.engine.assignPolicy(toSubjectRef({ id: 'stranger' }), 'posts.flag', 'window')
 
 interface ExtendedClient {
   post: {
@@ -344,7 +344,7 @@ describe("suppression — requests with no activated filter, and the engine's ow
 
 describe('assignPolicy scope validation rides listPolicies scopeOptions', () => {
   test('a scope missing from the synced scopeOptions is rejected', async () => {
-    expect(rbac.admin.assignPolicy({ subjectId: 'cashier' }, 'posts.view', 'ghost')).rejects.toThrow(
+    expect(rbac.engine.assignPolicy(toSubjectRef({ id: 'cashier' }), 'posts.view', 'ghost')).rejects.toThrow(
       /not among the scopeOptions/,
     )
   })

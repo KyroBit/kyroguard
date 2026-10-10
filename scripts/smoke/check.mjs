@@ -29,6 +29,7 @@ async function seededGuard() {
   const app = Fastify()
   await app.register(kyroguardFastify(guard))
   const admin = app.kyroguard.domain('admin', {
+    resources: [],
     getSubject: req => (req.headers['x-user-id'] ? { id: String(req.headers['x-user-id']) } : null),
   })
   app.get('/posts', { preHandler: admin.requirePolicy('posts.read') }, async () => ({ ok: true }))
@@ -40,7 +41,7 @@ async function seededGuard() {
   assert.equal(denied.statusCode, 403, `fastify deny: ${denied.statusCode}`)
   const deniedBody = JSON.parse(denied.body)
   assert.equal(deniedBody.code, 'ACCESS_DENIED')
-  // Fastify's default serializer carries code but not reason (see docs/reference/errors.md).
+  // An error body carries the code and message only (see docs/reference/errors.md).
   assert.equal(deniedBody.reason, undefined)
 
   const anonymous = await app.inject({ method: 'GET', url: '/posts' })
@@ -58,6 +59,7 @@ async function seededGuard() {
   const app = express()
   app.use(context())
   const admin = domain('admin', {
+    resources: [],
     getSubject: req => (req.headers['x-user-id'] ? { id: String(req.headers['x-user-id']) } : null),
   })
   app.get('/posts', admin.requirePolicy('posts.read'), (_req, res) => res.json({ ok: true }))
@@ -75,7 +77,7 @@ async function seededGuard() {
   assert.equal(denied.status, 403, `express deny: ${denied.status}`)
   const deniedBody = await denied.json()
   assert.equal(deniedBody.code, 'ACCESS_DENIED')
-  assert.equal(deniedBody.reason, 'policy')
+  assert.equal(deniedBody.reason, undefined)
 
   const anonymous = await fetch(`${base}/posts`)
   assert.equal(anonymous.status, 401, `express anon: ${anonymous.status}`)

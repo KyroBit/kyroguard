@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks'
-import { PolicyDeniedError, UnauthenticatedError } from './errors.js'
+import { MisconfiguredError, PolicyDeniedError, UnauthenticatedError } from './errors.js'
 import { policyCacheKey } from '../cache/key.js'
 import { SubjectStore } from './subject-store.js'
 import { qualifyPolicyName, toSubjectRef } from './types.js'
@@ -12,6 +12,7 @@ import type {
   Subject,
   SubjectRef,
 } from './types.js'
+import { blanketScopeName } from './policy.js'
 import type { ResourceDefinition } from './policy.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from '../cache/types.js'
 import { UnknownScopeError } from '../storage/contract.js'
@@ -154,20 +155,28 @@ export class GuardEngine {
       throw new UnauthenticatedError()
     }
 
+    // A blanket grant names no scope, so the policy states how far wholesale
+    // access reaches. Without that it would read every tenant's rows.
+    let cacheHit = false
+    let scopeNames: string[] | null
     if (this.superBypass && subject.is_super === true) {
-      this.emitDecision(subject, policy, 'allow', 'super', null, false, startedAt, 'list')
-      return { kind: 'all' }
+      const blanket = blanketScopeFor(resource, policy, subject.domain)
+      if (blanket === null) {
+        this.emitDecision(subject, policy, 'allow', 'super', null, false, startedAt, 'list')
+        return { kind: 'all' }
+      }
+      scopeNames = [blanket]
+    } else {
+      const ref = toSubjectRef(subject)
+      const resolved = await this.getPolicyMap(ref)
+      cacheHit = resolved.cacheHit
+
+      if (!resolved.map.has(policy)) {
+        this.emitDecision(subject, policy, 'deny', 'no-policy', null, cacheHit, startedAt, 'list')
+        return { kind: 'none', reason: 'no-policy' }
+      }
+      scopeNames = resolved.map.get(policy)!
     }
-
-    const ref = toSubjectRef(subject)
-    const { map, cacheHit } = await this.getPolicyMap(ref)
-
-    if (!map.has(policy)) {
-      this.emitDecision(subject, policy, 'deny', 'no-policy', null, cacheHit, startedAt, 'list')
-      return { kind: 'none', reason: 'no-policy' }
-    }
-
-    const scopeNames = map.get(policy)!
     if (scopeNames === null) {
       this.emitDecision(subject, policy, 'allow', 'granted', null, cacheHit, startedAt, 'list')
       return { kind: 'all' }
@@ -190,7 +199,7 @@ export class GuardEngine {
           )
           continue
         }
-        const result = await scope.filter(subject, ctx)
+        const result = await scope.match(subject, ctx)
         if (result === true) {
           this.emitDecision(subject, policy, 'allow', 'granted', scopeName, cacheHit, startedAt, 'list')
           return { kind: 'all' }
@@ -234,6 +243,59 @@ export class GuardEngine {
    * static resource config — so the filter always follows the policy the
    * request is exercising.
    */
+  /**
+   * The columns a row created under this request's grant must carry, merged
+   * from every granted scope that defines `insert`. Two scopes disagreeing on
+   * one column is a configuration error, not a row to guess at.
+   */
+  async insertValuesFor(
+    subject: Subject | null | undefined,
+    policy: QualifiedPolicyName,
+    resource: ResourceDefinition,
+  ): Promise<Record<string, unknown>> {
+    if (!subject?.id) return {}
+
+    // A blanket grant names no scope, so the policy states how far wholesale
+    // access reaches — the same scope that narrows its reads must stamp its
+    // writes, or a superuser creates rows belonging to no tenant at all.
+    let scopeNames: readonly string[] | null | undefined
+    if (this.superBypass && subject.is_super === true) {
+      const blanket = blanketScopeFor(resource, policy, subject.domain)
+      if (blanket === null) return {}
+      scopeNames = [blanket]
+    } else {
+      const { map } = await this.getPolicyMap(toSubjectRef(subject))
+      scopeNames = map.get(policy)
+    }
+    if (!scopeNames) return {}
+
+    const ctx = { db: this.db, adapter: this.adapter, resource }
+    const merged: Record<string, unknown> = {}
+    const sources = new Map<string, string>()
+    const prevInAuthz = this.store.isInAuthz()
+    this.store.setInAuthz(true)
+    try {
+      for (const scopeName of scopeNames) {
+        const scope = this.scopes.get(scopeName)
+        if (!scope?.insert) continue
+        for (const [column, value] of Object.entries(await scope.insert(subject, ctx))) {
+          const previous = sources.get(column)
+          if (previous !== undefined && merged[column] !== value) {
+            throw new MisconfiguredError(
+              `[kyroguard] scopes "${previous}" and "${scopeName}" both set "${column}" on create, ` +
+                `to different values — a row cannot carry both.`,
+            )
+          }
+          merged[column] = value
+          sources.set(column, scopeName)
+        }
+      }
+    } finally {
+      this.store.setInAuthz(prevInAuthz)
+    }
+    return merged
+  }
+
   async storeFilterFor(
     subject: Subject | null | undefined,
     policy: QualifiedPolicyName,
@@ -241,10 +303,34 @@ export class GuardEngine {
   ): Promise<FilterResult> {
     const filter = await this.filterFor(subject, policy, resource)
     this.store.setActiveFilter(resource.type, filter)
+    this.store.setActiveInsert(resource.type, await this.insertValuesFor(subject, policy, resource))
     return filter
   }
 
   // ── Mutations (invalidate + publish, always) ────────────────────────────────
+
+  /** Emits no decision event on purpose: a capability query is not an access attempt. */
+  async can(subject: Subject | null | undefined, policy: QualifiedPolicyName): Promise<boolean> {
+    if (!subject?.id) return false
+    if (this.superBypass && subject.is_super === true) return true
+    const { map } = await this.getPolicyMap(toSubjectRef(subject))
+    return map.has(policy)
+  }
+
+  /** Without `allPolicies` a superuser answers empty, which reads as "may do nothing". */
+  async grantsFor(
+    subject: Subject | null | undefined,
+    allPolicies?: readonly QualifiedPolicyName[],
+  ): Promise<PolicyMap> {
+    if (!subject?.id) return new Map()
+    if (this.superBypass && subject.is_super === true) {
+      return new Map((allPolicies ?? []).map(policy => [policy, null]))
+    }
+    const { map } = await this.getPolicyMap(toSubjectRef(subject))
+    // getPolicyMap hands back the cached instance; a caller mutating it would
+    // poison every later request for this subject.
+    return new Map([...map].map(([policy, scopes]) => [policy, scopes ? [...scopes] : null]))
+  }
 
   async assignGroup(ref: SubjectRef, groupName: string): Promise<void> {
     await this.adapter.assignGroup(ref, groupName)
@@ -353,6 +439,18 @@ export class GuardEngine {
 }
 
 /** Null scope (unrestricted) wins entirely; otherwise the deduped union of scope names in grant order. */
+/** The blanket scope for the policy this request exercises, if the policy states one. */
+function blanketScopeFor(
+  resource: ResourceDefinition,
+  qualified: QualifiedPolicyName,
+  domain: string | undefined,
+): string | null {
+  const prefix = domain ? `${domain}.` : ''
+  const unqualified = prefix && qualified.startsWith(prefix) ? qualified.slice(prefix.length) : qualified
+  const policy = resource.policies.find(entry => entry.name === unqualified)
+  return policy ? blanketScopeName(policy) : null
+}
+
 export function mergeGrants(grants: PolicyGrant[]): PolicyMap {
   const map: PolicyMap = new Map()
   for (const grant of grants) {

@@ -32,25 +32,18 @@ Assigning twice is safe. The second call does nothing.
 
 Changes apply immediately on this server. Running several servers? See [Production](/guide/production).
 
-## Scripts and admin panels
+## Scripts and seeders
 
-Outside a request handler there is often no domain instance. Use `guard.admin.*` there:
+A domain is a plain value you export once ([Domains](/guide/domains)), so a script imports it and calls the same methods a route would:
 
 ```ts
-import { guard } from './kyroguard/domains.js'
+import { teachers } from './kyroguard/domains.js'
 
-await guard.admin.assignGroup(
-  { subjectId: 'user-42', domain: 'teachers', tenantId: 'school-1' },
-  'teacher',
-)
-
-await guard.admin.assignPolicy(
-  { subjectId: 'user-42', domain: 'teachers', tenantId: 'school-1' },
-  'teachers.grades.view',
-)
+await teachers.assignGroup('user-42', 'teacher', { tenantId: 'school-1' })
+await teachers.assignPolicy('user-42', 'grades.view', { tenantId: 'school-1' })
 ```
 
-Same operations, made explicit. `guard.admin` takes full policy names like `teachers.grades.view`. Domain instances add the prefix for you. This API does not.
+There is no second, lower-level assignment API. The domain supplies its own name, so a grant can never be filed under one domain while naming another's policy — a mistake that stores a grant nothing can ever use.
 
 ## Owners
 

@@ -18,7 +18,8 @@ const guard = createGuard({ adapter: drizzleAdapter(db, { schema }), resources }
 const app = Fastify()
 await app.register(kyroguardFastify(guard))
 
-const teachers = app.kyroguard.domain({
+const teachers = app.kyroguard.domain('teachers', {
+  resources,
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id } : null
@@ -34,7 +35,7 @@ await app.listen({ port: 3000 })
 
 Three steps. Register `kyroguardFastify(guard)` once. Create a domain with `app.kyroguard.domain()`. Guard routes with `requirePolicy` in `preHandler`.
 
-`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). `teachers` is an unnamed domain — the single-app form; named domains are in [Domains](/guide/domains).
+`resources` holds your policy definitions ([Policies](/guide/policies)). The [Prisma](/databases/prisma) and [MongoDB](/databases/mongodb) adapters swap in the same way. `getSubject` returns the logged-in user, or `null` ([Protecting routes](/guide/protecting-routes)). Every domain is named, and its name prefixes its policies — see [Domains](/guide/domains).
 
 ## Errors
 

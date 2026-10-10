@@ -15,6 +15,8 @@ export interface RequestStore {
    * wrappers must never fall back to any statically-configured plan.
    */
   activeFilters: Map<string, FilterResult>
+  /** Columns a row created for this resource type must carry, per the grant. */
+  activeInserts: Map<string, Record<string, unknown>>
 }
 
 /**
@@ -56,6 +58,15 @@ export class SubjectStore {
     this.als.getStore()?.activeFilters.set(resourceType, filter)
   }
 
+  setActiveInsert(resourceType: string, values: Record<string, unknown>): void {
+    const store = this.get()
+    if (store) store.activeInserts.set(resourceType, values)
+  }
+
+  getActiveInsert(resourceType: string): Record<string, unknown> | undefined {
+    return this.get()?.activeInserts.get(resourceType)
+  }
+
   getActiveFilter(resourceType: string): FilterResult | undefined {
     return this.als.getStore()?.activeFilters.get(resourceType)
   }
@@ -76,5 +87,6 @@ function createStore(): RequestStore {
     domainSubjects: new Map(),
     inAuthz: false,
     activeFilters: new Map(),
+    activeInserts: new Map(),
   }
 }

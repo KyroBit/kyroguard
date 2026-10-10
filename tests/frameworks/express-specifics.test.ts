@@ -10,7 +10,7 @@ import express, { Router } from 'express'
 import { createServer } from 'node:http'
 import { kyroguardExpress } from '../../src/frameworks/express/index.js'
 import { PolicyDeniedError, UnauthenticatedError } from '../../src/core/errors.js'
-import { Policy, createGuard } from '../../src/index.js'
+import { Policy, createGuard, toSubjectRef } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { Express, Request, RequestHandler } from 'express'
 import type { Server } from 'node:http'
@@ -168,7 +168,7 @@ describe('formatError option', () => {
         }),
       })
       app.use(integration.context())
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
       app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
       const served = await serve(app)
@@ -195,7 +195,7 @@ describe('guard error strategy', () => {
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
       const domain = integration.domain('admin', {
-        getSubject: () => {
+        resources: [], getSubject: () => {
           throw new Error('getSubject exploded')
         },
       })
@@ -229,7 +229,7 @@ describe('guard error strategy', () => {
       })
       app.use(integration.context())
       const domain = integration.domain('admin', {
-        getSubject: async () => {
+        resources: [], getSubject: async () => {
           await Promise.resolve()
           throw new Error('async explosion')
         },
@@ -269,8 +269,8 @@ describe('domain independence', () => {
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
-      const admin = integration.domain('admin', { getSubject: headerSubject })
-      const branch = integration.domain('branch', { getSubject: headerSubject })
+      const admin = integration.domain('admin', { resources: [], getSubject: headerSubject })
+      const branch = integration.domain('branch', { resources: [], getSubject: headerSubject })
       app.get('/admin/thing', admin.requirePolicy('thing.read'), okHandler)
       app.get('/branch/thing', branch.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
@@ -307,14 +307,14 @@ describe('ALS propagation', () => {
   test('context() opens a store that survives into async handlers past guard resolution', async () => {
     const rbac = await makeGuard()
     try {
-      await rbac.admin.assignPolicy(
-        { subjectId: 'u1', domain: 'admin' },
+      await rbac.engine.assignPolicy(
+        toSubjectRef({ id: 'u1', domain: 'admin' }),
         'admin.thing.read',
       )
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
       app.get('/thing', domain.requirePolicy('thing.read'), (async (_req, res) => {
         // Cross an await boundary before reading — the Bun regression case.
         await new Promise(resolve => setTimeout(resolve, 5))
@@ -352,7 +352,7 @@ describe('ALS propagation', () => {
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
       app.get('/echo', domain.subjectHook(), (async (_req, res) => {
         await new Promise(resolve => setTimeout(resolve, 20))
         res.json({ id: rbac.engine.store.getSubject()?.id ?? null })
@@ -379,7 +379,7 @@ describe('ALS propagation', () => {
       const app = express()
       const integration = kyroguardExpress(rbac)
       // context() deliberately NOT registered.
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
       app.get('/thing', domain.requirePolicy('thing.read'), okHandler)
       app.use(integration.errorHandler())
       const served = await serve(app)
@@ -404,11 +404,11 @@ describe('router mounting', () => {
   test('guards work when routes live on a Router mounted at /api', async () => {
     const rbac = await makeGuard()
     try {
-      await rbac.admin.assignPolicy({ subjectId: 'u1', domain: 'admin' }, 'admin.thing.read')
+      await rbac.engine.assignPolicy(toSubjectRef({ id: 'u1', domain: 'admin' }), 'admin.thing.read')
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
 
       const router = Router()
       router.get('/thing', domain.requirePolicy('thing.read'), okHandler)
@@ -442,7 +442,7 @@ describe('router mounting', () => {
       const app = express()
       const integration = kyroguardExpress(rbac)
       app.use(integration.context())
-      const domain = integration.domain('admin', { getSubject: headerSubject })
+      const domain = integration.domain('admin', { resources: [], getSubject: headerSubject })
 
       const router = Router()
       router.get('/thing', domain.requirePolicy('thing.read'), okHandler)

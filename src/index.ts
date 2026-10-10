@@ -68,14 +68,6 @@ export interface Guard {
   /** Seed policy groups (replace-all per group). */
   seedGroups(groups: GroupsDefinition, options?: { domain?: string; allPolicies?: { name: string }[] }): Promise<void>
 
-  /** Low-level assignment API — takes FULLY-QUALIFIED policy names and explicit coordinates. */
-  admin: {
-    assignGroup(subject: AdminSubjectRef, group: string): Promise<void>
-    removeGroup(subject: AdminSubjectRef, group: string): Promise<void>
-    assignPolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName, scope?: string): Promise<void>
-    removePolicy(subject: AdminSubjectRef, policy: QualifiedPolicyName): Promise<void>
-  }
-
   cache: {
     invalidateSubject(subjectId: string): Promise<void>
     clear(): Promise<void>
@@ -83,12 +75,6 @@ export interface Guard {
 
   /** Detach bus subscriptions (graceful shutdown / tests). */
   dispose(): void
-}
-
-export interface AdminSubjectRef {
-  subjectId: string
-  domain?: string
-  tenantId?: string
 }
 
 export function createGuard(options: CreateGuardOptions): Guard {
@@ -127,11 +113,6 @@ export function createGuard(options: CreateGuardOptions): Guard {
     onCacheEvent: options.onCacheEvent,
   })
 
-  const normalize = (subject: AdminSubjectRef) => ({
-    subjectId: subject.subjectId,
-    domain: subject.domain ?? '',
-    tenantId: subject.tenantId ?? '',
-  })
 
   // Domain-registered resources (createDomain({ resources })). The scope map
   // and resourceForPolicy are live references shared with the engine, so
@@ -193,12 +174,6 @@ export function createGuard(options: CreateGuardOptions): Guard {
         seedOptions?.domain,
       ),
 
-    admin: {
-      assignGroup: (subject, group) => engine.assignGroup(normalize(subject), group),
-      removeGroup: (subject, group) => engine.removeGroup(normalize(subject), group),
-      assignPolicy: (subject, policy, scope) => engine.assignPolicy(normalize(subject), policy, scope),
-      removePolicy: (subject, policy) => engine.removePolicy(normalize(subject), policy),
-    },
 
     cache: {
       invalidateSubject: id => engine.invalidateSubject(id),

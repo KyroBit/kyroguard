@@ -17,47 +17,10 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
-
-const CLI = join(import.meta.dir, '..', '..', 'src', 'cli', 'index.ts')
-const DIST_CLI = join(import.meta.dir, '..', '..', 'dist', 'cli', 'index.js')
-const SRC_TESTING = join(import.meta.dir, '..', '..', 'src', 'testing', 'index.ts')
-
-/** Generous for CI; the child normally exits in well under a second. */
-const EXIT_DEADLINE_MS = 20_000
+import { join } from 'node:path'
+import { DIST_CLI, EXIT_DEADLINE_MS, SRC_TESTING, relativeImport, runCli } from './run.js'
 
 let fixture: string
-
-function relativeImport(fromDir: string, toFile: string): string {
-  const spec = relative(fromDir, toFile).split('\\').join('/')
-  return spec.startsWith('.') ? spec : `./${spec}`
-}
-
-async function runCli(
-  args: string[],
-  cwd: string,
-  entry: { runtime: string; cli: string } = { runtime: process.execPath, cli: CLI },
-): Promise<{ exitCode: number | 'timeout'; stdout: string; stderr: string }> {
-  const child = Bun.spawn([entry.runtime, entry.cli, ...args], {
-    cwd,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const exitCode = await Promise.race([
-    child.exited,
-    new Promise<'timeout'>(resolve => {
-      timer = setTimeout(() => resolve('timeout'), EXIT_DEADLINE_MS)
-    }),
-  ])
-  clearTimeout(timer)
-  if (exitCode === 'timeout') child.kill()
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ])
-  return { exitCode, stdout, stderr }
-}
 
 beforeAll(async () => {
   // realpath: macOS tmpdir sits behind the /var → /private/var symlink and

@@ -15,6 +15,7 @@ import {
   PolicyDeniedError,
   createGuard,
   qualifyPolicyName,
+  toSubjectRef,
 } from '../../src/index.js'
 import type { DecisionEvent, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
@@ -74,7 +75,7 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: app => {
-          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { resources: [], getSubject: headerSubject })
           app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
@@ -101,7 +102,7 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: app => {
-          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { resources: [], getSubject: headerSubject })
           let seen: unknown = null
           app.setErrorHandler((error, _req, reply) => {
             seen = error
@@ -147,7 +148,7 @@ describe('fastify integration specifics', () => {
           app.addHook('onSend', async (_req, reply) => {
             reply.header('x-app-hook', 'ran')
           })
-          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { resources: [], getSubject: headerSubject })
           app.get('/thing', { preHandler: domain.requirePolicy('thing.read') }, async () => ({
             ok: true,
           }))
@@ -173,7 +174,7 @@ describe('fastify integration specifics', () => {
     withHarness(
       {
         setup: async (app, rbac) => {
-          const domain = app.kyroguard.domain('admin', { getSubject: headerSubject })
+          const domain = app.kyroguard.domain('admin', { resources: [], getSubject: headerSubject })
           const subjectIdInStore = () => rbac.engine.store.getSubject()?.id ?? null
 
           await app.register(async scope => {
@@ -213,14 +214,14 @@ describe('fastify integration specifics', () => {
         domains: ['a', 'b'],
         setup: async (app, rbac) => {
           const domainA = app.kyroguard.domain('a', {
-            getSubject: req => {
+            resources: [], getSubject: req => {
               callsA += 1
               return headerSubject(req)
             },
           })
           // Domain B exists on the same app but guards nothing on this route.
           app.kyroguard.domain('b', {
-            getSubject: req => {
+            resources: [], getSubject: req => {
               callsB += 1
               return headerSubject(req)
             },
@@ -232,12 +233,12 @@ describe('fastify integration specifics', () => {
             },
             async () => ({ ok: true }),
           )
-          await rbac.admin.assignPolicy(
-            { subjectId: 'u1', domain: 'a' },
+          await rbac.engine.assignPolicy(
+            toSubjectRef({ id: 'u1', domain: 'a' }),
             qualifyPolicyName('a', 'thing.read'),
           )
-          await rbac.admin.assignPolicy(
-            { subjectId: 'u1', domain: 'a' },
+          await rbac.engine.assignPolicy(
+            toSubjectRef({ id: 'u1', domain: 'a' }),
             qualifyPolicyName('a', 'other.read'),
           )
         },
@@ -264,19 +265,19 @@ describe('fastify integration specifics', () => {
         setup: async (app, rbac) => {
           // Distinct subjects per domain — if domain B's guard ever read domain
           // A's memoized subject, its decision would carry subjectId 'ua'.
-          const domainA = app.kyroguard.domain('a', { getSubject: () => ({ id: 'ua' }) })
-          const domainB = app.kyroguard.domain('b', { getSubject: () => ({ id: 'ub' }) })
+          const domainA = app.kyroguard.domain('a', { resources: [], getSubject: () => ({ id: 'ua' }) })
+          const domainB = app.kyroguard.domain('b', { resources: [], getSubject: () => ({ id: 'ub' }) })
           app.get(
             '/both',
             { preHandler: [domainA.requirePolicy('thing.read'), domainB.requirePolicy('thing.read')] },
             async () => ({ ok: true }),
           )
-          await rbac.admin.assignPolicy(
-            { subjectId: 'ua', domain: 'a' },
+          await rbac.engine.assignPolicy(
+            toSubjectRef({ id: 'ua', domain: 'a' }),
             qualifyPolicyName('a', 'thing.read'),
           )
-          await rbac.admin.assignPolicy(
-            { subjectId: 'ub', domain: 'b' },
+          await rbac.engine.assignPolicy(
+            toSubjectRef({ id: 'ub', domain: 'b' }),
             qualifyPolicyName('b', 'thing.read'),
           )
         },
@@ -335,13 +336,13 @@ describe('fastify integration specifics', () => {
     const rbac = createGuard({ adapter: memoryAdapter(), resources: makeResources() })
     try {
       await rbac.sync(makeResources(), 'admin')
-      await rbac.admin.assignPolicy(
-        { subjectId: 'u1', domain: 'admin', tenantId: '' },
+      await rbac.engine.assignPolicy(
+        toSubjectRef({ id: 'u1', domain: 'admin', tenant_id: '' }),
         qualifyPolicyName('admin', 'thing.read'),
       )
 
       // The domains.ts pattern: no app in sight when the domain is created.
-      const admin = createDomain(rbac, 'admin', { getSubject: async req => headerSubject(req) })
+      const admin = createDomain(rbac, 'admin', { resources: [], getSubject: async req => headerSubject(req) })
 
       const app = Fastify()
       await app.register(kyroguardFastify(rbac))
@@ -388,8 +389,8 @@ describe('fastify integration specifics', () => {
       const synced = await adapter.listPolicies()
       expect(synced.map(p => p.name).toSorted()).toEqual(['admin.other.read', 'admin.thing.read'])
 
-      await rbac.admin.assignPolicy(
-        { subjectId: 'u1', domain: 'admin', tenantId: '' },
+      await rbac.engine.assignPolicy(
+        toSubjectRef({ id: 'u1', domain: 'admin', tenant_id: '' }),
         qualifyPolicyName('admin', 'thing.read'),
       )
 

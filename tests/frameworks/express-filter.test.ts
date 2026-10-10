@@ -8,7 +8,7 @@ import { describe, expect, test } from 'bun:test'
 import express from 'express'
 import { createServer } from 'node:http'
 import { kyroguardExpress } from '../../src/frameworks/express/index.js'
-import { Policy, Scope, createGuard, qualifyPolicyName } from '../../src/index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName, toSubjectRef } from '../../src/index.js'
 import type { AddressInfo } from 'node:net'
 import type { Request } from 'express'
 import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
@@ -46,8 +46,8 @@ const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 async function seed(rbac: Guard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
-    rbac.admin.assignPolicy(
-      { subjectId, domain: 'staff' },
+    rbac.engine.assignPolicy(
+      toSubjectRef({ id: subjectId, domain: 'staff' }),
       qualifyPolicyName('staff', policy),
       scope,
     )
@@ -77,7 +77,7 @@ async function withApp(fn: (h: Harness) => Promise<void>): Promise<void> {
     const integration = kyroguardExpress(rbac)
     app.use(integration.context())
     const staff = integration.domain('staff', {
-      getSubject: (req: Request): SubjectInput | null => {
+      resources: [], getSubject: (req: Request): SubjectInput | null => {
         const id = req.header('x-subject-id')
         return id ? { id } : null
       },

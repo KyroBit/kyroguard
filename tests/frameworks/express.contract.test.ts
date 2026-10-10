@@ -59,13 +59,16 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
   const integration = kyroguardExpress(rbac)
   app.use(integration.context())
 
-  // The named-domain overload's return type (ReturnType picks the last overload).
+  // Captured before any domain registers its own, so every domain in this
+  // harness owns the same policy set the guard was built with.
+  const baseResources = [...rbac.resources]
   const domains = new Map<string, ReturnType<typeof integration.domain<string>>>()
   for (const route of routes) {
     if (domains.has(route.domain)) continue
     domains.set(
       route.domain,
       integration.domain(route.domain, {
+        resources: baseResources,
         getSubject: req => {
           const counter = (req as CountedRequest).__getSubjectCalls
           if (counter) counter.count += 1
@@ -78,6 +81,22 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
   for (const route of routes) {
     const domain = domains.get(route.domain)
     if (!domain) throw new Error(`missing domain ${route.domain}`)
+
+    if (route.answers) {
+      const answers = route.answers
+      const policy = route.policy
+      const capability: RequestHandler = (req, res, next) => {
+        const answer =
+          answers === 'can'
+            ? domain.can!(req, policy!).then(can => ({ can }))
+            : domain.grantsFor!(req)
+        answer.then(body => res.status(200).json(body), next)
+      }
+      if (route.method === 'GET') app.get(route.path, capability)
+      else app.post(route.path, capability)
+      continue
+    }
+
     const guards: RequestHandler[] = (route.policy ? route.policy.split('+') : []).map(policy =>
       domain.requirePolicy(policy),
     )

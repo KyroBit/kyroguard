@@ -26,7 +26,8 @@ const app = Fastify()
 await app.register(kyroguardFastify(guard))
 
 // A domain turns a request into a user
-const teachers = app.kyroguard.domain({
+const teachers = app.kyroguard.domain('teachers', {
+  resources,
   getSubject: async req => ({ id: req.headers['x-user-id'] as string }),
 })
 

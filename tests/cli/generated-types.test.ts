@@ -1,10 +1,21 @@
+/// <reference types="bun-types" />
+/**
+ * What `kyroguard sync` writes to kyroguard.d.ts, driven through the real CLI
+ * against a fixture project. Names travel the whole pipeline — policies file →
+ * sync → domain qualification → typegen — so a mangling anywhere shows up here.
+ */
+
 import { describe, test, expect, afterAll } from 'bun:test'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
-import { generateTypes } from '../../src/cli/typegen.js'
-import type { DomainTypeInfo } from '../../src/cli/typegen.js'
+import { SRC_TESTING, jsString, relativeImport, runCli } from './run.js'
+
+interface DomainFixture {
+  name: string
+  policyNames: string[]
+}
 
 const roots: string[] = []
 
@@ -12,14 +23,56 @@ afterAll(async () => {
   await Promise.all(roots.map(root => rm(root, { recursive: true, force: true })))
 })
 
-let fileCounter = 0
+/** Builds a project declaring these domains, runs `kyroguard sync`, returns the generated file. */
+async function generate(domains: DomainFixture[]): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'kyroguard-typegen-')))
+  roots.push(dir)
 
-async function generate(domains: DomainTypeInfo[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'kyroguard-typegen-'))
-  roots.push(root)
-  const output = join(root, 'nested', `kyroguard-${++fileCounter}.d.ts`)
-  await generateTypes(domains, output)
-  return await readFile(output, 'utf8')
+  await Promise.all(
+    domains.map((domain, index) =>
+      writeFile(
+        join(dir, `policies-${index}.ts`),
+        `export const resources = [
+  {
+    type: 'resource-${index}',
+    policies: [
+${domain.policyNames
+  .map(name => `      { name: ${jsString(name)}, label: 'L', dependsOn: [], scopeOptions: [] },`)
+  .join('\n')}
+    ],
+  },
+]
+`,
+        'utf8',
+      ),
+    ),
+  )
+
+  const domainEntries = domains
+    .map((domain, index) => `    { name: ${jsString(domain.name)}, policies: './policies-${index}.ts' },`)
+    .join('\n')
+
+  await writeFile(
+    join(dir, 'kyroguard.config.ts'),
+    `import { memoryAdapter } from '${relativeImport(dir, SRC_TESTING)}'
+
+export default {
+  adapter: async () => memoryAdapter(),
+  domains: [
+${domainEntries}
+  ],
+  // A directory that does not exist: typegen must create it.
+  typegen: { output: './nested/kyroguard.d.ts' },
+}
+`,
+    'utf8',
+  )
+
+  const { exitCode, stderr } = await runCli(['sync'], dir)
+  expect(stderr).toBe('')
+  expect(exitCode).toBe(0)
+
+  return await readFile(join(dir, 'nested', 'kyroguard.d.ts'), 'utf8')
 }
 
 /** Syntactic diagnostics only — module augmentation of an unresolved package
@@ -101,7 +154,7 @@ function unionLiterals(node: ts.TypeNode): string[] {
   throw new Error(`unexpected type node kind ${ts.SyntaxKind[node.kind]}`)
 }
 
-describe('generateTypes', () => {
+describe('kyroguard sync writes kyroguard.d.ts', () => {
   test('plain names: valid TS augmenting @kyrobit/kyroguard GuardTypes', async () => {
     const text = await generate([
       { name: 'admin', policyNames: ['posts.read', 'posts.create'] },

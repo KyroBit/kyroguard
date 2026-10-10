@@ -21,7 +21,6 @@ function kyroguardExpress(guard: Guard, options?: ExpressGuardOptions): ExpressG
 | --- | --- |
 | `context()` | Middleware that opens the request context. Register once, before any guard. |
 | `domain(name, options)` | Create a named [domain instance](#domain-instance) — one per app area, like `admin` and `teachers`. |
-| `domain(options)` | Domain-less overload for single-area apps. Policy names stay unprefixed. |
 | `errorHandler()` | Error middleware that sends the denial response. Register after your routes. |
 
 ```ts
@@ -34,7 +33,8 @@ const { context, domain, errorHandler } = kyroguardExpress(guard)
 
 app.use(context()) // before any guard
 
-const teachers = domain({
+const teachers = domain('teachers', {
+  resources,
   getSubject: async req => {
     const user = await verifySession(req.headers.authorization)
     return user ? { id: user.id, tenant_id: user.schoolId } : null
@@ -51,19 +51,20 @@ app.use(errorHandler()) // after the routes
 ## Domain instance
 
 ```ts
-const teachers = domain({ getSubject })       // single-area app
-const admin = domain('admin', { getSubject }) // multi-area app
+const admin = domain('admin', { resources, getSubject })
 ```
 
 `options.getSubject(req)` returns the logged-in user, or `null` for a 401. It runs once per request per domain.
 
-`createDomain(guard, name?, options)` is also exported from the subpath — the same factory without calling `kyroguardExpress` first, for modules that only define domains (`src/kyroguard/domains.ts`). Pass the domain's `resources` there and the guard registers them for you.
+`createDomain(guard, name, options)` is also exported from the subpath — the same factory without calling `kyroguardExpress` first, for modules that only define domains (`src/kyroguard/domains.ts`). Pass the domain's `resources` there and the guard registers them for you.
 
 | Method | Description |
 | --- | --- |
-| `name` | The domain name. `''` for the domain-less overload. |
+| `name` | The domain name. |
 | `requirePolicy(policy)` | Guard middleware. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). On allow, queries against the policy's resource are narrowed by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
+| `can(req, policy)` | `Promise<boolean>` — does the subject hold this policy? Never throws: no user answers `false`, not 401. See [`can()`](/reference/core-api#can). |
+| `grantsFor(req)` | `Promise<DomainGrants>` — every policy the subject holds in this domain, to serialize to a client. See [`grantsFor()`](/reference/core-api#grantsfor). |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Mount on specific routers, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |

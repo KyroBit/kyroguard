@@ -11,7 +11,7 @@
  * at all — the reads look safe. Each integration is free to implement it however
  * its ORM allows; it is not free to skip a clause.
  *
- * Clause ids (Q1–Q7) appear in every case name so a failure names the promise
+ * Clause ids (Q1–Q9) appear in every case name so a failure names the promise
  * that broke.
  */
 
@@ -36,6 +36,11 @@ export interface IntegrationHarness {
   marked: (mark: string) => Promise<string[]>
   /** Deletes every row through the integration's write path, without naming ids. */
   deleteAll: () => Promise<void>
+  /**
+   * Creates one row through the integration's write path. `mark` names the
+   * stamped column explicitly; omitted, the grant must supply it.
+   */
+  create: (id: string, mark?: string) => Promise<void>
 }
 
 export interface IntegrationSuiteOptions {
@@ -47,7 +52,9 @@ export interface IntegrationSuiteOptions {
    * Clauses this integration cannot satisfy, with the reason. A skipped clause is
    * still reported, so a gap is a visible decision rather than a silent absence.
    */
-  unsupported?: Partial<Record<'Q1' | 'Q2' | 'Q3' | 'Q4' | 'Q5' | 'Q6' | 'Q7', string>>
+  unsupported?: Partial<
+    Record<'Q1' | 'Q2' | 'Q3' | 'Q4' | 'Q5' | 'Q6' | 'Q7' | 'Q8' | 'Q9', string>
+  >
 }
 
 export function runQueryIntegrationContractSuite(options: IntegrationSuiteOptions): void {
@@ -124,6 +131,18 @@ export function runQueryIntegrationContractSuite(options: IntegrationSuiteOption
 
       await harness.unguarded(() => harness.markAll('touched'))
       expect(await harness.marked('touched')).toEqual(['r1', 'r2', 'r3'])
+    })
+
+    clause('Q8', 'a row created under a grant carries the grant stamp', async harness => {
+      await harness.guarded(['r1'], () => harness.create('r4'))
+
+      expect(await harness.marked('stamped')).toContain('r4')
+    })
+
+    clause('Q9', 'a create naming a different value for a stamped column is refused', async harness => {
+      await expect(harness.guarded(['r1'], () => harness.create('r5', 'elsewhere'))).rejects.toThrow()
+
+      expect(await harness.rows.all()).not.toContain('r5')
     })
   })
 }

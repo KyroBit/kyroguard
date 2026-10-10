@@ -1,11 +1,14 @@
 import fp from 'fastify-plugin'
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { MisconfiguredError, GuardError } from '../../core/errors.js'
-import { qualifyPolicyName } from '../../core/types.js'
+import { normalizeSentinel, qualifyPolicyName } from '../../core/types.js'
 import type { Subject } from '../../core/types.js'
 import type { ResourceDefinition } from '../../core/policy.js'
 import type { Guard } from '../../index.js'
+import { domainGrants } from '../contract.js'
 import type { ErrorFormatter, DomainInstance, DomainOptions } from '../contract.js'
+
+export type { DomainGrants } from '../contract.js'
 
 /** Async guard compatible with Fastify's preHandler/onRequest hook slots. */
 export type FastifyGuard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>
@@ -18,8 +21,6 @@ export type FastifyDomain<P extends string = string> = DomainInstance<
 
 export interface FastifyGuardDecoration {
   domain<P extends string>(name: P, options: DomainOptions<FastifyRequest>): FastifyDomain<P>
-  /** Single-area apps don't need a domain name — policies stay unprefixed. */
-  domain(options: DomainOptions<FastifyRequest>): FastifyDomain<''>
   setSubject(subject: Subject): void
   readonly cache: Guard['cache']
 }
@@ -61,19 +62,8 @@ export function kyroguardFastify(guard: Guard, options?: FastifyGuardOptions): F
 export function createDomain<P extends string>(
   guard: Guard,
   name: P,
-  options: DomainOptions<FastifyRequest> & FastifyGuardOptions,
-): FastifyDomain<P>
-export function createDomain(
-  guard: Guard,
-  options: DomainOptions<FastifyRequest> & FastifyGuardOptions,
-): FastifyDomain<''>
-export function createDomain(
-  guard: Guard,
-  nameOrOptions: string | (DomainOptions<FastifyRequest> & FastifyGuardOptions),
-  maybeOptions?: DomainOptions<FastifyRequest> & FastifyGuardOptions,
-): FastifyDomain<string> {
-  const [name, all] =
-    typeof nameOrOptions === 'string' ? [nameOrOptions, maybeOptions!] : ['', nameOrOptions]
+  all: DomainOptions<FastifyRequest> & FastifyGuardOptions,
+): FastifyDomain<P> {
   const { formatError, ...options } = all
   return buildDomain(guard, formatError ? { formatError } : undefined, name, options)
 }
@@ -82,13 +72,8 @@ function makeDomainFactory(
   guard: Guard,
   pluginOptions: FastifyGuardOptions | undefined,
 ): FastifyGuardDecoration['domain'] {
-  return (<P extends string>(
-    nameOrOptions: P | DomainOptions<FastifyRequest>,
-    domainOptions?: DomainOptions<FastifyRequest>,
-  ) =>
-    typeof nameOrOptions === 'string'
-      ? buildDomain(guard, pluginOptions, nameOrOptions, domainOptions!)
-      : buildDomain(guard, pluginOptions, '', nameOrOptions)) as FastifyGuardDecoration['domain']
+  return (<P extends string>(name: P, domainOptions: DomainOptions<FastifyRequest>) =>
+    buildDomain(guard, pluginOptions, name, domainOptions)) as FastifyGuardDecoration['domain']
 }
 
 function buildDomain<P extends string>(
@@ -97,7 +82,7 @@ function buildDomain<P extends string>(
   name: P,
   options: DomainOptions<FastifyRequest>,
 ): FastifyDomain<P> {
-  if (options.resources) guard.registerResources(name, options.resources)
+  guard.registerResources(name, options.resources)
   const store = guard.engine.store
 
   // Memoized per (request, domain), null results included — two domains on
@@ -123,6 +108,14 @@ function buildDomain<P extends string>(
     if (subject) store.setSubject(subject)
     return subject
   }
+
+  // The domain supplies its own name, so a grant can never be filed under one
+  // domain while naming another's policy.
+  const ref = (subjectId: string, tenantId?: string) => ({
+    subjectId,
+    domain: name,
+    tenantId: normalizeSentinel(tenantId),
+  })
 
   return {
     name,
@@ -162,24 +155,31 @@ function buildDomain<P extends string>(
       return guard.engine.filterFor(subject, qualifyPolicyName(name, policy), filterResource(guard, name, policy))
     },
 
+    async can(req, policy) {
+      const subject = await resolveSubject(req)
+      return guard.engine.can(subject, qualifyPolicyName(name, policy))
+    },
+
+    async grantsFor(req) {
+      const subject = await resolveSubject(req)
+      return domainGrants(guard, name, options.resources, subject)
+    },
+
     assignGroup: (subjectId, group, opts) =>
-      guard.admin.assignGroup({ subjectId, domain: name, tenantId: opts?.tenantId }, group),
+      guard.engine.assignGroup(ref(subjectId, opts?.tenantId), group),
 
     removeGroup: (subjectId, group, opts) =>
-      guard.admin.removeGroup({ subjectId, domain: name, tenantId: opts?.tenantId }, group),
+      guard.engine.removeGroup(ref(subjectId, opts?.tenantId), group),
 
     assignPolicy: (subjectId, policy, opts) =>
-      guard.admin.assignPolicy(
-        { subjectId, domain: name, tenantId: opts?.tenantId },
+      guard.engine.assignPolicy(
+        ref(subjectId, opts?.tenantId),
         qualifyPolicyName(name, policy),
         opts?.scope,
       ),
 
     removePolicy: (subjectId, policy, opts) =>
-      guard.admin.removePolicy(
-        { subjectId, domain: name, tenantId: opts?.tenantId },
-        qualifyPolicyName(name, policy),
-      ),
+      guard.engine.removePolicy(ref(subjectId, opts?.tenantId), qualifyPolicyName(name, policy)),
   }
 }
 

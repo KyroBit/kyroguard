@@ -77,17 +77,9 @@ app.get('/blogs', { preHandler: admin.requirePolicy('blog.read') }, listBlogs)
 
 `domains.ts` stays the one shared module on purpose — the guard and its domains are process-wide singletons, exactly like your database client.
 
-## Single-area apps
+## One domain is still a domain
 
-One app means no domains. Skip the name and policies stay unprefixed:
-
-```ts
-import { resources } from './policies.js'
-
-export const site = createDomain(guard, { resources, getSubject })
-```
-
-Add domains when a second app shows up.
+There is no unnamed form. An app with a single panel names it anyway — `site`, `app`, whatever it is — and its policies live in `policies/<that name>.ts`. Naming it costs one word now and saves renaming every policy the day a second panel appears.
 
 ## Tenants
 
@@ -95,6 +87,7 @@ The second coordinate on every grant. A domain says *which app*; a tenant says *
 
 ```ts
 export const teachers = createDomain(guard, 'teachers', {
+  resources: teacherResources,
   getSubject: async req => {
     const user = await getTeacherSession(req)
     return user ? { id: user.id, tenant_id: user.schoolId } : null
@@ -110,6 +103,6 @@ await teachers.assignGroup(amina.id, 'coordinator', { tenantId: 'school-1' })
 
 Amina is a coordinator in school-1. The same request from school-2 gets a 403 — grants match domain and tenant exactly, in both directions. Omitting `tenantId` does not make a grant global; it makes a grant for requests that carry no tenant. To cover three schools, assign three times.
 
-Rows carry the tenant too: the `in-tenant` scope limits a grant to the request's school ([Scopes](/guide/scopes#the-built-in-scopes)), and a tenant can have an owner who passes every check in it ([Owners](/guide/owners)).
+Rows carry the tenant too: write a scope against your own tenant column to limit a grant to the request's school ([Scopes](/guide/scopes)), and a tenant can have an owner who passes every check in it ([Owners](/guide/owners)).
 
 To see domains, tenants, owners, and scopes run one product together, read [Building a multi-tenant SaaS](/guide/multi-tenant-saas).

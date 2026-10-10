@@ -1,4 +1,11 @@
-import { and, is, One, sql } from 'drizzle-orm'
+import {
+  and,
+  createTableRelationsHelpers,
+  extractTablesRelationalConfig,
+  is,
+  One,
+  sql,
+} from 'drizzle-orm'
 import type { Relation, SQL } from 'drizzle-orm'
 import { MisconfiguredError } from '../../core/errors.js'
 import type { GuardEngine } from '../../core/engine.js'
@@ -8,6 +15,8 @@ export interface ScopedDbOptions {
   /** The guard whose per-request store carries the activated filters. */
   guard: { engine: GuardEngine }
   resources: ResourceDefinition[]
+  /** The same schema module passed to `drizzle()`. */
+  schema: Record<string, unknown>
   /**
    * Reasons allowed to bypass filtering, e.g. `['seeders', 'jobs/sweep']`.
    * `db.unscoped(reason)` accepts only these, so every bypass is a registered decision
@@ -16,10 +25,16 @@ export interface ScopedDbOptions {
   unscoped?: readonly string[]
 }
 
+interface RelationalConfig {
+  relational: Record<string, { relations?: Record<string, Relation> }>
+  tables: Record<string, unknown>
+}
+
 interface Ctx {
   engine: GuardEngine
   tableMap: Map<unknown, ResourceDefinition>
   unscoped: ReadonlySet<string>
+  relationalConfig: RelationalConfig
 }
 
 const EXEC_METHODS = new Set(['execute', 'run', 'all', 'get'])
@@ -132,16 +147,51 @@ function wrapSelectBuilder(builder: any, ctx: Ctx): any {
 }
 
 /**
+ * The grant's insert columns are the same fact its filter reads by, so a row
+ * created with a different value would be invisible to its creator — that is a
+ * bug in the caller, not a value to overwrite silently.
+ */
+function wrapInsert(builder: any, stamp: Record<string, unknown>, resourceType: string): any {
+  return new Proxy(builder, {
+    get(target, prop) {
+      if (prop !== 'values') {
+        const value = target[prop]
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+      return (input: unknown) => {
+        const rows = Array.isArray(input) ? input : [input]
+        const stamped = rows.map(row => {
+          const next = { ...(row as Record<string, unknown>) }
+          for (const [column, value] of Object.entries(stamp)) {
+            if (next[column] !== undefined && next[column] !== value) {
+              throw new MisconfiguredError(
+                `[kyroguard] insert into "${resourceType}": the grant sets "${column}" to ` +
+                  `${JSON.stringify(value)}, but this insert passes ${JSON.stringify(next[column])} — ` +
+                  `the row would be unreadable to whoever created it.`,
+              )
+            }
+            next[column] = value
+          }
+          return next
+        })
+        return target.values(Array.isArray(input) ? stamped : stamped[0])
+      }
+    },
+  })
+}
+
+function relationalConfigFrom(schema: Record<string, unknown>): RelationalConfig {
+  const { tables } = extractTablesRelationalConfig(schema, createTableRelationsHelpers)
+  return { relational: tables as RelationalConfig['relational'], tables: schema }
+}
+
+/**
  * db.query must filter like db.select. Drizzle exposes `where` on the root config
  * and on `many` relations only, so a `one` relation pointing at a filtered table
  * cannot be narrowed — that fails loudly rather than returning disallowed rows.
  */
-function wrapQuery(query: any, raw: any, ctx: Ctx): any {
-  const relational = raw?._?.schema as
-    | Record<string, { relations?: Record<string, Relation> }>
-    | undefined
-  const tables = raw?._?.fullSchema as Record<string, unknown> | undefined
-  if (!relational || !tables) return query
+function wrapQuery(query: any, ctx: Ctx): any {
+  const { relational, tables } = ctx.relationalConfig
 
   const nameByTable = new Map<unknown, string>()
   for (const key of Object.keys(relational)) nameByTable.set(tables[key], key)
@@ -226,11 +276,22 @@ function makeDbProxy<T extends object>(raw: T, ctx: Ctx): T & { unscoped: (reaso
       }
 
       if (prop === 'query') {
-        return wrapQuery(target.query, target, ctx)
+        return wrapQuery(target.query, ctx)
       }
 
       if (prop === 'select' || prop === 'selectDistinct') {
         return (...args: unknown[]) => wrapSelectBuilder(target[prop](...args), ctx)
+      }
+
+      if (prop === 'insert') {
+        return (table: unknown, ...rest: unknown[]) => {
+          const builder = target.insert(table, ...rest)
+          const resource = ctx.tableMap.get(table)
+          if (!resource || ctx.engine.store.isInAuthz()) return builder
+          const stamp = ctx.engine.store.getActiveInsert(resource.type)
+          if (!stamp || Object.keys(stamp).length === 0) return builder
+          return wrapInsert(builder, stamp, resource.type)
+        }
       }
 
       // Writes carry the same decision as reads: without this a grant that can only
@@ -273,5 +334,6 @@ export function scopedDb<T extends object>(db: T, options: ScopedDbOptions): T &
     engine: options.guard.engine,
     tableMap,
     unscoped: new Set(options.unscoped ?? []),
+    relationalConfig: relationalConfigFrom(options.schema),
   })
 }

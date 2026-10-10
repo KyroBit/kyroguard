@@ -9,8 +9,7 @@
  *   app.use(errorHandler())   // AFTER your routes
  *
  * Guards forward typed GuardErrors to Express's error pipeline via
- * next(err): 401 unauthenticated, 403 policy/scope denied, 404 resource not
- * found.
+ * next(err): 401 unauthenticated, 403 policy not granted.
  */
 import { createGuard } from '@kyrobit/kyroguard'
 import { createDomain, kyroguardExpress } from '@kyrobit/kyroguard/express'
@@ -44,12 +43,8 @@ export const {{DOMAIN_EXPORT}} = createDomain(guard, '{{DOMAIN}}', {
 //
 // app.get('/posts/:id', {{DOMAIN_EXPORT}}.requirePolicy('posts.read'), handler)
 //
-// Scoped policies need a resource resolver so row-level scopes can run:
+// A scoped policy is guarded the same way — a scope narrows the query rather
+// than denying the request, so a row it excludes is simply not found and your
+// handler's existing "missing row" branch answers:
 //
-// app.patch(
-//   '/posts/:id',
-//   {{DOMAIN_EXPORT}}.requirePolicy('posts.update', {
-//     resource: req => ({ type: 'post', id: req.params.id }),
-//   }),
-//   handler,
-// )
+// app.patch('/posts/:id', {{DOMAIN_EXPORT}}.requirePolicy('posts.update'), handler)

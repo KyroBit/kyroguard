@@ -56,7 +56,7 @@ The instance returned by `createGuard()`.
 
 | Member | Description |
 | --- | --- |
-| `engine` | The authorization engine (`GuardEngine`). |
+| `engine` | The authorization engine (`GuardEngine`) — also [`can()`](#can) and [`grantsFor()`](#grantsfor) outside a request. |
 | `adapter` | The adapter passed to `createGuard()`. |
 | `resources` | All resource definitions: constructor ones plus everything domains registered. |
 | `registerResources(domain, resources)` | Attach a domain's resources. `createDomain` calls this for you when given `resources`. |
@@ -65,29 +65,11 @@ The instance returned by `createGuard()`.
 | `sync(domain)` | The same, qualified under a domain name. |
 | `sync(resources, domain?)` | Explicit form for multi-domain setups. Does not seed groups. |
 | `seedGroups(groups, options?)` | Seed groups alone. Replaces each group's policies exactly. `options`: `domain`, `allPolicies`. |
-| `admin.assignGroup(subject, group)` | Assign a group. |
-| `admin.removeGroup(subject, group)` | Remove a group. |
-| `admin.assignPolicy(subject, policy, scope?)` | Grant one policy directly. `scope` is a scope name; omitted or `'all'` means no restriction — every row. |
-| `admin.removePolicy(subject, policy)` | Remove a direct grant. |
 | `cache.invalidateSubject(subjectId)` | Drop one user's cached policies on every instance. |
 | `cache.clear()` | Drop all cached policies on every instance. |
 | `dispose()` | Detach bus subscriptions (shutdown, tests). |
 
-`guard.admin` is the low-level API. It takes qualified policy names — domain prefix included, like `admin.reports.view` — and an explicit domain/tenant:
-
-```ts
-interface AdminSubjectRef {
-  subjectId: string
-  domain?: string
-  tenantId?: string
-}
-
-await guard.admin.assignPolicy({ subjectId: 'zainab', domain: 'admin' }, 'admin.reports.view')
-```
-
-Domain instances offer the same methods with unqualified names. Prefer those in app code. See [Assigning access](/guide/assigning-access).
-
-**Throws** from `assignPolicy`: `UnknownPolicyError` when the policy was never synced, `UnknownScopeError` when the scope is not among the policy's `scopeOptions`. `'all'` is always accepted — it is the unrestricted marker, not a scope name.
+Assignment lives on the domain — `teachers.assignGroup(...)`, `teachers.assignPolicy(...)` — which supplies its own name and policy prefix. Domains are plain exported values, so scripts and seeders import them too. See [Assigning access](/guide/assigning-access).
 
 ## Policy
 
@@ -116,9 +98,10 @@ interface ResourceDefinition {
   type: string                     // resource name a scope applies to
   policies: Policy[]
   table?: unknown                  // Drizzle table or Mongoose model — read by scopedDb / the plugin
-  fields?: Record<string, unknown> // abstract field name → native column, for resource-generic scopes
 }
 ```
+
+A scope reaches the table through `ctx.resource.table`, so a scope written against a conventional column (`businessId`, `ownerId`) works for every resource that has one — there is nothing per-resource to declare, and nothing to forget.
 
 The registration ties policies to rows. A guard whose policy appears in `policies` activates [automatic filtering](/guide/scopes#automatic-filtering) for this resource — queries against it carry that guard's grant for the rest of the request. Queries against an unregistered resource, or on a request no guard filtered, run plainly; lists outside a guard go through [`filterFor`](#filterfor) by hand.
 
@@ -126,7 +109,8 @@ The registration ties policies to rows. A guard whose policy appears in `policie
 
 ```ts
 class Scope {
-  constructor(name: string, label: string, filter: ScopeFn)
+  constructor(name: string, label: string, match: ScopeFn)
+  constructor(name: string, label: string, definition: { match: ScopeFn; insert?: ScopeInsertFn })
 }
 
 type ScopeFn = (
@@ -135,9 +119,24 @@ type ScopeFn = (
 ) => Awaitable<ScopeResult>
 
 type ScopeResult = boolean | { where: unknown }
+
+type ScopeInsertFn = (subject: Subject, ctx: ScopeContext) => Awaitable<Record<string, unknown>>
 ```
 
-A scope is a named condition on a grant, written against your own tables. It returns `true` (no restriction), `false` (no rows — fail closed), or `{ where }` — a native fragment for your ORM. The integration ANDs that fragment into every query for the resource: reads, updates and deletes alike, so there is no separate single-row check.
+A scope is a named condition on a grant, written against your own tables.
+
+**`match`** decides which rows. It returns `true` (every row), `false` (no rows — fail closed), or `{ where }` — a native fragment for your ORM. The integration ANDs that fragment into every query for the resource: reads, updates and deletes alike, so there is no separate single-row check.
+
+**`insert`** decides what a row created under this grant must carry. It returns the columns to stamp, so the same fact is declared once and used both ways:
+
+```ts
+new Scope('in-business', 'This business', {
+  match: (subject, ctx) => ({ where: eq(transactions.businessId, subject.tenant_id) }),
+  insert: subject => ({ businessId: subject.tenant_id }),
+})
+```
+
+An insert that names one of those columns with a **different** value throws: the row would land where its creator's own `match` cannot read it. Passing the same value is fine. Two granted scopes stamping one column with different values is a `MisconfiguredError`.
 
 kyroguard ships no built-in scopes; it has no table of its own describing your rows. The name `'all'` is reserved — it marks an unrestricted grant, and the constructor rejects it. See [Scopes](/guide/scopes).
 
@@ -166,7 +165,73 @@ The list-path counterpart of `requirePolicy`: same subject resolution, same gran
 | `{ kind: 'none', reason: 'unfilterable' }` | Multiple fragments and the adapter cannot OR-combine them. Serve `[]`. |
 | `{ kind: 'where', where }` | `AND` the fragment into your query. Native to the adapter: Drizzle SQL, Prisma `WhereInput`, Mongo filter. |
 
-`filterFor` throws `UnauthenticatedError` for a missing subject — nothing else. A grant with several scopes ORs their fragments, and any scope answering `true` short-circuits to `all`. Worked examples in [Scopes](/guide/scopes#filtering-lists).
+`filterFor` throws `UnauthenticatedError` for a missing subject — nothing else. A grant with several scopes ORs their fragments, and any scope answering `true` short-circuits to `all`. Worked examples in [Scopes](/guide/scopes#when-you-want-the-condition-in-hand).
+
+## can()
+
+```ts
+// On a domain instance (Fastify, Express):
+teachers.can(req, policy): Promise<boolean>
+
+// On the engine:
+guard.engine.can(subject, qualifiedPolicy): Promise<boolean>
+```
+
+The non-throwing counterpart of `requirePolicy`, for deciding what to render. It answers the same question a guard answers — does this subject hold this policy? — as a boolean instead of a status code.
+
+| Subject | Answer |
+| --- | --- |
+| No subject | `false` — never an `UnauthenticatedError` |
+| Holds the policy | `true` |
+| Holds it under a scope | `true` — a scoped grant is a grant |
+| Does not hold it | `false` |
+| `is_super` (with `superBypass`) | `true` |
+
+```ts
+app.get('/grades/:id', { preHandler: teachers.requirePolicy('grades.view') }, async req => ({
+  grade: await loadGrade(req.params.id),
+  // The screen hides its own Delete button; the DELETE route still guards itself.
+  canDelete: await teachers.can(req, 'grades.delete'),
+}))
+```
+
+`can()` emits no [decision event](#createguard). A capability query is not an access attempt, so it never reaches the audit hook — only real guard and list decisions do.
+
+::: warning `can()` renders, it does not protect
+Deciding what to show is not deciding what to allow. Every route still needs its own `requirePolicy` — a client can call the endpoint whatever the UI drew.
+:::
+
+## grantsFor()
+
+```ts
+// On a domain instance (Fastify, Express):
+teachers.grantsFor(req): Promise<DomainGrants>
+
+// On the engine (qualified names, no domain filtering):
+guard.engine.grantsFor(subject, allPolicies?): Promise<PolicyMap>
+
+type DomainGrants = Record<string, string[] | null>
+```
+
+Every policy the subject holds in this domain, in one round trip — enough for a client to render its whole navigation without asking per button.
+
+Names come back **unqualified**, matching what you write on routes. Each value is `null` for an unrestricted grant, or the granted [scope](/guide/scopes) names:
+
+```ts
+app.get('/me/permissions', async req => teachers.grantsFor(req))
+```
+
+```json
+{ "grades.view": null, "grades.update": ["entered"] }
+```
+
+| Subject | Answer |
+| --- | --- |
+| No subject | `{}` |
+| Ordinary subject | Only this domain's grants — another domain's never appear |
+| `is_super` (with `superBypass`) | Every policy the domain defines, each `null` |
+
+A superuser holds no grant rows, so the bypass is expanded against the domain's own resources — otherwise an owner would come back as `{}` and every button would render hidden. On the engine form that universe is the `allPolicies` argument; the domain form supplies it for you.
 
 ## storeFilterFor()
 

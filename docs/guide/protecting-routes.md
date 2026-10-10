@@ -27,14 +27,15 @@ app.post('/grades', teachers.requirePolicy('grades.enter'), enterGrade)
 
 The user must hold the named policy. Otherwise the request is denied. Viewing grades and entering them are separate policies.
 
-`teachers` is the unnamed domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; named domains and their policy prefixes are covered in [Domains](/guide/domains).
+`teachers` is the domain from the [Fastify](/guide/fastify) or [Express](/guide/express) setup; how a domain prefixes its policy names is covered in [Domains](/guide/domains).
 
 ## getSubject
 
 Return the logged-in user, or `null`:
 
 ```ts
-const teachers = app.kyroguard.domain({
+const teachers = app.kyroguard.domain('teachers', {
+  resources,
   getSubject: async req => {
     const token = req.headers.authorization?.slice('Bearer '.length)
     if (!token) return null
@@ -88,3 +89,31 @@ Nothing to configure. Inside `updateGrade`, the teacher's `UPDATE … WHERE id =
 Write the handler as if the row might simply not be there — that branch now does double duty, and it is the only one you need.
 
 Which paths carry the condition depends on your ORM integration — [Drizzle](/reference/drizzle#what-gets-filtered), [Prisma](/reference/prisma#what-gets-filtered), [Mongoose](/reference/mongoose). Inserts never do: an owner or tenant column is yours to fill.
+
+## Asking without enforcing
+
+A guard answers with a status code, which is the wrong shape for a screen: you cannot render a toolbar by catching a 403. `can` asks the same question and answers `true` or `false`:
+
+```ts
+app.get('/grades/:id', { preHandler: teachers.requirePolicy('grades.view') }, async req => ({
+  grade: await loadGrade(req.params.id),
+  canDelete: await teachers.can(req, 'grades.delete'),
+}))
+```
+
+An unauthenticated request answers `false` rather than 401, and a scoped grant answers `true` — the subject holds the policy; the scope decides rows, not permission.
+
+For a whole screen, ask once instead of per button. `grantsFor` returns everything the subject holds in this domain, ready to send to a client:
+
+```ts
+app.get('/me/permissions', async req => teachers.grantsFor(req))
+// { "grades.view": null, "grades.update": ["entered"] }
+```
+
+`null` is an unrestricted grant; an array names the [scopes](/guide/scopes) it carries. An owner (`is_super`) comes back holding every policy in the domain.
+
+::: warning These render, they do not protect
+Deciding what to show is not deciding what to allow. Keep `requirePolicy` on every route — a client can call the endpoint whatever the UI drew.
+:::
+
+Full contract in the [reference](/reference/core-api#can).

@@ -3,7 +3,7 @@
  * protocol is normative in docs/reference/testing.md ("The makeApp contract").
  */
 
-import { Policy, Scope, createGuard, qualifyPolicyName } from '../index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName, toSubjectRef } from '../index.js'
 import { memoryAdapter } from './memory-adapter.js'
 import type { Guard, ResourceDefinition } from '../index.js'
 import type { SuiteTestApi } from './adapter-suite.js'
@@ -14,6 +14,11 @@ export interface RouteSpec {
   domain: string
   policy?: string
   getSubjectFrom?: 'header'
+  /**
+   * The harness must NOT install requirePolicy on these routes: 'can' answers
+   * `{ can }` for `policy`, 'grants' answers the grant map, both always 200.
+   */
+  answers?: 'can' | 'grants'
 }
 
 export interface TestAppResponse {
@@ -107,8 +112,8 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     opts: { domain?: string; tenantId?: string; scope?: string } = {},
   ): Promise<void> => {
     const domain = opts.domain ?? 'admin'
-    return guard.admin.assignPolicy(
-      { subjectId, domain, tenantId: opts.tenantId },
+    return guard.engine.assignPolicy(
+      toSubjectRef({ id: subjectId, domain, tenant_id: opts.tenantId }),
       qualifyPolicyName(domain, policy),
       opts.scope,
     )
@@ -269,14 +274,119 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           const denied = await get(app, '/thing', asUser('u1'))
           expect(denied.status).toBe(403)
 
-          await guard.admin.assignGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
+          await guard.engine.assignGroup(toSubjectRef({ id: 'u1', domain: 'admin' }), 'editors')
           const allowed = await get(app, '/thing', asUser('u1'))
           expect(allowed.status).toBe(200)
 
-          await guard.admin.removeGroup({ subjectId: 'u1', domain: 'admin' }, 'editors')
+          await guard.engine.removeGroup(toSubjectRef({ id: 'u1', domain: 'admin' }), 'editors')
           const revoked = await get(app, '/thing', asUser('u1'))
           expect(revoked.status).toBe(403)
           expect(revoked.body.code).toBe('ACCESS_DENIED')
+        },
+      ))
+
+    const canRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
+      route({ path: '/can/thing', answers: 'can', ...over })
+
+    const grantsRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
+      route({ path: '/grants', answers: 'grants', policy: undefined, ...over })
+
+    it('14: can() answers false for an unauthenticated request — it never 401s', () =>
+      withApp({ routes: [canRoute()] }, async app => {
+        const res = await get(app, '/can/thing')
+        expect(res.status).toBe(200)
+        expect(res.body.can).toBe(false)
+      }))
+
+    it('15: can() answers false for an authenticated subject without the grant', () =>
+      withApp({ routes: [canRoute()] }, async app => {
+        const res = await get(app, '/can/thing', asUser('u1'))
+        expect(res.status).toBe(200)
+        expect(res.body.can).toBe(false)
+      }))
+
+    it('16: can() answers true for a granted subject', () =>
+      withApp(
+        { routes: [canRoute()], seed: guard => grant(guard, 'u1', 'thing.read') },
+        async app => {
+          const res = await get(app, '/can/thing', asUser('u1'))
+          expect(res.body.can).toBe(true)
+        },
+      ))
+
+    it('17: can() answers true for a scoped grant — a scoped grant is still a grant', () =>
+      withApp(
+        {
+          routes: [canRoute({ path: '/can/docs', policy: 'docs.read' })],
+          seed: guard => grant(guard, 'u1', 'docs.read', { scope: 'none' }),
+        },
+        async app => {
+          const res = await get(app, '/can/docs', asUser('u1'))
+          expect(res.body.can).toBe(true)
+        },
+      ))
+
+    it('18: can() answers true for is_super without any grants', () =>
+      withApp({ routes: [canRoute()] }, async app => {
+        const res = await get(app, '/can/thing', asUser('root', { 'x-super': '1' }))
+        expect(res.body.can).toBe(true)
+      }))
+
+    it('19: can() respects domain isolation — an admin grant does not answer for branch', () =>
+      withApp(
+        {
+          domains: ['admin', 'branch'],
+          routes: [canRoute({ domain: 'branch', path: '/can/branch-thing' })],
+          seed: guard => grant(guard, 'u1', 'thing.read', { domain: 'admin' }),
+        },
+        async app => {
+          const res = await get(app, '/can/branch-thing', asUser('u1'))
+          expect(res.body.can).toBe(false)
+        },
+      ))
+
+    it('20: grantsFor() answers unqualified policy names, null for unrestricted and the scope names otherwise', () =>
+      withApp(
+        {
+          routes: [grantsRoute()],
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read')
+            await grant(guard, 'u1', 'docs.read', { scope: 'none' })
+          },
+        },
+        async app => {
+          const res = await get(app, '/grants', asUser('u1'))
+          expect(res.status).toBe(200)
+          expect(res.body).toEqual({ 'thing.read': null, 'docs.read': ['none'] })
+        },
+      ))
+
+    it('21: grantsFor() answers an empty object for an unauthenticated request', () =>
+      withApp({ routes: [grantsRoute()] }, async app => {
+        const res = await get(app, '/grants')
+        expect(res.status).toBe(200)
+        expect(res.body).toEqual({})
+      }))
+
+    it('22: grantsFor() answers every policy in the domain, unrestricted, for is_super', () =>
+      withApp({ routes: [grantsRoute()] }, async app => {
+        const res = await get(app, '/grants', asUser('root', { 'x-super': '1' }))
+        expect(res.body).toEqual({ 'thing.read': null, 'other.read': null, 'docs.read': null })
+      }))
+
+    it('23: grantsFor() answers only this domain, never another domain’s grants', () =>
+      withApp(
+        {
+          domains: ['admin', 'branch'],
+          routes: [grantsRoute({ domain: 'branch', path: '/grants/branch' })],
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read', { domain: 'admin' })
+            await grant(guard, 'u1', 'other.read', { domain: 'branch' })
+          },
+        },
+        async app => {
+          const res = await get(app, '/grants/branch', asUser('u1'))
+          expect(res.body).toEqual({ 'other.read': null })
         },
       ))
   })

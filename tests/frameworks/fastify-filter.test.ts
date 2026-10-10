@@ -10,7 +10,7 @@ import { describe, expect, test } from 'bun:test'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { kyroguardFastify } from '../../src/frameworks/fastify/index.js'
-import { Policy, Scope, createGuard, qualifyPolicyName } from '../../src/index.js'
+import { Policy, Scope, createGuard, qualifyPolicyName, toSubjectRef } from '../../src/index.js'
 import type { FilterResult, Guard, ResourceDefinition, SubjectInput } from '../../src/index.js'
 import { memoryAdapter } from '../../src/testing/index.js'
 import type { MemoryWhere } from '../../src/testing/index.js'
@@ -46,8 +46,8 @@ const rows = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
 async function seed(rbac: Guard): Promise<void> {
   await rbac.sync(makeResources(), 'staff')
   const grant = (subjectId: string, scope: string, policy = 'sales.view'): Promise<void> =>
-    rbac.admin.assignPolicy(
-      { subjectId, domain: 'staff' },
+    rbac.engine.assignPolicy(
+      toSubjectRef({ id: subjectId, domain: 'staff' }),
       qualifyPolicyName('staff', policy),
       scope,
     )
@@ -72,7 +72,7 @@ async function withApp(fn: (app: FastifyInstance) => Promise<void>): Promise<voi
     const app = Fastify()
     await app.register(kyroguardFastify(rbac))
     const staff = app.kyroguard.domain('staff', {
-      getSubject: (req): SubjectInput | null => {
+      resources: [], getSubject: (req): SubjectInput | null => {
         const id = req.headers['x-subject-id']
         return typeof id === 'string' && id !== '' ? { id } : null
       },
@@ -170,7 +170,7 @@ describe('fastify domain.filterFor', () => {
     try {
       const app = Fastify()
       await app.register(kyroguardFastify(rbac))
-      const staff = app.kyroguard.domain('staff', { getSubject: () => ({ id: 'u1' }) })
+      const staff = app.kyroguard.domain('staff', { resources: [], getSubject: () => ({ id: 'u1' }) })
       app.get('/orphan', async req => render(await staff.filterFor!(req, 'sales.missing')))
       await app.ready()
       try {

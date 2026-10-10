@@ -39,7 +39,8 @@ const app = Fastify()
 await app.register(kyroguardFastify(guard))
 
 // Demo auth: the user id comes from a header
-const teachers = app.kyroguard.domain({
+const teachers = app.kyroguard.domain('teachers', {
+  resources,
   getSubject: async req => {
     const id = req.headers['x-user-id']
     return typeof id === 'string' ? { id } : null

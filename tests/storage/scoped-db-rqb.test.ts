@@ -14,7 +14,7 @@ import { pgTable, text } from 'drizzle-orm/pg-core'
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
 
-import { createGuard, MisconfiguredError, Policy, Scope } from '../../src/index.js'
+import { createGuard, MisconfiguredError, Policy, Scope, toSubjectRef } from '../../src/index.js'
 import type { GuardEngine, ResourceDefinition, Subject } from '../../src/index.js'
 import { drizzleAdapter, scopedDb } from '../../src/storage/drizzle/index.js'
 import * as pgSchema from '../../src/storage/drizzle/schema/pg.js'
@@ -116,7 +116,7 @@ async function makeSetup(options?: { registerAuthors?: boolean }) {
   const rbac = createGuard({ adapter, resources, cache: false })
   cleanups.push(async () => rbac.dispose())
   await rbac.sync()
-  await rbac.admin.assignPolicy({ subjectId: 'writer' }, 'articles.read', 'own-articles')
+  await rbac.engine.assignPolicy(toSubjectRef({ id: 'writer' }), 'articles.read', 'own-articles')
 
   await raw.insert(authors).values([
     { id: 'writer', name: 'Writer' },
@@ -129,7 +129,12 @@ async function makeSetup(options?: { registerAuthors?: boolean }) {
   ])
   await raw.insert(comments).values([{ id: 'c1', body: 'nice', article_id: 'a9' }])
 
-  const db = scopedDb(raw, { guard: { engine: rbac.engine }, resources, unscoped: ['test-bypass'] })
+  const db = scopedDb(raw, {
+    guard: { engine: rbac.engine },
+    resources,
+    unscoped: ['test-bypass'],
+    schema,
+  })
   return { raw, db, engine: rbac.engine, articleResource }
 }
 
@@ -224,5 +229,16 @@ describe('scopedDb — db.query carries the same filter as db.select', () => {
     })
 
     expect(rows.map((row: any) => row.id).sort()).toEqual(['a1', 'a2', 'a9'])
+  })
+
+  test('m: a db with no relational config at all still exposes db.query', async () => {
+    const { engine, articleResource } = await makeSetup()
+    const client = new PGlite()
+    cleanups.push(() => client.close())
+
+    const bare = drizzle(client)
+    const db = scopedDb(bare, { guard: { engine }, resources: [articleResource], schema })
+
+    expect((db as any).query).toEqual({})
   })
 })

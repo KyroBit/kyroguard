@@ -18,6 +18,17 @@ new Scope(name, label, (subject, ctx) => true | false | { where })
 | `false` | no rows — the query is emptied |
 | `{ where }` | a native condition for your ORM, ANDed into the query |
 
+A scope that also governs creation takes the options form, declaring the same fact once for reads and once for writes:
+
+```ts
+new Scope('in-business', 'This business', {
+  match: (subject, ctx) => ({ where: eq(transactions.businessId, subject.tenant_id) }),
+  insert: subject => ({ businessId: subject.tenant_id }),
+})
+```
+
+`insert` fills those columns on rows created under the grant, so a handler never repeats them. An insert naming one with a different value throws rather than creating a row its own author could not read.
+
 Here are those three rules, for real.
 
 ## Rule 1: "A teacher updates only the grades they entered. The coordinator updates any grade in the school."
