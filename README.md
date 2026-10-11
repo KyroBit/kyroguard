@@ -69,8 +69,8 @@ schema and an error encyclopedia.
 | Frameworks | Fastify ^5 · Express ^4.18 \|\| ^5 |
 | Storage | Drizzle ≥ 0.36 (pg/mysql/sqlite) · Prisma ^5 \|\| ^6 · Mongoose ^8 |
 
-All framework and ORM packages are optional peer dependencies — only what you
-import is required.
+kyroguard installs none of them. Add the framework and ORM you use; only what you
+import is loaded.
 
 ## Development
 

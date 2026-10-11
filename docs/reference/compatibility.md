@@ -12,8 +12,9 @@ Supported runtimes and version ranges for `@kyrobit/kyroguard` v1.
 | drizzle-orm | `>=0.36.0 <2` | PostgreSQL, MySQL and SQLite. |
 | @prisma/client | `^5.0.0 \|\| ^6.0.0` | Any client generated from the six kyroguard models. |
 | mongoose | `^8.0.0` | Multiple connections per process are supported. |
+| jiti | `^2.4.0` | Only for the CLI under Node, to load TypeScript config. Bun needs none. |
 
-All framework and ORM packages are optional peer dependencies. Install only what you use. Each integration lives at its own subpath, so importing `@kyrobit/kyroguard/fastify` never loads Express or an ORM.
+kyroguard installs none of these. Add the ones you use. Each integration lives at its own subpath, so importing `@kyrobit/kyroguard/fastify` never loads Express or an ORM.
 
 ## ESM only
 
