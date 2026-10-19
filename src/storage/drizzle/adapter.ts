@@ -453,5 +453,34 @@ export function drizzleAdapter(db: unknown, options: DrizzleAdapterOptions): Sto
         scope: (r.scope as string | null) ?? null,
       }))
     },
+
+    async getSubjectGroups(ref: SubjectRef): Promise<GroupRecord[]> {
+      const rows = await client
+        .select({
+          id: t.policyGroups.id,
+          name: t.policyGroups.name,
+          label: t.policyGroups.label,
+          isSystem: t.policyGroups.isSystem,
+          isActive: t.policyGroups.isActive,
+        })
+        .from(t.userPolicyGroups)
+        .innerJoin(t.policyGroups, eq(t.policyGroups.id, t.userPolicyGroups.policyGroupId))
+        .where(
+          and(
+            eq(t.userPolicyGroups.subjectId, ref.subjectId),
+            eq(t.userPolicyGroups.domain, ref.domain),
+            eq(t.userPolicyGroups.tenantId, ref.tenantId),
+          ),
+        )
+        .orderBy(asc(t.policyGroups.name))
+
+      return rows.map((r: any) => ({
+        id: String(r.id),
+        name: String(r.name),
+        label: String(r.label),
+        isSystem: Boolean(r.isSystem),
+        isActive: Boolean(r.isActive),
+      }))
+    },
   }
 }

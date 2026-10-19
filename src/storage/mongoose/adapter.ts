@@ -20,7 +20,7 @@ function isDuplicateKeyError(error: unknown): boolean {
   )
 }
 
-function byName(a: PolicyGrant, b: PolicyGrant): number {
+function byName(a: { name: string }, b: { name: string }): number {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
 }
 
@@ -283,6 +283,27 @@ export function mongooseAdapter(connection: Connection): StorageAdapter {
       }
 
       return [...groupGrants.sort(byName), ...directGrants.sort(byName)]
+    },
+
+    async getSubjectGroups(ref: SubjectRef): Promise<GroupRecord[]> {
+      const assignments = await models.userPolicyGroup
+        .find({ subjectId: ref.subjectId, domain: ref.domain, tenantId: ref.tenantId })
+        .lean()
+      if (assignments.length === 0) return []
+
+      const docs = await models.policyGroup
+        .find({ _id: { $in: assignments.map(assignment => assignment.policyGroupId) } })
+        .lean()
+
+      return docs
+        .map(doc => ({
+          id: doc._id.toString(),
+          name: doc.name,
+          label: doc.label ?? '',
+          isSystem: doc.isSystem ?? false,
+          isActive: doc.isActive ?? true,
+        }))
+        .sort(byName)
     },
 
     listFilters: {

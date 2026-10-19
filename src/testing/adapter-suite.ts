@@ -615,5 +615,76 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(names(await adapter.getSubjectPolicies(ref('u1')))).toEqual(['a.read', 'b.read'])
         }))
     })
+
+    describe('S21 — membership is readable, not only writable', () => {
+      const seedEditor = async (adapter: StorageAdapter): Promise<void> => {
+        await seedPolicies(adapter, ['a.read'])
+        await seedGroup(adapter, 'editor', [{ policyName: 'a.read', scope: null }])
+      }
+
+      it('S21: names the groups a subject was assigned', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1'), 'editor')
+          expect(names(await adapter.getSubjectGroups(ref('u1')))).toEqual(['editor'])
+        }))
+
+      it('S21: names nothing for a subject that belongs to no group', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          expect(await adapter.getSubjectGroups(ref('u1'))).toEqual([])
+        }))
+
+      it('S21: hands back the whole record, so a caller can tell a live group from a dead one', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1'), 'editor')
+          const [record] = await adapter.getSubjectGroups(ref('u1'))
+          expect(record).toMatchObject({ name: 'editor', label: 'editor', isActive: true })
+          expect(typeof record?.id).toBe('string')
+        }))
+
+      it('S21: keeps a membership visible after its group is deactivated, because belonging is not granting', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1'), 'editor')
+          await adapter.upsertGroup({ name: 'editor', label: 'editor', isActive: false })
+
+          expect(await adapter.getSubjectPolicies(ref('u1'))).toEqual([])
+          const [record] = await adapter.getSubjectGroups(ref('u1'))
+          expect(record).toMatchObject({ name: 'editor', isActive: false })
+        }))
+
+      it('S21: matches the exact tuple only, so one tenant never sees another’s membership', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1', 'branch', 'b1'), 'editor')
+
+          expect(await adapter.getSubjectGroups(ref('u1', 'branch', 'b2'))).toEqual([])
+          expect(await adapter.getSubjectGroups(ref('u1', 'branch', 'b1'))).toHaveLength(1)
+        }))
+
+      it('S21: stops naming a group once the membership is removed', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1'), 'editor')
+          await adapter.removeGroup(ref('u1'), 'editor')
+          expect(await adapter.getSubjectGroups(ref('u1'))).toEqual([])
+        }))
+
+      it('S21: names every group a subject holds, in a settled order', () =>
+        withAdapter(async adapter => {
+          await seedPolicies(adapter, ['a.read'])
+          for (const group of ['reviewer', 'editor', 'admin']) {
+            await seedGroup(adapter, group, [{ policyName: 'a.read', scope: null }])
+            await adapter.assignGroup(ref('u1'), group)
+          }
+          expect(names(await adapter.getSubjectGroups(ref('u1')))).toEqual([
+            'admin',
+            'editor',
+            'reviewer',
+          ])
+        }))
+    })
   })
 }

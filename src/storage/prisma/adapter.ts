@@ -463,5 +463,33 @@ export function prismaAdapter(client: PrismaClientLike): StorageAdapter {
       // S4: no dedup; group grants first, then direct, each sorted by name.
       return [...groupGrants.sort(byName), ...directGrants.sort(byName)]
     },
+
+    async getSubjectGroups(ref: SubjectRef): Promise<GroupRecord[]> {
+      const rows: Array<{
+        policyGroup: {
+          id: unknown
+          name: unknown
+          label: unknown
+          isSystem: unknown
+          isActive: unknown
+        }
+      }> = await client.kyroguardUserPolicyGroup.findMany({
+        where: { subjectId: ref.subjectId, domain: ref.domain, tenantId: ref.tenantId },
+        orderBy: { policyGroup: { name: 'asc' } },
+        select: {
+          policyGroup: {
+            select: { id: true, name: true, label: true, isSystem: true, isActive: true },
+          },
+        },
+      })
+
+      return rows.map(row => ({
+        id: String(row.policyGroup.id),
+        name: String(row.policyGroup.name),
+        label: String(row.policyGroup.label),
+        isSystem: Boolean(row.policyGroup.isSystem),
+        isActive: Boolean(row.policyGroup.isActive),
+      }))
+    },
   }
 }

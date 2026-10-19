@@ -178,6 +178,8 @@ export interface StorageAdapter {
   /** Group + direct grants, both strict-matched on (domain, tenantId) (S2, S3). */
   getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]>
 
+  getSubjectGroups(ref: SubjectRef): Promise<GroupRecord[]>
+
   /** Fragment composition — absent when the backend cannot combine scope fragments. */
   listFilters?: ListFilters
 }

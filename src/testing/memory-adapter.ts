@@ -10,7 +10,12 @@
 
 import { UnknownPolicyError } from '../index.js'
 import type { SubjectRef } from '../index.js'
-import type { GroupPolicyEntry, PolicyGrant, StorageAdapter } from '../storage/contract.js'
+import type {
+  GroupPolicyEntry,
+  GroupRecord,
+  PolicyGrant,
+  StorageAdapter,
+} from '../storage/contract.js'
 
 /** The memory adapter's native list-filter fragment: a row predicate. */
 export type MemoryWhere = (row: { id: string }) => boolean
@@ -70,7 +75,7 @@ export function memoryAdapter(): StorageAdapter {
     return group
   }
 
-  const byName = (a: PolicyGrant, b: PolicyGrant): number =>
+  const byName = (a: { name: string }, b: { name: string }): number =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0
 
   return {
@@ -261,6 +266,16 @@ export function memoryAdapter(): StorageAdapter {
         .sort(byName)
 
       return [...groupGrants, ...directGrants]
+    },
+
+    async getSubjectGroups(ref) {
+      const held: GroupRecord[] = []
+      for (const assignment of groupAssignments) {
+        if (!sameTuple(assignment, ref)) continue
+        const group = groups.get(assignment.groupName)
+        if (group) held.push({ ...group })
+      }
+      return held.sort(byName)
     },
 
     listFilters: {
