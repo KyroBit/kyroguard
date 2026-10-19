@@ -160,10 +160,13 @@ function buildDomain<P extends string>(
       return guard.engine.can(subject, qualifyPolicyName(name, policy))
     },
 
-    async grantsFor(req) {
-      const subject = await resolveSubject(req)
-      return domainGrants(guard, name, options.resources, subject)
-    },
+    policiesOf: (subjectId, opts) =>
+      domainGrants(guard, name, options.resources, {
+        id: subjectId,
+        domain: name,
+        tenant_id: opts?.tenantId,
+        is_super: opts?.isSuper,
+      }),
 
     groupsOf: (subjectId, opts) => guard.engine.groupsOf(ref(subjectId, opts?.tenantId)),
 

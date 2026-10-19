@@ -318,7 +318,7 @@ export class GuardEngine {
   }
 
   /** Without `allPolicies` a superuser answers empty, which reads as "may do nothing". */
-  async grantsFor(
+  async policiesOf(
     subject: Subject | null | undefined,
     allPolicies?: readonly QualifiedPolicyName[],
   ): Promise<PolicyMap> {

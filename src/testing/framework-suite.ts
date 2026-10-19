@@ -15,12 +15,14 @@ export interface RouteSpec {
   policy?: string
   getSubjectFrom?: 'header'
   /**
-   * The harness must NOT install requirePolicy on these routes: 'can' answers
-   * `{ can }` for `policy`, 'grants' answers the grant map, and 'groups' answers
-   * `{ groups }`, the names of the groups held by the member named in the
-   * `x-member-id` header (tenant `x-member-tenant`). All always 200.
+   * The harness must NOT install requirePolicy on these routes. 'can' answers
+   * `{ can }` for `policy`. 'policies' and 'groups' ask about the user id in
+   * `x-member-id`, with `x-member-tenant` as its tenant and `x-member-super: 1`
+   * marking a superuser: 'policies' answers the policy map, 'groups' answers
+   * `{ groups }` by name.
+   * All always 200.
    */
-  answers?: 'can' | 'grants' | 'groups'
+  answers?: 'can' | 'policies' | 'groups'
 }
 
 export interface TestAppResponse {
@@ -290,9 +292,6 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
     const canRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
       route({ path: '/can/thing', answers: 'can', ...over })
 
-    const grantsRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
-      route({ path: '/grants', answers: 'grants', policy: undefined, ...over })
-
     it('14: can() answers false for an unauthenticated request — it never 401s', () =>
       withApp({ routes: [canRoute()] }, async app => {
         const res = await get(app, '/can/thing')
@@ -347,57 +346,19 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('20: grantsFor() answers unqualified policy names, null for unrestricted and the scope names otherwise', () =>
-      withApp(
-        {
-          routes: [grantsRoute()],
-          seed: async guard => {
-            await grant(guard, 'u1', 'thing.read')
-            await grant(guard, 'u1', 'docs.read', { scope: 'none' })
-          },
-        },
-        async app => {
-          const res = await get(app, '/grants', asUser('u1'))
-          expect(res.status).toBe(200)
-          expect(res.body).toEqual({ 'thing.read': null, 'docs.read': ['none'] })
-        },
-      ))
-
-    it('21: grantsFor() answers an empty object for an unauthenticated request', () =>
-      withApp({ routes: [grantsRoute()] }, async app => {
-        const res = await get(app, '/grants')
-        expect(res.status).toBe(200)
-        expect(res.body).toEqual({})
-      }))
-
-    it('22: grantsFor() answers every policy in the domain, unrestricted, for is_super', () =>
-      withApp({ routes: [grantsRoute()] }, async app => {
-        const res = await get(app, '/grants', asUser('root', { 'x-super': '1' }))
-        expect(res.body).toEqual({ 'thing.read': null, 'other.read': null, 'docs.read': null })
-      }))
-
-    it('23: grantsFor() answers only this domain, never another domain’s grants', () =>
-      withApp(
-        {
-          domains: ['admin', 'branch'],
-          routes: [grantsRoute({ domain: 'branch', path: '/grants/branch' })],
-          seed: async guard => {
-            await grant(guard, 'u1', 'thing.read', { domain: 'admin' })
-            await grant(guard, 'u1', 'other.read', { domain: 'branch' })
-          },
-        },
-        async app => {
-          const res = await get(app, '/grants/branch', asUser('u1'))
-          expect(res.body).toEqual({ 'other.read': null })
-        },
-      ))
+    const policiesRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
+      route({ path: '/policies', answers: 'policies', policy: undefined, ...over })
 
     const groupsRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
       route({ path: '/groups', answers: 'groups', policy: undefined, ...over })
 
-    const member = (id: string, tenantId?: string): Record<string, string> => ({
+    const member = (
+      id: string,
+      opts: { tenantId?: string; isSuper?: boolean } = {},
+    ): Record<string, string> => ({
       'x-member-id': id,
-      ...(tenantId ? { 'x-member-tenant': tenantId } : {}),
+      ...(opts.tenantId ? { 'x-member-tenant': opts.tenantId } : {}),
+      ...(opts.isSuper ? { 'x-member-super': '1' } : {}),
     })
 
     const seedEditors = async (guard: Guard): Promise<void> => {
@@ -407,7 +368,77 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
       )
     }
 
-    it('24: groupsOf() names the groups a member belongs to in this domain', () =>
+    it('20: policiesOf() answers short policy names, null for unrestricted and the scope names otherwise', () =>
+      withApp(
+        {
+          routes: [policiesRoute()],
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read')
+            await grant(guard, 'u1', 'docs.read', { scope: 'none' })
+          },
+        },
+        async app => {
+          const res = await get(app, '/policies', member('u1'))
+          expect(res.status).toBe(200)
+          expect(res.body).toEqual({ 'thing.read': null, 'docs.read': ['none'] })
+        },
+      ))
+
+    it('21: policiesOf() answers nothing for a user who holds nothing', () =>
+      withApp({ routes: [policiesRoute()] }, async app => {
+        const res = await get(app, '/policies', member('u1'))
+        expect(res.body).toEqual({})
+      }))
+
+    it('22: policiesOf() answers every policy in the domain, unrestricted, for a superuser', () =>
+      withApp({ routes: [policiesRoute()] }, async app => {
+        const res = await get(app, '/policies', member('root', { isSuper: true }))
+        expect(res.body).toEqual({ 'thing.read': null, 'other.read': null, 'docs.read': null })
+      }))
+
+    it('23: policiesOf() answers only this domain, never another domain’s policies', () =>
+      withApp(
+        {
+          domains: ['admin', 'branch'],
+          routes: [policiesRoute({ domain: 'branch', path: '/policies/branch' })],
+          seed: async guard => {
+            await grant(guard, 'u1', 'thing.read', { domain: 'admin' })
+            await grant(guard, 'u1', 'other.read', { domain: 'branch' })
+          },
+        },
+        async app => {
+          const res = await get(app, '/policies/branch', member('u1'))
+          expect(res.body).toEqual({ 'other.read': null })
+        },
+      ))
+
+    it('24: policiesOf() matches the tenant, so one tenant never sees another’s policies', () =>
+      withApp(
+        { routes: [policiesRoute()], seed: guard => grant(guard, 'u1', 'thing.read', { tenantId: 'b1' }) },
+        async app => {
+          expect((await get(app, '/policies', member('u1', { tenantId: 'b2' }))).body).toEqual({})
+          expect((await get(app, '/policies', member('u1', { tenantId: 'b1' }))).body).toEqual({
+            'thing.read': null,
+          })
+        },
+      ))
+
+    it('25: policiesOf() answers what the user holds through a group', () =>
+      withApp(
+        {
+          routes: [policiesRoute()],
+          seed: async guard => {
+            await seedEditors(guard)
+            await guard.engine.assignGroup(toSubjectRef({ id: 'u1', domain: 'admin' }), 'editors')
+          },
+        },
+        async app => {
+          const res = await get(app, '/policies', member('u1'))
+          expect(res.body).toEqual({ 'thing.read': null })
+        },
+      ))
+
+    it('26: groupsOf() names the groups a user belongs to in this domain', () =>
       withApp(
         {
           routes: [groupsRoute()],
@@ -423,13 +454,13 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('25: groupsOf() names nothing for someone who belongs to no group', () =>
+    it('27: groupsOf() names nothing for a user who belongs to no group', () =>
       withApp({ routes: [groupsRoute()], seed: seedEditors }, async app => {
         const res = await get(app, '/groups', member('u1'))
         expect(res.body).toEqual({ groups: [] })
       }))
 
-    it('26: groupsOf() answers only this domain, never another domain’s membership', () =>
+    it('28: groupsOf() answers only this domain, never another domain’s membership', () =>
       withApp(
         {
           domains: ['admin', 'branch'],
@@ -445,7 +476,7 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         },
       ))
 
-    it('27: groupsOf() matches the tenant, so one tenant never sees another’s membership', () =>
+    it('29: groupsOf() matches the tenant, so one tenant never sees another’s membership', () =>
       withApp(
         {
           routes: [groupsRoute()],
@@ -458,8 +489,10 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
           },
         },
         async app => {
-          expect((await get(app, '/groups', member('u1', 'b2'))).body).toEqual({ groups: [] })
-          expect((await get(app, '/groups', member('u1', 'b1'))).body).toEqual({
+          expect((await get(app, '/groups', member('u1', { tenantId: 'b2' }))).body).toEqual({
+            groups: [],
+          })
+          expect((await get(app, '/groups', member('u1', { tenantId: 'b1' }))).body).toEqual({
             groups: ['editors'],
           })
         },

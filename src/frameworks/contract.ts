@@ -32,7 +32,7 @@ export async function domainGrants(
   const universe = resources.flatMap(resource =>
     resource.policies.map(policy => qualifyPolicyName(domain, policy.name)),
   )
-  const map = await guard.engine.grantsFor(subject, universe)
+  const map = await guard.engine.policiesOf(subject, universe)
 
   const prefix = `${domain}.`
   const grants: DomainGrants = {}
@@ -75,10 +75,13 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
    */
   can?(req: TReq, policy: DomainPolicyName<P>): Promise<boolean>
 
-  /** Every policy the subject holds in this domain, unqualified. */
-  grantsFor?(req: TReq): Promise<DomainGrants>
 
-  /** The groups a subject belongs to in this domain and tenant, inactive ones included. */
+  /** Every policy the subject holds in this domain, by its short name. A superuser holds them all. */
+  policiesOf(
+    subjectId: string,
+    options?: { tenantId?: string; isSuper?: boolean },
+  ): Promise<DomainGrants>
+  /** The groups the subject belongs to in this domain, inactive ones included. */
   groupsOf(subjectId: string, options?: { tenantId?: string }): Promise<GroupRecord[]>
   assignGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   removeGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>

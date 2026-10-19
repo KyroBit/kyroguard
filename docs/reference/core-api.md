@@ -56,7 +56,7 @@ The instance returned by `createGuard()`.
 
 | Member | Description |
 | --- | --- |
-| `engine` | The authorization engine (`GuardEngine`) — also [`can()`](#can) and [`grantsFor()`](#grantsfor) outside a request. |
+| `engine` | The authorization engine (`GuardEngine`) — also [`can()`](#can) and [`policiesOf()`](#policiesof) outside a request. |
 | `adapter` | The adapter passed to `createGuard()`. |
 | `resources` | All resource definitions: constructor ones plus everything domains registered. |
 | `registerResources(domain, resources)` | Attach a domain's resources. `createDomain` calls this for you when given `resources`. |
@@ -201,14 +201,14 @@ app.get('/grades/:id', { preHandler: teachers.requirePolicy('grades.view') }, as
 Deciding what to show is not deciding what to allow. Every route still needs its own `requirePolicy` — a client can call the endpoint whatever the UI drew.
 :::
 
-## grantsFor()
+## policiesOf()
 
 ```ts
 // On a domain instance (Fastify, Express):
-teachers.grantsFor(req): Promise<DomainGrants>
+teachers.policiesOf(subjectId, { tenantId?, isSuper? }): Promise<DomainGrants>
 
 // On the engine (qualified names, no domain filtering):
-guard.engine.grantsFor(subject, allPolicies?): Promise<PolicyMap>
+guard.engine.policiesOf(subject, allPolicies?): Promise<PolicyMap>
 
 type DomainGrants = Record<string, string[] | null>
 ```
@@ -218,7 +218,9 @@ Every policy the subject holds in this domain, in one round trip — enough for 
 Names come back **unqualified**, matching what you write on routes. Each value is `null` for an unrestricted grant, or the granted [scope](/guide/scopes) names:
 
 ```ts
-app.get('/me/permissions', async req => teachers.grantsFor(req))
+app.get('/me/permissions', async req =>
+  teachers.policiesOf(req.user.id, { tenantId: req.user.schoolId }),
+)
 ```
 
 ```json
@@ -227,7 +229,7 @@ app.get('/me/permissions', async req => teachers.grantsFor(req))
 
 | Subject | Answer |
 | --- | --- |
-| No subject | `{}` |
+| Holds nothing | `{}` |
 | Ordinary subject | Only this domain's grants — another domain's never appear |
 | `is_super` (with `superBypass`) | Every policy the domain defines, each `null` |
 

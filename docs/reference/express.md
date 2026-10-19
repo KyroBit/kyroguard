@@ -64,11 +64,11 @@ const admin = domain('admin', { resources, getSubject })
 | `requirePolicy(policy)` | Guard middleware. Takes the unqualified name (`grades.view`, not `teachers.grades.view`). On allow, queries against the policy's resource are narrowed by this grant for the rest of the request ([automatic filtering](/guide/scopes#automatic-filtering)). |
 | `filterFor(req, policy)` | The policy's list decision as a [`FilterResult`](/reference/core-api#filterfor), for queries you build yourself. |
 | `can(req, policy)` | `Promise<boolean>` — does the subject hold this policy? Never throws: no user answers `false`, not 401. See [`can()`](/reference/core-api#can). |
-| `grantsFor(req)` | `Promise<DomainGrants>` — every policy the subject holds in this domain, to serialize to a client. See [`grantsFor()`](/reference/core-api#grantsfor). |
+| `policiesOf(subjectId, options?)` | `Promise<DomainGrants>` — every policy the subject holds in this domain, to serialize to a client. `options`: `tenantId`, `isSuper`. See [`policiesOf()`](/reference/core-api#policiesof). |
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Mount on specific routers, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
-| `groupsOf(subjectId, options?)` | The groups the user belongs to in this domain, inactive ones included. `options.tenantId` reads one school. |
+| `groupsOf(subjectId, options?)` | The groups the subject belongs to in this domain, inactive ones included. `options.tenantId` reads one school. |
 | `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |
 

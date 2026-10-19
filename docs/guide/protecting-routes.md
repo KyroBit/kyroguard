@@ -103,14 +103,16 @@ app.get('/grades/:id', { preHandler: teachers.requirePolicy('grades.view') }, as
 
 An unauthenticated request answers `false` rather than 401, and a scoped grant answers `true` — the subject holds the policy; the scope decides rows, not permission.
 
-For a whole screen, ask once instead of per button. `grantsFor` returns everything the subject holds in this domain, ready to send to a client:
+For a whole screen, ask once instead of per button. `policiesOf` returns everything a subject holds in this domain, ready to send to a client. Pass the subject's id, and the tenant and superuser flag your app already knows:
 
 ```ts
-app.get('/me/permissions', async req => teachers.grantsFor(req))
+app.get('/me/permissions', async req =>
+  teachers.policiesOf(req.user.id, { tenantId: req.user.schoolId, isSuper: req.user.isOwner }),
+)
 // { "grades.view": null, "grades.update": ["entered"] }
 ```
 
-`null` is an unrestricted grant; an array names the [scopes](/guide/scopes) it carries. An owner (`is_super`) comes back holding every policy in the domain.
+`null` is an unrestricted grant; an array names the [scopes](/guide/scopes) it carries. A superuser comes back holding every policy in the domain.
 
 ::: warning These render, they do not protect
 Deciding what to show is not deciding what to allow. Keep `requirePolicy` on every route — a client can call the endpoint whatever the UI drew.

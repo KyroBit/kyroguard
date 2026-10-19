@@ -68,11 +68,16 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
         url: route.path,
         handler: async req => {
           if (answers === 'can') return { can: await domain.can!(req, policy!) }
-          if (answers === 'grants') return domain.grantsFor!(req)
+          const userId = String(req.headers['x-member-id'])
           const tenant = req.headers['x-member-tenant']
-          const held = await domain.groupsOf(String(req.headers['x-member-id']), {
-            tenantId: typeof tenant === 'string' ? tenant : undefined,
-          })
+          const tenantId = typeof tenant === 'string' ? tenant : undefined
+          if (answers === 'policies') {
+            return domain.policiesOf(userId, {
+              tenantId,
+              isSuper: req.headers['x-member-super'] === '1',
+            })
+          }
+          const held = await domain.groupsOf(userId, { tenantId })
           return { groups: held.map(group => group.name) }
         },
       })
