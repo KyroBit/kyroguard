@@ -138,6 +138,8 @@ function buildDomain<P extends string>(
       return domainGrants(guard, name, options.resources, subject)
     },
 
+    groupsOf: (subjectId: string, opts?: { tenantId?: string }) =>
+      guard.engine.groupsOf(ref(subjectId, opts?.tenantId)),
     assignGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>
       guard.engine.assignGroup(ref(subjectId, opts?.tenantId), group),
     removeGroup: (subjectId: string, group: string, opts?: { tenantId?: string }) =>

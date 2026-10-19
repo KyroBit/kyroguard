@@ -664,6 +664,15 @@ export function runStorageAdapterContractSuite(options: StorageAdapterSuiteOptio
           expect(await adapter.getSubjectGroups(ref('u1', 'branch', 'b1'))).toHaveLength(1)
         }))
 
+      it('S21: matches the domain too, so a membership in one domain is invisible from another', () =>
+        withAdapter(async adapter => {
+          await seedEditor(adapter)
+          await adapter.assignGroup(ref('u1', 'branch', 'b1'), 'editor')
+
+          expect(await adapter.getSubjectGroups(ref('u1', 'portal', 'b1'))).toEqual([])
+          expect(names(await adapter.getSubjectGroups(ref('u1', 'branch', 'b1')))).toEqual(['editor'])
+        }))
+
       it('S21: stops naming a group once the membership is removed', () =>
         withAdapter(async adapter => {
           await seedEditor(adapter)

@@ -16,9 +16,11 @@ export interface RouteSpec {
   getSubjectFrom?: 'header'
   /**
    * The harness must NOT install requirePolicy on these routes: 'can' answers
-   * `{ can }` for `policy`, 'grants' answers the grant map, both always 200.
+   * `{ can }` for `policy`, 'grants' answers the grant map, and 'groups' answers
+   * `{ groups }`, the names of the groups held by the member named in the
+   * `x-member-id` header (tenant `x-member-tenant`). All always 200.
    */
-  answers?: 'can' | 'grants'
+  answers?: 'can' | 'grants' | 'groups'
 }
 
 export interface TestAppResponse {
@@ -387,6 +389,79 @@ export function runFrameworkContractSuite(options: FrameworkSuiteOptions): void 
         async app => {
           const res = await get(app, '/grants/branch', asUser('u1'))
           expect(res.body).toEqual({ 'other.read': null })
+        },
+      ))
+
+    const groupsRoute = (over: Partial<RouteSpec> = {}): RouteSpec =>
+      route({ path: '/groups', answers: 'groups', policy: undefined, ...over })
+
+    const member = (id: string, tenantId?: string): Record<string, string> => ({
+      'x-member-id': id,
+      ...(tenantId ? { 'x-member-tenant': tenantId } : {}),
+    })
+
+    const seedEditors = async (guard: Guard): Promise<void> => {
+      await guard.seedGroups(
+        { editors: { label: 'Editors', policies: ['thing.read'] } },
+        { domain: 'admin' },
+      )
+    }
+
+    it('24: groupsOf() names the groups a member belongs to in this domain', () =>
+      withApp(
+        {
+          routes: [groupsRoute()],
+          seed: async guard => {
+            await seedEditors(guard)
+            await guard.engine.assignGroup(toSubjectRef({ id: 'u1', domain: 'admin' }), 'editors')
+          },
+        },
+        async app => {
+          const res = await get(app, '/groups', member('u1'))
+          expect(res.status).toBe(200)
+          expect(res.body).toEqual({ groups: ['editors'] })
+        },
+      ))
+
+    it('25: groupsOf() names nothing for someone who belongs to no group', () =>
+      withApp({ routes: [groupsRoute()], seed: seedEditors }, async app => {
+        const res = await get(app, '/groups', member('u1'))
+        expect(res.body).toEqual({ groups: [] })
+      }))
+
+    it('26: groupsOf() answers only this domain, never another domain’s membership', () =>
+      withApp(
+        {
+          domains: ['admin', 'branch'],
+          routes: [groupsRoute({ domain: 'branch', path: '/groups/branch' })],
+          seed: async guard => {
+            await seedEditors(guard)
+            await guard.engine.assignGroup(toSubjectRef({ id: 'u1', domain: 'admin' }), 'editors')
+          },
+        },
+        async app => {
+          const res = await get(app, '/groups/branch', member('u1'))
+          expect(res.body).toEqual({ groups: [] })
+        },
+      ))
+
+    it('27: groupsOf() matches the tenant, so one tenant never sees another’s membership', () =>
+      withApp(
+        {
+          routes: [groupsRoute()],
+          seed: async guard => {
+            await seedEditors(guard)
+            await guard.engine.assignGroup(
+              toSubjectRef({ id: 'u1', domain: 'admin', tenant_id: 'b1' }),
+              'editors',
+            )
+          },
+        },
+        async app => {
+          expect((await get(app, '/groups', member('u1', 'b2'))).body).toEqual({ groups: [] })
+          expect((await get(app, '/groups', member('u1', 'b1'))).body).toEqual({
+            groups: ['editors'],
+          })
         },
       ))
   })

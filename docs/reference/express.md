@@ -68,6 +68,7 @@ const admin = domain('admin', { resources, getSubject })
 | `subjectHook()` | Resolves the user without guarding. For unguarded routes that still record ownership. It activates no read filter. Mount on specific routers, never app-wide. |
 | `assignGroup(subjectId, group, options?)` | Assign a group in this domain. `options.tenantId` targets one school, like `school-1`. |
 | `removeGroup(subjectId, group, options?)` | Remove a group. |
+| `groupsOf(subjectId, options?)` | The groups the user belongs to in this domain, inactive ones included. `options.tenantId` reads one school. |
 | `assignPolicy(subjectId, policy, options?)` | Grant one policy. Unqualified name. `options`: `tenantId`, `scope`. |
 | `removePolicy(subjectId, policy, options?)` | Remove a direct grant. |
 

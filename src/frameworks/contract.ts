@@ -6,6 +6,7 @@
 import { qualifyPolicyName } from '../core/types.js'
 import type { GuardError } from '../core/errors.js'
 import type { ResourceDefinition } from '../core/policy.js'
+import type { GroupRecord } from '../storage/contract.js'
 import type { Guard } from '../index.js'
 import type {
   Awaitable,
@@ -77,6 +78,8 @@ export interface DomainInstance<TReq, TGuard, P extends string = string> {
   /** Every policy the subject holds in this domain, unqualified. */
   grantsFor?(req: TReq): Promise<DomainGrants>
 
+  /** The groups a subject belongs to in this domain and tenant, inactive ones included. */
+  groupsOf(subjectId: string, options?: { tenantId?: string }): Promise<GroupRecord[]>
   assignGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   removeGroup(subjectId: string, group: string, options?: { tenantId?: string }): Promise<void>
   assignPolicy(

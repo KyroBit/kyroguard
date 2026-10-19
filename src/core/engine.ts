@@ -16,7 +16,7 @@ import { blanketScopeName } from './policy.js'
 import type { ResourceDefinition } from './policy.js'
 import type { CacheHook, InvalidationBus, PolicyCache } from '../cache/types.js'
 import { UnknownScopeError } from '../storage/contract.js'
-import type { PolicyGrant, StorageAdapter } from '../storage/contract.js'
+import type { GroupRecord, PolicyGrant, StorageAdapter } from '../storage/contract.js'
 import type { Scope } from './scope.js'
 
 export interface EngineOptions {
@@ -330,6 +330,10 @@ export class GuardEngine {
     // getPolicyMap hands back the cached instance; a caller mutating it would
     // poison every later request for this subject.
     return new Map([...map].map(([policy, scopes]) => [policy, scopes ? [...scopes] : null]))
+  }
+
+  async groupsOf(ref: SubjectRef): Promise<GroupRecord[]> {
+    return this.adapter.getSubjectGroups(ref)
   }
 
   async assignGroup(ref: SubjectRef, groupName: string): Promise<void> {

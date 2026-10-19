@@ -30,6 +30,12 @@ await teachers.removePolicy(user.id, 'grades.delete')
 
 Assigning twice is safe. The second call does nothing.
 
+To read who belongs where, ask the domain. It answers for this domain and tenant only:
+
+```ts
+const groups = await teachers.groupsOf(user.id, { tenantId: 'school-1' })
+```
+
 Changes apply immediately on this server. Running several servers? See [Production](/guide/production).
 
 ## Scripts and seeders

@@ -63,6 +63,9 @@
  * S20 getSubjectPolicies excludes group grants from groups whose isActive is
  *     false (emergency kill-switch for a whole role). Direct grants are
  *     unaffected.
+ * S21 getSubjectGroups strict-matches (subjectId, domain, tenantId) like S2 and
+ *     names every group the subject belongs to, inactive ones included:
+ *     belonging is not granting. Ordered by name.
  */
 
 import type { SubjectRef } from '../core/types.js'
@@ -178,6 +181,7 @@ export interface StorageAdapter {
   /** Group + direct grants, both strict-matched on (domain, tenantId) (S2, S3). */
   getSubjectPolicies(ref: SubjectRef): Promise<PolicyGrant[]>
 
+  /** The groups the subject belongs to, strict-matched on (domain, tenantId), inactive ones included (S21). */
   getSubjectGroups(ref: SubjectRef): Promise<GroupRecord[]>
 
   /** Fragment composition — absent when the backend cannot combine scope fragments. */

@@ -66,8 +66,15 @@ async function makeApp(rbac: Guard, routes: RouteSpec[]): Promise<TestApp> {
       app.route({
         method: route.method,
         url: route.path,
-        handler: async req =>
-          answers === 'can' ? { can: await domain.can!(req, policy!) } : domain.grantsFor!(req),
+        handler: async req => {
+          if (answers === 'can') return { can: await domain.can!(req, policy!) }
+          if (answers === 'grants') return domain.grantsFor!(req)
+          const tenant = req.headers['x-member-tenant']
+          const held = await domain.groupsOf(String(req.headers['x-member-id']), {
+            tenantId: typeof tenant === 'string' ? tenant : undefined,
+          })
+          return { groups: held.map(group => group.name) }
+        },
       })
       continue
     }

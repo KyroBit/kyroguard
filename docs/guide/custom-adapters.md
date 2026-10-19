@@ -27,6 +27,7 @@ const adapter: StorageAdapter = {
   removeGroup,
   assignPolicy,
   removePolicy,
+  getSubjectGroups,
 
   // The read path — guards call this on every request
   getSubjectPolicies,
